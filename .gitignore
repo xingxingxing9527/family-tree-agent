@@ -1,0 +1,11 @@
+.worktrees/
+.superpowers/
+work/
+app/node_modules/
+app/out/
+app/release/
+app/coverage/
+app/test-results/
+app/playwright-report/
+*.log
+*.tmp
