@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
 
 describe("WorkspaceManager", () => {
@@ -61,5 +62,37 @@ describe("WorkspaceManager", () => {
       id: "11111111-1111-4111-8111-111111111111", name: "Unsafe", directory: "..", originPersonId: null, lastOpenedAt: null, schemaVersion: 1
     }] }));
     await expect(manager.open({ id: "11111111-1111-4111-8111-111111111111" })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+  });
+
+  it("migrates the workspace database before marking it open", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Migrated family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const opened = await manager.open({ id: created.value.id });
+    expect(opened.ok).toBe(true);
+    const database = new Database(join(root, created.value.directory, "genealogy.sqlite"), { readonly: true });
+    try {
+      expect(database.pragma("user_version", { simple: true })).toBe(1);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(1);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("does not update workspace state when migration fails", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Broken family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const databasePath = join(root, created.value.directory, "genealogy.sqlite");
+    const database = new Database(databasePath);
+    database.exec("CREATE TABLE person (id TEXT PRIMARY KEY)");
+    database.close();
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    const index = JSON.parse(await readFile(join(root, "index.json"), "utf8")) as { workspaces: Array<{ id: string; lastOpenedAt: string | null }> };
+    expect(index.workspaces.find((workspace) => workspace.id === created.value.id)?.lastOpenedAt).toBeNull();
   });
 });

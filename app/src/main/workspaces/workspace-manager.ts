@@ -1,6 +1,8 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { AppResult, WorkspacePaths, WorkspaceSummary } from "../../shared/contracts.js";
+import { applyMigrations } from "../database/migrations/index.js";
+import { openDatabase } from "../database/open-database.js";
 import { WorkspaceIndex } from "./workspace-index.js";
 import { resolveWorkspacePaths } from "./workspace-paths.js";
 
@@ -32,7 +34,24 @@ export class WorkspaceManager {
       const paths = resolveWorkspacePaths(this.root, workspace.directory);
       if (!paths) return failure("PATH_DENIED", "Workspace directory was denied", { id: input.id });
       if (!await this.hasRequiredFiles(paths)) return failure("NOT_FOUND", "Workspace files were not found", { id: input.id });
-      const updated = { ...workspace, lastOpenedAt: new Date().toISOString() }; await this.index.write(workspaces.map((entry) => entry.id === updated.id ? updated : entry));
+      const database = openDatabase(paths.database);
+      let migratedVersion: number;
+      try {
+        migratedVersion = applyMigrations(database);
+        const now = new Date().toISOString();
+        database.prepare(`
+          INSERT INTO workspace_meta (workspace_id, name, origin_person_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(workspace_id) DO UPDATE SET
+            name = excluded.name,
+            origin_person_id = excluded.origin_person_id,
+            updated_at = excluded.updated_at,
+            row_version = workspace_meta.row_version + 1
+        `).run(workspace.id, workspace.name, workspace.originPersonId, now, now);
+      } finally {
+        database.close();
+      }
+      const updated = { ...workspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() }; await this.index.write(workspaces.map((entry) => entry.id === updated.id ? updated : entry));
       this.openWorkspaceId = updated.id; return { ok: true, value: updated };
     } catch { return failure("INTERNAL", "Unable to open workspace", { id: input.id }); }
   }
