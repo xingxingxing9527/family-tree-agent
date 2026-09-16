@@ -97,4 +97,69 @@ describe("UnitOfWork", () => {
       database.close();
     }
   });
+
+  it("rejects invalid persisted partial dates and rolls back their operation groups", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-transaction-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    applyMigrations(database);
+    const unitOfWork = new SqliteUnitOfWork(database, "workspace-1");
+    const firstId = "55555555-5555-4555-8555-555555555555";
+    const secondId = "66666666-6666-4666-8666-666666666666";
+
+    try {
+      unitOfWork.run("person.create", (ctx) => ctx.people.create(ctx, { id: firstId, displayName: "First", gender: "unknown" }));
+      unitOfWork.run("person.create", (ctx) => ctx.people.create(ctx, { id: secondId, displayName: "Second", gender: "unknown" }));
+
+      expect(() => unitOfWork.run("person.update", (ctx) => ctx.people.update(ctx, firstId, {
+        death: { calendar: "solar", year: 2024, month: 2, day: 30, leapMonth: false, precision: "day" }
+      }))).toThrow("Invalid solar calendar day");
+      expect(() => unitOfWork.run("person.create", (ctx) => ctx.people.create(ctx, {
+        displayName: "Invalid birth", gender: "unknown",
+        birth: { calendar: "solar", year: 2024, month: 2, day: 1, leapMonth: true, precision: "day" }
+      }))).toThrow("Solar dates cannot use leap months");
+      expect(() => unitOfWork.run("marriage.create", (ctx) => ctx.relations.createMarriage(ctx, {
+        spouseAId: firstId, spouseBId: secondId,
+        start: { calendar: "lunar", year: 2024, month: 13, day: null, leapMonth: false, precision: "month" }
+      }))).toThrow();
+      expect(() => unitOfWork.run("marriage.create", (ctx) => ctx.relations.createMarriage(ctx, {
+        spouseAId: firstId, spouseBId: secondId,
+        end: { calendar: "lunar", year: 0, month: 1, day: null, leapMonth: false, precision: "month" }
+      }))).toThrow();
+
+      expect(database.prepare("SELECT row_version, death_calendar FROM person WHERE id = ?").get(firstId)).toEqual({ row_version: 1, death_calendar: null });
+      expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(2);
+      expect(database.prepare("SELECT COUNT(*) FROM marriage").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()).toBe(2);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()).toBe(2);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("allows an active remarriage after divorce but rejects concurrent active duplicates", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-transaction-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    applyMigrations(database);
+    const unitOfWork = new SqliteUnitOfWork(database, "workspace-1");
+    const firstId = "77777777-7777-4777-8777-777777777777";
+    const secondId = "88888888-8888-4888-8888-888888888888";
+
+    try {
+      unitOfWork.run("person.create", (ctx) => ctx.people.create(ctx, { id: firstId, displayName: "First", gender: "unknown" }));
+      unitOfWork.run("person.create", (ctx) => ctx.people.create(ctx, { id: secondId, displayName: "Second", gender: "unknown" }));
+      const historical = unitOfWork.run("marriage.create", (ctx) => ctx.relations.createMarriage(ctx, { spouseAId: secondId, spouseBId: firstId, status: "divorced" }));
+      const active = unitOfWork.run("marriage.create", (ctx) => ctx.relations.createMarriage(ctx, { spouseAId: firstId, spouseBId: secondId }));
+
+      expect(historical).toMatchObject({ spouseAId: firstId, spouseBId: secondId, status: "divorced" });
+      expect(active).toMatchObject({ spouseAId: firstId, spouseBId: secondId, status: "active" });
+      expect(() => unitOfWork.run("marriage.create", (ctx) => ctx.relations.createMarriage(ctx, { spouseAId: secondId, spouseBId: firstId }))).toThrow();
+      expect(database.prepare("SELECT marriage_status FROM marriage ORDER BY marriage_status").pluck().all()).toEqual(["active", "divorced"]);
+      expect(database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()).toBe(4);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()).toBe(4);
+    } finally {
+      database.close();
+    }
+  });
 });

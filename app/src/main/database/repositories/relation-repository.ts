@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PartialDate } from "../../../shared/domain.js";
+import { parsePartialDate, type PartialDate } from "../../../shared/domain.js";
 import type { TransactionContext } from "../unit-of-work.js";
 import type { WorkspaceDatabase } from "../open-database.js";
 import type { ReadOptions } from "./person-repository.js";
@@ -15,7 +15,11 @@ interface MarriageRow { id: string; workspace_id: string; spouse_a_id: string; s
 const parentRecord = (row: ParentRow): ParentChildRecord => ({ id: row.id, workspaceId: row.workspace_id, parentId: row.parent_id, childId: row.child_id, parentRole: row.parent_role, relationshipType: row.relationship_type, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at, rowVersion: row.row_version });
 function rowDate(row: MarriageRow, prefix: "start" | "end"): PartialDate | null { const calendar = row[`${prefix}_calendar`]; return calendar === null ? null : { calendar, year: row[`${prefix}_year`]!, month: row[`${prefix}_month`]!, day: row[`${prefix}_day`], leapMonth: row[`${prefix}_leap_month`] === 1, precision: row[`${prefix}_precision`]! }; }
 const marriageRecord = (row: MarriageRow): MarriageRecord => ({ id: row.id, workspaceId: row.workspace_id, spouseAId: row.spouse_a_id, spouseBId: row.spouse_b_id, status: row.marriage_status, start: rowDate(row, "start"), end: rowDate(row, "end"), createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at, rowVersion: row.row_version });
-const dateValues = (date: PartialDate | null | undefined): readonly unknown[] => date ? [date.calendar, date.year, date.month, date.day, date.leapMonth ? 1 : 0, date.precision] : [null, null, null, null, 0, null];
+const dateValues = (date: PartialDate | null | undefined): readonly unknown[] => {
+  if (!date) return [null, null, null, null, 0, null];
+  const validated = parsePartialDate(date);
+  return [validated.calendar, validated.year, validated.month, validated.day, validated.leapMonth ? 1 : 0, validated.precision];
+};
 
 export class RelationRepository {
   constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string) {}

@@ -174,7 +174,8 @@ export const initialSchemaMigration = {
     );
 
     CREATE UNIQUE INDEX marriage_active_pair_uq
-      ON marriage(workspace_id, spouse_a_id, spouse_b_id) WHERE deleted_at IS NULL;
+      ON marriage(workspace_id, spouse_a_id, spouse_b_id)
+      WHERE marriage_status = 'active' AND deleted_at IS NULL;
 
     CREATE TABLE import_identity (
       id TEXT PRIMARY KEY,

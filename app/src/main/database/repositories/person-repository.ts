@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PartialDate } from "../../../shared/domain.js";
+import { parsePartialDate, type PartialDate } from "../../../shared/domain.js";
 import type { TransactionContext } from "../unit-of-work.js";
 import type { WorkspaceDatabase } from "../open-database.js";
 
@@ -100,9 +100,11 @@ function toRecord(row: PersonRow): PersonRecord {
   };
 }
 
-const dateValues = (date: PartialDate | null | undefined): readonly unknown[] => date ?
-  [date.calendar, date.year, date.month, date.day, date.leapMonth ? 1 : 0, date.precision] :
-  [null, null, null, null, 0, null];
+const dateValues = (date: PartialDate | null | undefined): readonly unknown[] => {
+  if (!date) return [null, null, null, null, 0, null];
+  const validated = parsePartialDate(date);
+  return [validated.calendar, validated.year, validated.month, validated.day, validated.leapMonth ? 1 : 0, validated.precision];
+};
 
 export class PersonRepository {
   constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string) {}
