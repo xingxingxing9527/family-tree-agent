@@ -33,6 +33,28 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("creates the configured root before its first workspace", async () => {
+    const { root, manager } = await createManager();
+    await rm(root, { recursive: true });
+    const created = await manager.create({ name: "First family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const workspaceRoot = join(root, created.value.directory);
+    await expect(readFile(join(workspaceRoot, "workspace.json"), "utf8")).resolves.toContain(created.value.id);
+    await expect(readFile(join(workspaceRoot, "genealogy.sqlite"))).resolves.toBeInstanceOf(Buffer);
+    expect((await stat(join(workspaceRoot, "media"))).isDirectory()).toBe(true);
+    expect((await stat(join(workspaceRoot, "backups"))).isDirectory()).toBe(true);
+  });
+
+  it.each(["workspace.json", "genealogy.sqlite", "media", "backups"])("does not open an indexed workspace with a missing required %s", async (missingPath) => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Incomplete family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await rm(join(root, created.value.directory, missingPath), { recursive: true, force: true });
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "NOT_FOUND", details: { id: created.value.id } } });
+  });
+
   it("rejects an indexed directory that escapes the configured root", async () => {
     const { root, manager } = await createManager();
     await writeFile(join(root, "index.json"), JSON.stringify({ workspaces: [{
