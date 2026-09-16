@@ -1,0 +1,28 @@
+:root {
+  color: #0f172a;
+  background: #f8fafc;
+  font-family: system-ui, sans-serif;
+  --surface: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --accent: #2563eb;
+  --border: #cbd5e1;
+  --focus-ring: 0 0 0 3px #2563eb;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+}
+
+main {
+  max-width: 720px;
+  margin: 2rem auto;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+p { color: var(--text-secondary); }
+
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }

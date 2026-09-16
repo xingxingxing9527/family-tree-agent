@@ -1,0 +1,13 @@
+appId: cn.llmwiki.family
+productName: 家谱智能体
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  target:
+    - nsis
+  artifactName: family-agent-${version}-${arch}.${ext}

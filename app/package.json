@@ -1,0 +1,48 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "main": "./out/main/index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run build && playwright test",
+    "package:win": "npm run build && electron-builder --win nsis",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.13.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^5.0.1",
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "jsdom": "^30.0.1",
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
