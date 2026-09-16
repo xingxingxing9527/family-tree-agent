@@ -3,6 +3,8 @@ import { join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installNavigationPolicy } from "./security/navigation-policy.js";
 import { createSecureWebPreferences } from "./security/window-options.js";
+import { registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { WorkspaceManager } from "./workspaces/workspace-manager.js";
 
 const rendererRoot = resolve(__dirname, "../renderer");
 
@@ -48,13 +50,15 @@ function createWindow(): BrowserWindow {
 app.enableSandbox();
 
 app.whenReady().then(() => {
+  let mainWindow: BrowserWindow | null = null;
   registerAppProtocol();
   ipcMain.handle("desktop:get-version", () => app.getVersion());
-  createWindow();
+  mainWindow = createWindow();
+  registerWorkspaceIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceManager(join(app.getPath("userData"), "workspaces")));
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      mainWindow = createWindow();
     }
   });
 });
