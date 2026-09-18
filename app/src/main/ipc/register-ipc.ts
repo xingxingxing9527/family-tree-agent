@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { AppResult } from "../../shared/contracts.js";
 import type { WorkspaceManager } from "../workspaces/workspace-manager.js";
 
+export { FACT_CHANNELS, registerFactsIpc } from "./facts-ipc.js";
+
 export const WORKSPACE_CHANNELS = { list: "workspaces:list", create: "workspaces:create", open: "workspaces:open", close: "workspaces:close" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;
 const createSchema = z.object({ name: z.string().trim().min(1).max(200) });

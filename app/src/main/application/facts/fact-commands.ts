@@ -12,9 +12,10 @@ export interface PersonDraft {
   birth?: PartialDate | null;
   death?: PartialDate | null;
   notes?: string | null;
+  aliases?: string[];
 }
 
-export type PersonPatch = UpdatePersonInput;
+export type PersonPatch = UpdatePersonInput & { aliases?: string[] };
 
 export interface ParentChildDraft {
   id?: string;

@@ -81,6 +81,23 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("provides main-only open database context until the workspace is closed", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Facts family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    expect(manager.getOpenWorkspaceContext()).toBeNull();
+    await manager.open({ id: created.value.id });
+    expect(manager.getOpenWorkspaceContext()).toEqual({
+      workspaceId: created.value.id,
+      databasePath: join(root, created.value.directory, "genealogy.sqlite")
+    });
+
+    await manager.close();
+    expect(manager.getOpenWorkspaceContext()).toBeNull();
+  });
+
   it("does not update workspace state when migration fails", async () => {
     const { root, manager } = await createManager();
     const created = await manager.create({ name: "Broken family" });

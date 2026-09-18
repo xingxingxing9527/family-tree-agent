@@ -151,18 +151,23 @@ export class FactCommandService {
     switch (command.type) {
       case "person.create": {
         ctx.sources.create(ctx, command.source);
-        return ctx.people.create(ctx, {
+        const person = ctx.people.create(ctx, {
           id: command.draft.id,
           displayName: command.draft.displayName,
           gender: command.draft.gender,
           birth: command.draft.birth,
           death: command.draft.death,
           notes: command.draft.notes
-        }).id;
+        });
+        this.syncAliases(ctx, person.id, command.draft.aliases);
+        return person.id;
       }
       case "person.update": {
         ctx.sources.create(ctx, command.source);
-        return ctx.people.update(ctx, ids.person!, command.patch).id;
+        const { aliases, ...personPatch } = command.patch;
+        const person = ctx.people.update(ctx, ids.person!, personPatch);
+        this.syncAliases(ctx, person.id, aliases);
+        return person.id;
       }
       case "parentChild.add": {
         ctx.sources.create(ctx, command.source);
@@ -321,5 +326,20 @@ export class FactCommandService {
 
   private throwOnErrors(errors: DomainIssue[]): void {
     if (errors.length > 0) throw new FactCommandError(errors);
+  }
+
+  private syncAliases(ctx: TransactionContext, personId: string, aliases: string[] | undefined): void {
+    if (aliases === undefined) return;
+    const desired = new Map<string, string>();
+    for (const alias of aliases) {
+      const name = alias.trim();
+      if (name) desired.set(name.toLowerCase(), name);
+    }
+    const existing = ctx.people.listAliases(personId);
+    for (const alias of existing) {
+      if (!desired.has(alias.normalizedName)) ctx.people.archiveAlias(ctx, alias.id);
+      else desired.delete(alias.normalizedName);
+    }
+    for (const name of desired.values()) ctx.people.addAlias(ctx, { personId, name });
   }
 }
