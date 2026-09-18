@@ -179,6 +179,14 @@ dd { margin: 0.25rem 0 0; color: var(--text-primary); }
   border-radius: 0.55rem;
 }
 
+.relation-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-primary);
+}
+
+.relation-list li + li { margin-top: 0.35rem; }
+
 .marriage-history { margin-top: 1.25rem; }
 .marriage-record + .marriage-record { margin-top: 0.75rem; }
 .status-badge { padding: 0.3rem 0.55rem; border-radius: 999px; font-weight: 700; }

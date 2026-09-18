@@ -31,7 +31,15 @@ export function PersonDetail({ detail, relationsApi, onEdit, onChanged }: Person
       <div className="family-summary">
         <section>
           <h3>父母</h3>
-          <p>{detail.parents.map((entry) => `${entry.person.displayName}（${entry.role === "father" ? "父亲" : "母亲"}）`).join("、") || "未记录"}</p>
+          {detail.parents.length > 0 ? (
+            <ul className="relation-list" aria-label="已记录父母">
+              {detail.parents.map((entry) => (
+                <li key={entry.relationId} data-relation-id={entry.relationId}>
+                  {entry.person.displayName}（{entry.role === "father" ? "父亲" : "母亲"}）
+                </li>
+              ))}
+            </ul>
+          ) : <p>未记录</p>}
         </section>
         <section>
           <h3>子女</h3>

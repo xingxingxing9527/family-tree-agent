@@ -37,6 +37,7 @@ async function expectCardAndFieldTextReadable(window: Page): Promise<void> {
     ".person-card span",
     ".detail-card h2",
     ".detail-card h3",
+    ".detail-card li",
     ".detail-card dt",
     ".detail-card dd",
     ".relationship-card h2",
@@ -127,6 +128,14 @@ test("persists a five-person household, correction, and divorce", async () => {
     for (const person of people) await expect(window.getByRole("button", { name: `查看${person.name}` })).toBeVisible();
 
     await window.getByRole("button", { name: "查看张敏" }).click();
+    const persistedParents = window.getByRole("list", { name: "已记录父母" });
+    await expect(persistedParents.getByRole("listitem")).toHaveCount(2);
+    await expect(persistedParents).toContainText("张国强（父亲）");
+    await expect(persistedParents).toContainText("李秀兰（母亲）");
+    const parentRelationIds = await persistedParents.getByRole("listitem").evaluateAll((items) => items.map((item) => item.getAttribute("data-relation-id")));
+    expect(parentRelationIds).toHaveLength(2);
+    expect(parentRelationIds.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
+    expect(new Set(parentRelationIds).size).toBe(2);
     await expectCardAndFieldTextReadable(window);
     await window.getByRole("button", { name: "编辑人物" }).click();
     await window.getByLabel("出生月份").fill("6");

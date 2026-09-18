@@ -29,6 +29,11 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const updateDraftField = <T,>(setter: (value: T) => void, value: T): void => {
+    setPending(null);
+    setter(value);
+  };
+
   const options = useMemo(() => {
     const selectedIds = new Set([parentId, childId, spouseAId, spouseBId]);
     const combined = [...people];
@@ -90,18 +95,18 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
       <div className="relationship-columns">
         <form onSubmit={(event) => { event.preventDefault(); void complete("parentChild", parentDraft, false); }}>
           <h3>亲子关系</h3>
-          <label><span>父母人物</span><select className="field-control" aria-label="父母人物" required value={parentId} onChange={(event) => setParentId(event.target.value)}><option value="">请选择</option>{personOptions(childId)}</select></label>
-          <label><span>子女人物</span><select className="field-control" aria-label="子女人物" required value={childId} onChange={(event) => setChildId(event.target.value)}><option value="">请选择</option>{personOptions(parentId)}</select></label>
-          <label><span>父母角色</span><select className="field-control" aria-label="父母角色" value={parentRole} onChange={(event) => setParentRole(event.target.value as "father" | "mother")}><option value="father">父亲</option><option value="mother">母亲</option></select></label>
-          <label><span>来源说明</span><input className="field-control" aria-label="亲子关系来源" required value={parentSource} onChange={(event) => setParentSource(event.target.value)} /></label>
+          <label><span>父母人物</span><select className="field-control" aria-label="父母人物" required value={parentId} onChange={(event) => updateDraftField(setParentId, event.target.value)}><option value="">请选择</option>{personOptions(childId)}</select></label>
+          <label><span>子女人物</span><select className="field-control" aria-label="子女人物" required value={childId} onChange={(event) => updateDraftField(setChildId, event.target.value)}><option value="">请选择</option>{personOptions(parentId)}</select></label>
+          <label><span>父母角色</span><select className="field-control" aria-label="父母角色" value={parentRole} onChange={(event) => updateDraftField(setParentRole, event.target.value as "father" | "mother")}><option value="father">父亲</option><option value="mother">母亲</option></select></label>
+          <label><span>来源说明</span><input className="field-control" aria-label="亲子关系来源" required value={parentSource} onChange={(event) => updateDraftField(setParentSource, event.target.value)} /></label>
           <button className="button primary-button" type="submit">保存亲子关系</button>
         </form>
         <form onSubmit={(event) => { event.preventDefault(); void complete("marriage", marriageDraft, false); }}>
           <h3>婚姻</h3>
-          <label><span>配偶一</span><select className="field-control" aria-label="配偶一" required value={spouseAId} onChange={(event) => setSpouseAId(event.target.value)}><option value="">请选择</option>{personOptions(spouseBId)}</select></label>
-          <label><span>配偶二</span><select className="field-control" aria-label="配偶二" required value={spouseBId} onChange={(event) => setSpouseBId(event.target.value)}><option value="">请选择</option>{personOptions(spouseAId)}</select></label>
-          <PartialDateField label="结婚日期" value={marriageStart} onChange={setMarriageStart} />
-          <label><span>来源说明</span><input className="field-control" aria-label="婚姻来源" required value={marriageSource} onChange={(event) => setMarriageSource(event.target.value)} /></label>
+          <label><span>配偶一</span><select className="field-control" aria-label="配偶一" required value={spouseAId} onChange={(event) => updateDraftField(setSpouseAId, event.target.value)}><option value="">请选择</option>{personOptions(spouseBId)}</select></label>
+          <label><span>配偶二</span><select className="field-control" aria-label="配偶二" required value={spouseBId} onChange={(event) => updateDraftField(setSpouseBId, event.target.value)}><option value="">请选择</option>{personOptions(spouseAId)}</select></label>
+          <PartialDateField label="结婚日期" value={marriageStart} onChange={(value) => updateDraftField(setMarriageStart, value)} />
+          <label><span>来源说明</span><input className="field-control" aria-label="婚姻来源" required value={marriageSource} onChange={(event) => updateDraftField(setMarriageSource, event.target.value)} /></label>
           <button className="button primary-button" type="submit">保存婚姻</button>
         </form>
       </div>
