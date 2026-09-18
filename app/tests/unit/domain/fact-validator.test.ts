@@ -19,6 +19,14 @@ describe("partial-date validation", () => {
     expect(validatePartialDate(solar(2024, 2, 29)).errors).toEqual([]);
   });
 
+  it("rejects February 29 in a huge non-leap year beyond the ECMAScript Date range", () => {
+    expect(validatePartialDate(solar(275761, 2, 29)).errors.map((issue) => issue.code)).toContain("INVALID_DATE");
+  });
+
+  it("accepts February 29 in a huge Gregorian leap year", () => {
+    expect(validatePartialDate(solar(400000, 2, 29)).errors).toEqual([]);
+  });
+
   it("validates lunar storage bounds without converting calendars", () => {
     const lunar = { calendar: "lunar" as const, year: 2024, month: 12, day: 30, leapMonth: true, precision: "day" as const };
     expect(validatePartialDate(lunar).errors).toEqual([]);

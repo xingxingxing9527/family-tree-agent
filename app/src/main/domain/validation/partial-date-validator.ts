@@ -16,6 +16,14 @@ const invalidDate = (message: string): DomainIssue => ({
   message
 });
 
+const isGregorianLeapYear = (year: number): boolean =>
+  year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+
+const daysInGregorianMonth = (year: number, month: number): number => {
+  if (month === 2) return isGregorianLeapYear(year) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+};
+
 export function validatePartialDate(value: PartialDate): ValidationResult {
   const errors: DomainIssue[] = [];
   const dayIsPresent = value.day !== null;
@@ -49,7 +57,7 @@ export function validatePartialDate(value: PartialDate): ValidationResult {
       value.month >= 1 &&
       value.month <= 12
     ) {
-      const lastDay = new Date(Date.UTC(value.year, value.month, 0)).getUTCDate();
+      const lastDay = daysInGregorianMonth(value.year, value.month);
       if (value.day! > lastDay) {
         errors.push(invalidDate("Day is outside the selected Gregorian month"));
       }
