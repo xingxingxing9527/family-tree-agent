@@ -12,6 +12,15 @@ const solar = (year: number, month: number, day: number | null = null): PartialD
   precision: day === null ? "month" : "day"
 });
 
+const lunar = (year: number, month: number, day: number | null = null, leapMonth = false): PartialDate => ({
+  calendar: "lunar",
+  year,
+  month,
+  day,
+  leapMonth,
+  precision: day === null ? "month" : "day"
+});
+
 describe("FamilyUnionProjector", () => {
   it("keeps ended marriages visible and reuses one remarried person across marriage unions", () => {
     const unions = new FamilyUnionProjector().project({
@@ -144,6 +153,76 @@ describe("FamilyUnionProjector", () => {
     expect(unions.find((union) => union.kind === "unassigned")?.id).toBe("unassigned:a:b");
     expect(unions.filter((union) => union.kind === "unassigned")).toHaveLength(1);
     expect(unions.filter((union) => union.kind === "marriage")).toHaveLength(2);
+  });
+
+  it("keeps December 31 before January 1 when selecting a repeated marriage", () => {
+    const unions = new FamilyUnionProjector().project({
+      people: [{ id: "child", birth: solar(2001, 1, 1) }],
+      marriages: [
+        { id: "first", spouseAId: "a", spouseBId: "b", status: "divorced", start: solar(1990, 1, 1), end: solar(2000, 12, 31) },
+        { id: "second", spouseAId: "a", spouseBId: "b", status: "active", start: solar(2001, 1, 1), end: null }
+      ],
+      parentChildFacts: [
+        { parentId: "a", childId: "child", relationshipType: "biological" },
+        { parentId: "b", childId: "child", relationshipType: "biological" }
+      ]
+    });
+
+    expect(unions.find((union) => union.id === "marriage:second")?.childIds).toEqual(["child"]);
+    expect(unions.some((union) => union.kind === "unassigned")).toBe(false);
+  });
+
+  it("orders a lunar leap month after its regular month", () => {
+    const unions = new FamilyUnionProjector().project({
+      people: [{ id: "child", birth: lunar(2000, 1, 10, true) }],
+      marriages: [
+        { id: "regular", spouseAId: "a", spouseBId: "b", status: "divorced", start: lunar(2000, 1, 1), end: lunar(2000, 1, 30) },
+        { id: "leap", spouseAId: "a", spouseBId: "b", status: "divorced", start: lunar(2000, 1, 1, true), end: lunar(2000, 1, 30, true) }
+      ],
+      parentChildFacts: [
+        { parentId: "a", childId: "child", relationshipType: "biological" },
+        { parentId: "b", childId: "child", relationshipType: "biological" }
+      ]
+    });
+
+    expect(unions.find((union) => union.id === "marriage:leap")?.childIds).toEqual(["child"]);
+    expect(unions.some((union) => union.kind === "unassigned")).toBe(false);
+  });
+
+  it("keeps a child unassigned when month precision overlaps another marriage", () => {
+    const unions = new FamilyUnionProjector().project({
+      people: [{ id: "child", birth: solar(2000, 1, 20) }],
+      marriages: [
+        { id: "first", spouseAId: "a", spouseBId: "b", status: "divorced", start: solar(1990, 1, 1), end: solar(2000, 1) },
+        { id: "second", spouseAId: "a", spouseBId: "b", status: "active", start: solar(2000, 1, 15), end: null }
+      ],
+      parentChildFacts: [
+        { parentId: "a", childId: "child", relationshipType: "biological" },
+        { parentId: "b", childId: "child", relationshipType: "biological" }
+      ]
+    });
+
+    const unassigned = unions.find((union) => union.id === "unassigned:a:b");
+    expect(unassigned?.childIds).toEqual(["child"]);
+    expect(unassigned?.warnings).toEqual([expect.stringContaining("child")]);
+  });
+
+  it("keeps a child unassigned when repeated marriage evidence uses different calendars", () => {
+    const unions = new FamilyUnionProjector().project({
+      people: [{ id: "child", birth: solar(2000, 6, 1) }],
+      marriages: [
+        { id: "solar", spouseAId: "a", spouseBId: "b", status: "divorced", start: solar(2000, 1, 1), end: solar(2000, 12, 31) },
+        { id: "lunar", spouseAId: "a", spouseBId: "b", status: "divorced", start: lunar(1999, 1, 1), end: lunar(2001, 1, 1) }
+      ],
+      parentChildFacts: [
+        { parentId: "a", childId: "child", relationshipType: "biological" },
+        { parentId: "b", childId: "child", relationshipType: "biological" }
+      ]
+    });
+
+    const unassigned = unions.find((union) => union.id === "unassigned:a:b");
+    expect(unassigned?.childIds).toEqual(["child"]);
+    expect(unassigned?.warnings).toHaveLength(1);
   });
 });
 

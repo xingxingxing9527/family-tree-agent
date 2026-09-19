@@ -40,20 +40,44 @@ type IntervalRelation = "inside" | "outside" | "unknown";
 
 interface DateRange {
   calendar: PartialDate["calendar"];
-  minimum: number;
-  maximum: number;
+  minimum: CalendarPoint;
+  maximum: CalendarPoint;
+}
+
+interface CalendarPoint {
+  year: number;
+  monthOrder: number;
+  day: number;
 }
 
 const ordered = (ids: Iterable<string>): string[] => [...new Set(ids)].sort((left, right) => left.localeCompare(right));
 const pairKey = (ids: Iterable<string>): string => ordered(ids).join(":");
 
+function solarMonthLength(year: number, month: number): number {
+  if (month === 2) {
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leapYear ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
 function dateRange(date: PartialDate): DateRange {
-  const base = date.year * 372 + date.month * 31;
+  const monthOrder = date.calendar === "lunar"
+    ? date.month * 2 + (date.leapMonth ? 1 : 0)
+    : date.month;
+  const maximumDay = date.calendar === "lunar" ? 30 : solarMonthLength(date.year, date.month);
   return {
     calendar: date.calendar,
-    minimum: base + (date.day ?? 1),
-    maximum: base + (date.day ?? 31)
+    minimum: { year: date.year, monthOrder, day: date.day ?? 1 },
+    maximum: { year: date.year, monthOrder, day: date.day ?? maximumDay }
   };
+}
+
+function comparePoint(left: CalendarPoint, right: CalendarPoint): number {
+  if (left.year !== right.year) return left.year < right.year ? -1 : 1;
+  if (left.monthOrder !== right.monthOrder) return left.monthOrder < right.monthOrder ? -1 : 1;
+  if (left.day !== right.day) return left.day < right.day ? -1 : 1;
+  return 0;
 }
 
 function relationToInterval(birth: PartialDate | null, marriage: FamilyUnionMarriage): IntervalRelation {
@@ -62,10 +86,10 @@ function relationToInterval(birth: PartialDate | null, marriage: FamilyUnionMarr
   const start = marriage.start ? dateRange(marriage.start) : null;
   const end = marriage.end ? dateRange(marriage.end) : null;
   if ((start && start.calendar !== child.calendar) || (end && end.calendar !== child.calendar)) return "unknown";
-  if ((start && child.maximum < start.minimum) || (end && child.minimum > end.maximum)) return "outside";
+  if ((start && comparePoint(child.maximum, start.minimum) < 0) || (end && comparePoint(child.minimum, end.maximum) > 0)) return "outside";
 
-  const afterStart = !start || child.minimum >= start.maximum;
-  const beforeEnd = !end || child.maximum <= end.minimum;
+  const afterStart = !start || comparePoint(child.minimum, start.maximum) >= 0;
+  const beforeEnd = !end || comparePoint(child.maximum, end.minimum) <= 0;
   return afterStart && beforeEnd ? "inside" : "unknown";
 }
 

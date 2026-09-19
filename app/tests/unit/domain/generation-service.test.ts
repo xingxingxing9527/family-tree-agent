@@ -123,7 +123,6 @@ describe("GenerationService", () => {
         ctx.people.create(ctx, { id: "child", displayName: "Child", gender: "unknown" });
         ctx.people.create(ctx, { id: "spouse", displayName: "Spouse", gender: "unknown" });
         ctx.lineages.create(ctx, { id: "lineage-a", name: "A branch", founderPersonId: "founder" });
-        ctx.lineages.addMembership(ctx, { id: "membership-founder", lineageId: "lineage-a", personId: "founder", lineageRole: "blood" });
         ctx.lineages.addMembership(ctx, { id: "membership-child", lineageId: "lineage-a", personId: "child", lineageRole: "blood", declaredGeneration: 4 });
         ctx.lineages.addMembership(ctx, { id: "membership-spouse", lineageId: "lineage-a", personId: "spouse", lineageRole: "married_in" });
         ctx.relations.createParentChild(ctx, { id: "founder-child", parentId: "founder", childId: "child", parentRole: "father" });
@@ -132,7 +131,79 @@ describe("GenerationService", () => {
       const displays = new LineageService(database, "workspace-1").generationDisplays("lineage-a");
 
       expect(displays.child).toEqual({ declared: 4, computed: 2, displayed: 4, source: "declared", conflict: true });
+      expect(displays.founder).toEqual({ declared: null, computed: 1, displayed: 1, source: "computed", conflict: false });
       expect(displays.spouse).toEqual({ declared: null, computed: null, displayed: null, source: "none", conflict: false });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("rejects cross-workspace founders on create and update without partial transaction writes", () => {
+    const database = openDatabase(":memory:");
+    applyMigrations(database);
+    const local = new SqliteUnitOfWork(database, "workspace-1");
+    const foreign = new SqliteUnitOfWork(database, "workspace-2");
+
+    try {
+      local.run("person.fixture", (ctx) => ctx.people.create(ctx, { id: "local", displayName: "Local", gender: "unknown" }));
+      foreign.run("person.fixture", (ctx) => ctx.people.create(ctx, { id: "foreign", displayName: "Foreign", gender: "unknown" }));
+      local.run("lineage.fixture", (ctx) => ctx.lineages.create(ctx, { id: "local-lineage", name: "Local branch", founderPersonId: "local" }));
+
+      const countsBefore = {
+        lineages: database.prepare("SELECT COUNT(*) FROM lineage").pluck().get(),
+        memberships: database.prepare("SELECT COUNT(*) FROM lineage_membership").pluck().get(),
+        operations: database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get(),
+        audits: database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()
+      };
+
+      expect(() => local.run("lineage.cross-workspace.create", (ctx) => ctx.lineages.create(ctx, {
+        id: "invalid-lineage",
+        name: "Invalid branch",
+        founderPersonId: "foreign"
+      }))).toThrow("active person in workspace");
+      expect(() => local.run("lineage.cross-workspace.update", (ctx) => ctx.lineages.update(ctx, "local-lineage", {
+        founderPersonId: "foreign"
+      }))).toThrow("active person in workspace");
+
+      expect(database.prepare("SELECT COUNT(*) FROM lineage").pluck().get()).toBe(countsBefore.lineages);
+      expect(database.prepare("SELECT COUNT(*) FROM lineage_membership").pluck().get()).toBe(countsBefore.memberships);
+      expect(database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()).toBe(countsBefore.operations);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()).toBe(countsBefore.audits);
+      expect(database.prepare("SELECT founder_person_id FROM lineage WHERE id = 'local-lineage'").pluck().get()).toBe("local");
+    } finally {
+      database.close();
+    }
+  });
+
+  it("creates and preserves exactly one active blood membership for the current founder", () => {
+    const database = openDatabase(":memory:");
+    applyMigrations(database);
+    const unitOfWork = new SqliteUnitOfWork(database, "workspace-1");
+
+    try {
+      unitOfWork.run("lineage.fixture", (ctx) => {
+        ctx.people.create(ctx, { id: "first", displayName: "First", gender: "unknown" });
+        ctx.people.create(ctx, { id: "replacement", displayName: "Replacement", gender: "unknown" });
+        ctx.lineages.create(ctx, { id: "lineage-a", name: "A branch", founderPersonId: "first" });
+        ctx.lineages.addMembership(ctx, { id: "replacement-membership", lineageId: "lineage-a", personId: "replacement", lineageRole: "married_in" });
+      });
+
+      expect(new LineageService(database, "workspace-1").generationDisplays("lineage-a").first).toEqual({
+        declared: null,
+        computed: 1,
+        displayed: 1,
+        source: "computed",
+        conflict: false
+      });
+
+      unitOfWork.run("lineage.founder.update", (ctx) => ctx.lineages.update(ctx, "lineage-a", { founderPersonId: "replacement" }));
+      const replacementMemberships = database.prepare("SELECT lineage_role FROM lineage_membership WHERE lineage_id = 'lineage-a' AND person_id = 'replacement' AND deleted_at IS NULL").pluck().all();
+      expect(replacementMemberships).toEqual(["blood"]);
+      expect(new LineageService(database, "workspace-1").generationDisplays("lineage-a").replacement.computed).toBe(1);
+      expect(() => unitOfWork.run("lineage.founder.demote", (ctx) => ctx.lineages.updateMembership(ctx, "replacement-membership", {
+        lineageRole: "married_in"
+      }))).toThrow("founder blood membership");
+      expect(() => unitOfWork.run("lineage.founder.archive", (ctx) => ctx.lineages.archiveMembership(ctx, "replacement-membership"))).toThrow("founder blood membership");
     } finally {
       database.close();
     }
