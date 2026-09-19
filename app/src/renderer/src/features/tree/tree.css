@@ -1,0 +1,122 @@
+.family-tree-canvas {
+  width: 100%;
+  min-height: 620px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.family-tree-page {
+  display: grid;
+  gap: 16px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.family-tree-header,
+.tree-selectors,
+.tree-view-tabs {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.tree-selectors label {
+  display: grid;
+  gap: 5px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.tree-view-tabs {
+  justify-content: flex-start;
+}
+
+.tree-view-button {
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #94a3b8;
+}
+
+.tree-view-button.active {
+  color: #ffffff;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.tree-person-node {
+  box-sizing: border-box;
+  width: 196px;
+  min-height: 112px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 2px solid #94a3b8;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 12%);
+  text-align: left;
+}
+
+.tree-person-name {
+  line-height: 1.35;
+}
+
+.tree-kinship-label {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.tree-life-years,
+.tree-generation {
+  color: #475569;
+  font-size: 13px;
+}
+
+.tree-generation.conflict {
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.family-union-node {
+  box-sizing: border-box;
+  width: 72px;
+  min-height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 7px;
+  border: 2px solid #2563eb;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.family-union-node.ended {
+  border-color: #475569;
+  border-style: dashed;
+}
+
+.family-union-node.warning {
+  border-color: #c2410c;
+}
+
+.tree-status {
+  padding: 2rem;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
