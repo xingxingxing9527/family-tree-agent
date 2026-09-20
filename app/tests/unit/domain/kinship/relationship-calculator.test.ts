@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { calculateRelationship } from "../../../../src/main/domain/kinship/relationship-calculator";
 import { loadKinshipRuleCatalog } from "../../../../src/main/domain/kinship/rule-loader";
@@ -52,6 +52,26 @@ describe("calculateRelationship", () => {
     } finally {
       process.chdir(originalDirectory);
       rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("loads the catalog from Electron's packaged resources path and packages only that catalog", () => {
+    const originalResourcesPath = process.resourcesPath;
+    const packagedResourcesPath = mkdtempSync(resolve(tmpdir(), "kinship-packaged-resources-"));
+    const catalogPath = join(packagedResourcesPath, "kinship-rules", "mandarin-v1.json");
+    try {
+      mkdirSync(join(packagedResourcesPath, "kinship-rules"));
+      writeFileSync(catalogPath, JSON.stringify({ version: "packaged-mandarin-v1", rules: [] }));
+      Object.defineProperty(process, "resourcesPath", { configurable: true, value: packagedResourcesPath });
+
+      expect(loadKinshipRuleCatalog().version).toBe("packaged-mandarin-v1");
+
+      const builderConfig = readFileSync(resolve(process.cwd(), "electron-builder.yml"), "utf8");
+      expect(builderConfig).toMatch(/extraResources:\s*\r?\n\s+- from: resources\/kinship-rules\/mandarin-v1\.json\r?\n\s+to: kinship-rules\/mandarin-v1\.json/);
+      expect(builderConfig).not.toMatch(/from: resources\/kinship-rules\/\*\*/);
+    } finally {
+      Object.defineProperty(process, "resourcesPath", { configurable: true, value: originalResourcesPath });
+      rmSync(packagedResourcesPath, { recursive: true, force: true });
     }
   });
 
@@ -124,6 +144,22 @@ describe("calculateRelationship", () => {
     expect(result.primaryTerm).toBe("姐妹");
     expect(result.signature.steps).toEqual(["sister"]);
     expect(result.signature.relativeAgeOrder).toBe("unknown");
+  });
+
+  it("treats siblings born on the same exact solar date as age-uncertain", () => {
+    const result = calculateRelationship(graph(
+      [person("source", "female", solar(2000, 3, 1)), person("parent"), person("sister", "female", solar(2000, 3, 1))],
+      [
+        { id: "parent-source", parentId: "parent", childId: "source", parentRole: "mother" },
+        { id: "parent-sister", parentId: "parent", childId: "sister", parentRole: "mother" }
+      ]
+    ), "source", "sister");
+
+    expect(result.primaryTerm).toBe("姐妹");
+    expect(result.reverseTerm).toBe("姐妹");
+    expect(result.signature.steps).toEqual(["sister"]);
+    expect(result.signature.relativeAgeOrder).toBe("unknown");
+    expect(result.uncertainty).toContain("缺少可靠出生日期，未推断长幼顺序");
   });
 
   it("uses an active spouse path for direct current in-laws", () => {

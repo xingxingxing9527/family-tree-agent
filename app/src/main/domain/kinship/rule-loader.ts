@@ -44,7 +44,11 @@ export function parseKinshipRuleCatalog(value: unknown): KinshipRuleCatalog {
 }
 
 const defaultCatalogPath = (): string => {
+  const electronResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   const candidates = [
+    ...(typeof electronResourcesPath === "string"
+      ? [resolve(electronResourcesPath, "kinship-rules", "mandarin-v1.json")]
+      : []),
     resolve(process.cwd(), "resources", "kinship-rules", "mandarin-v1.json"),
     fileURLToPath(new URL("../../resources/kinship-rules/mandarin-v1.json", import.meta.url)),
     fileURLToPath(new URL("../../../../resources/kinship-rules/mandarin-v1.json", import.meta.url))

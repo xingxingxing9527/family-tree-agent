@@ -14,18 +14,17 @@ type AgeOrder = KinshipSignature["relativeAgeOrder"];
 interface DateRange {
   start: number;
   end: number;
-  exact: boolean;
 }
 
 const dateRange = (date: PartialDate | null): DateRange | null => {
   if (!date || date.calendar !== "solar") return null;
   if (date.day !== null) {
     const instant = Date.UTC(date.year, date.month - 1, date.day);
-    return { start: instant, end: instant, exact: true };
+    return { start: instant, end: instant };
   }
   const start = Date.UTC(date.year, date.month - 1, 1);
   const end = Date.UTC(date.year, date.month, 0);
-  return { start, end, exact: false };
+  return { start, end };
 };
 
 export const compareRelativeAge = (
@@ -37,7 +36,6 @@ export const compareRelativeAge = (
   if (!viewpoint || !target) return "unknown";
   if (target.end < viewpoint.start) return "older";
   if (target.start > viewpoint.end) return "younger";
-  if (target.exact && viewpoint.exact && target.start === viewpoint.start) return "same";
   return "unknown";
 };
 
