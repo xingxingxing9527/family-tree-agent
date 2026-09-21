@@ -1,0 +1,202 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
+import { QueryToolRegistry } from "../../../src/main/application/query/query-tool-registry";
+import { applyMigrations } from "../../../src/main/database/migrations";
+import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
+import { QUERY_CHANNELS, registerQueryIpc, WorkspaceQueryGateway, type QueryGateway } from "../../../src/main/ipc/query-ipc";
+
+const workspaceId = "workspace-query-tools";
+const solar = (year: number) => ({
+  calendar: "solar" as const,
+  year,
+  month: 1,
+  day: null,
+  leapMonth: false,
+  precision: "month" as const
+});
+
+describe("query IPC boundary", () => {
+  it("rejects escape-hatch fields and sanitizes unexpected gateway details", async () => {
+    const searchPeople = vi.fn().mockResolvedValue({ ok: true, value: [] });
+    const getPerson = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        code: "INTERNAL",
+        message: "SQL SELECT secret at C:\\private\\genealogy.sqlite",
+        details: { stack: "private stack", file: "C:\\private\\genealogy.sqlite" }
+      }
+    });
+    const gateway = {
+      searchPeople,
+      getPerson,
+      listRelatives: vi.fn(),
+      calculateRelationship: vi.fn(),
+      summarizeLineage: vi.fn(),
+      searchWiki: vi.fn()
+    } as unknown as QueryGateway;
+    const handlers = new Map<string, (event: { sender: { id: number } }, input: unknown) => Promise<unknown>>();
+    registerQueryIpc({ handle: (channel, handler) => handlers.set(channel, handler as never) }, () => 7, gateway);
+
+    await expect(handlers.get(QUERY_CHANNELS.searchPeople)!({ sender: { id: 7 } }, {
+      query: "张",
+      limit: 20,
+      sql: "SELECT * FROM person"
+    })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    expect(searchPeople).not.toHaveBeenCalled();
+
+    const internal = await handlers.get(QUERY_CHANNELS.getPerson)!({ sender: { id: 7 } }, { personId: "person-1" });
+    expect(internal).toEqual({ ok: false, error: { code: "INTERNAL", message: "Unable to complete query request" } });
+    expect(JSON.stringify(internal)).not.toMatch(/SELECT|genealogy\.sqlite|private|stack/i);
+  });
+
+  it("returns a sanitized result when an existing workspace database cannot be opened", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "query-gateway-"));
+    const databasePath = join(directory, "genealogy.sqlite");
+    await writeFile(databasePath, "not a sqlite database");
+    const gateway = new WorkspaceQueryGateway({
+      getOpenWorkspaceContext: () => ({ workspaceId, databasePath })
+    });
+
+    await expect(gateway.searchPeople({ query: "张", limit: 20 })).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL", message: "Unable to complete query request" }
+    });
+    await rm(directory, { recursive: true, force: true });
+  });
+});
+const source = (key: string) => ({ sourceKey: key, title: `来源 ${key}`, kind: "form" });
+
+describe("QueryToolRegistry", () => {
+  let database: WorkspaceDatabase;
+  let registry: QueryToolRegistry;
+
+  beforeEach(() => {
+    database = openDatabase(":memory:");
+    applyMigrations(database);
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "person.create",
+      draft: { id: "father", workspaceId, displayName: "张国强", gender: "male", birth: solar(1960) },
+      source: source("father")
+    });
+    facts.execute({
+      type: "person.create",
+      draft: { id: "child-a", workspaceId, displayName: "张敏", aliases: ["敏敏"], gender: "female", birth: solar(1988) },
+      source: source("child-a")
+    });
+    facts.execute({
+      type: "person.create",
+      draft: { id: "child-b", workspaceId, displayName: "张敏", gender: "male", birth: solar(1990) },
+      source: source("child-b")
+    });
+    facts.execute({
+      type: "person.create",
+      draft: { id: "spouse", workspaceId, displayName: "李华", gender: "female" },
+      source: source("spouse")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: { id: "father-child-a", workspaceId, parentId: "father", childId: "child-a", parentRole: "father" },
+      source: source("father-child-a")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: { id: "father-child-b", workspaceId, parentId: "father", childId: "child-b", parentRole: "father" },
+      source: source("father-child-b")
+    });
+
+    createUnitOfWork(database, workspaceId).run("lineage.fixtures", (context) => {
+      context.lineages.create(context, { id: "lineage", name: "张氏", founderPersonId: "father" });
+      context.lineages.addMembership(context, { id: "member-a", lineageId: "lineage", personId: "child-a", lineageRole: "blood" });
+      context.lineages.addMembership(context, { id: "member-b", lineageId: "lineage", personId: "child-b", lineageRole: "blood" });
+      context.lineages.addMembership(context, { id: "member-spouse", lineageId: "lineage", personId: "spouse", lineageRole: "married_in", declaredGeneration: 2 });
+    });
+
+    const now = new Date().toISOString();
+    database.prepare("INSERT INTO wiki_entry (id, workspace_id, slug, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("wiki-active", workspaceId, "percent-story", "百分号 % 家史", "记录含有 100% 原文和下划线_符号", now, now);
+    database.prepare("INSERT INTO wiki_entry (id, workspace_id, slug, title, content, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("wiki-archived", workspaceId, "archived", "旧家史", "百分号 % 家史", now, now, now);
+    registry = new QueryToolRegistry(database, workspaceId);
+  });
+
+  afterEach(() => database.close());
+
+  it("keeps duplicate names disambiguated with birth and parent hints", () => {
+    expect(registry.tools.search_people({ query: "张敏", limit: 20 })).toEqual([
+      {
+        id: "child-a",
+        displayName: "张敏",
+        aliases: ["敏敏"],
+        gender: "female",
+        birth: solar(1988),
+        parentHints: [{ id: "father", displayName: "张国强", role: "father" }]
+      },
+      {
+        id: "child-b",
+        displayName: "张敏",
+        aliases: [],
+        gender: "male",
+        birth: solar(1990),
+        parentHints: [{ id: "father", displayName: "张国强", role: "father" }]
+      }
+    ]);
+  });
+
+  it("returns structured person sources and typed relatives without mutating facts", () => {
+    const operationCount = database.prepare("SELECT COUNT(*) AS count FROM operation_group").get() as { count: number };
+
+    const person = registry.tools.get_person({ personId: "child-a" });
+    const children = registry.tools.list_relatives({ personId: "father", kinds: ["child"] });
+
+    expect(person.sources).toEqual([expect.objectContaining({ title: "来源 child-a", sourceKey: "child-a" })]);
+    expect(children).toHaveLength(2);
+    expect(children.map((relative) => relative.person.id)).toEqual(["child-a", "child-b"]);
+    expect(children.every((relative) => relative.kind === "child")).toBe(true);
+    expect(database.prepare("SELECT COUNT(*) AS count FROM operation_group").get()).toEqual(operationCount);
+  });
+
+  it("calculates the same relationship bidirectionally with inspectable paths", () => {
+    const downward = registry.tools.calculate_relationship({ viewpointId: "father", targetId: "child-a" });
+    const upward = registry.tools.calculate_relationship({ viewpointId: "child-a", targetId: "father" });
+
+    expect(downward.primaryTerm).toBe(upward.reverseTerm);
+    expect(downward.reverseTerm).toBe(upward.primaryTerm);
+    expect(downward.signature.pathPersonIds).toEqual(["father", "child-a"]);
+    expect(upward.signature.pathPersonIds).toEqual(["child-a", "father"]);
+  });
+
+  it("summarizes blood generations without counting married-in members", () => {
+    const summary = registry.tools.summarize_lineage({ lineageId: "lineage" });
+    const secondGeneration = registry.tools.summarize_lineage({ lineageId: "lineage", generation: 2 });
+
+    expect(summary).toMatchObject({
+      lineageId: "lineage",
+      name: "张氏",
+      memberCount: 4,
+      bloodMemberCount: 3,
+      generationCounts: { "1": 1, "2": 2 }
+    });
+    expect(secondGeneration.members.map((member) => member.personId)).toEqual(["child-a", "child-b"]);
+    expect(secondGeneration.members.some((member) => member.personId === "spouse")).toBe(false);
+  });
+
+  it("keeps the six-tool map closed and treats LIKE wildcard characters literally", () => {
+    expect(Object.keys(registry.tools)).toEqual([
+      "search_people",
+      "get_person",
+      "list_relatives",
+      "calculate_relationship",
+      "summarize_lineage",
+      "search_wiki"
+    ]);
+    expect(registry.tools.search_wiki({ query: "%", limit: 50 })).toEqual([
+      expect.objectContaining({ wikiEntryId: "wiki-active", title: "百分号 % 家史", sourceIds: [] })
+    ]);
+    expect(() => registry.tools.search_people({ query: "张", limit: 2, sql: "SELECT *" } as never)).toThrow();
+  });
+});

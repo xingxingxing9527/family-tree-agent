@@ -80,6 +80,109 @@ export interface PersonDetailReadModel {
   marriages: MarriageReadModel[];
 }
 
+export interface SourceReadModel {
+  id: string;
+  sourceKey: string;
+  title: string;
+  kind: string | null;
+  uri: string | null;
+  citation: string | null;
+}
+
+export interface PersonParentHint {
+  id: string;
+  displayName: string;
+  role: "father" | "mother";
+}
+
+export interface PersonCandidate {
+  id: string;
+  displayName: string;
+  aliases: string[];
+  gender: Gender;
+  birth: PartialDate | null;
+  parentHints: PersonParentHint[];
+}
+
+export interface PersonQueryReadModel extends PersonReadModel {
+  aliases: string[];
+  sources: SourceReadModel[];
+}
+
+export type RelativeKind = "parent" | "spouse" | "child";
+
+export interface RelativeReadModel {
+  relationId: string;
+  kind: RelativeKind;
+  person: PersonCandidate;
+  parentRole: "father" | "mother" | null;
+  marriageStatus: "active" | "divorced" | null;
+}
+
+export interface RelationshipSignatureDto {
+  steps: string[];
+  generationDelta: number;
+  lineageSide: "paternal" | "maternal" | "self" | "affinity" | "unknown";
+  bloodAffinity: "blood" | "currentAffinity" | "directFormerSpouse";
+  viewpointGender: Gender;
+  targetGender: Gender;
+  relativeAgeOrder: "older" | "younger" | "same" | "unknown";
+  pathPersonIds: string[];
+  pathRelationIds: string[];
+}
+
+export interface RelationshipAlternativeDto {
+  primaryTerm: string | null;
+  reverseTerm: string | null;
+  description: string;
+  signature: RelationshipSignatureDto;
+}
+
+export interface RelationshipResultDto extends RelationshipAlternativeDto {
+  ruleVersion: string;
+  alternatives: RelationshipAlternativeDto[];
+  uncertainty: string[];
+}
+
+export interface LineageMemberSummary {
+  personId: string;
+  displayName: string;
+  role: "blood" | "married_in" | "associated";
+  generation: {
+    declared: number | null;
+    computed: number | null;
+    displayed: number | null;
+    source: "declared" | "computed" | "none";
+    conflict: boolean;
+  };
+}
+
+export interface LineageSummary {
+  lineageId: string;
+  name: string;
+  generation: number | null;
+  memberCount: number;
+  bloodMemberCount: number;
+  generationCounts: Record<string, number>;
+  members: LineageMemberSummary[];
+}
+
+export interface WikiSearchHit {
+  wikiEntryId: string;
+  title: string;
+  excerpt: string;
+  sourceIds: string[];
+}
+
+export interface QueryApi {
+  searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
+  getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
+  listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
+  calculateRelationship(input: { viewpointId: string; targetId: string }): Promise<AppResult<RelationshipResultDto>>;
+  summarizeLineage(input: { lineageId: string; generation?: number }): Promise<AppResult<LineageSummary>>;
+  searchWiki(input: { query: string; limit: number }): Promise<AppResult<WikiSearchHit[]>>;
+}
+
 export interface DomainWarningDto {
   code: string;
   message: string;
@@ -125,4 +228,5 @@ export interface DesktopApi {
     addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
   };
+  query: QueryApi;
 }

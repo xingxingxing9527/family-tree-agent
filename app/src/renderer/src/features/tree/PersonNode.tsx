@@ -1,12 +1,17 @@
 import React, { type JSX } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { TreeFlowNodeData } from "./layout-with-elk";
+import { useOptionalViewpoint } from "../../app/ViewpointContext";
 
 type PersonFlowNode = Node<TreeFlowNodeData, "person">;
 
 export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | null {
+  const viewpoint = useOptionalViewpoint();
   if (data.node.kind !== "person") return null;
   const { display } = data.node;
+  const relationshipLabel = viewpoint && Object.hasOwn(viewpoint.relationshipLabels, data.node.personId)
+    ? viewpoint.relationshipLabels[data.node.personId]
+    : data.relationshipLabel;
   const years = display.birthYear === null && display.deathYear === null
     ? null
     : `${display.birthYear ?? "?"}–${display.deathYear ?? ""}`;
@@ -25,7 +30,7 @@ export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | n
     >
       <Handle type="target" position={Position.Top} isConnectable={false} />
       <strong className="tree-person-name" style={{ fontSize: "15px" }}>{display.displayName}</strong>
-      {data.relationshipLabel && <span className="tree-kinship-label">{data.relationshipLabel}</span>}
+      {relationshipLabel && <span className="tree-kinship-label">{relationshipLabel}</span>}
       {years && <span className="tree-life-years">{years}</span>}
       {generation && <span className={display.generation?.conflict ? "tree-generation conflict" : "tree-generation"}>{generation}</span>}
       <Handle type="source" position={Position.Bottom} isConnectable={false} />

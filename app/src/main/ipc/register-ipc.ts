@@ -4,6 +4,7 @@ import type { AppResult } from "../../shared/contracts.js";
 import type { WorkspaceManager } from "../workspaces/workspace-manager.js";
 
 export { FACT_CHANNELS, registerFactsIpc } from "./facts-ipc.js";
+export { QUERY_CHANNELS, registerQueryIpc } from "./query-ipc.js";
 
 export const WORKSPACE_CHANNELS = { list: "workspaces:list", create: "workspaces:create", open: "workspaces:open", close: "workspaces:close" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;
