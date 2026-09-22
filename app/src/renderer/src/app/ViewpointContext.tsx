@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import type { AppResult, RelationshipResultDto } from "../../../shared/contracts";
 
 export interface ViewpointQuery {
@@ -37,36 +37,55 @@ export function ViewpointProvider({
 }: ViewpointProviderProps): JSX.Element {
   const [viewpointId, setViewpointState] = useState<string | null>(() => storage.getItem(storageKey(workspaceId)));
   const [relationshipLabels, setRelationshipLabels] = useState<Readonly<Record<string, string | null>>>({});
+  const [labelsKey, setLabelsKey] = useState<string | null>(null);
+  const requestToken = useRef(0);
   const visibleKey = [...new Set(visiblePersonIds)].sort().join("\u0000");
   const visible = useMemo(() => visibleKey ? visibleKey.split("\u0000") : [], [visibleKey]);
+  const requestKey = `${workspaceId}\u0001${viewpointId ?? ""}\u0001${visibleKey}`;
 
   useEffect(() => {
     setViewpointState(storage.getItem(storageKey(workspaceId)));
-    setRelationshipLabels({});
+    setLabelsKey(null);
   }, [storage, workspaceId]);
 
   const setViewpointId = useCallback((next: string | null): void => {
+    requestToken.current += 1;
     if (next) storage.setItem(storageKey(workspaceId), next);
     else storage.removeItem(storageKey(workspaceId));
     setViewpointState(next);
+    setLabelsKey(null);
   }, [storage, workspaceId]);
 
   useEffect(() => {
+    const token = ++requestToken.current;
     let current = true;
+    const activeRequestKey = requestKey;
     if (!viewpointId) {
       setRelationshipLabels({});
+      setLabelsKey(activeRequestKey);
       return () => { current = false; };
     }
     void Promise.all(visible.map(async (targetId) => {
-      const result = await query.calculateRelationship({ viewpointId, targetId });
-      return [targetId, result.ok ? result.value.primaryTerm : null] as const;
+      try {
+        const result = await query.calculateRelationship({ viewpointId, targetId });
+        return [targetId, result.ok ? result.value.primaryTerm : null] as const;
+      } catch {
+        return [targetId, null] as const;
+      }
     })).then((entries) => {
-      if (current) setRelationshipLabels(Object.fromEntries(entries));
+      if (current && token === requestToken.current) {
+        setRelationshipLabels(Object.fromEntries(entries));
+        setLabelsKey(activeRequestKey);
+      }
     });
     return () => { current = false; };
-  }, [query, viewpointId, visible]);
+  }, [query, requestKey, viewpointId, visible]);
 
-  const value = useMemo<ViewpointState>(() => ({ viewpointId, relationshipLabels, setViewpointId }), [relationshipLabels, setViewpointId, viewpointId]);
+  const value = useMemo<ViewpointState>(() => ({
+    viewpointId,
+    relationshipLabels: labelsKey === requestKey ? relationshipLabels : {},
+    setViewpointId
+  }), [labelsKey, relationshipLabels, requestKey, setViewpointId, viewpointId]);
   return <ViewpointContext.Provider value={value}>{children}</ViewpointContext.Provider>;
 }
 

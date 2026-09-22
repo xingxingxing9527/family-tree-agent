@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppResult, RelationshipResultDto } from "../../../src/shared/contracts";
 import { ViewpointProvider, useViewpoint } from "../../../src/renderer/src/app/ViewpointContext";
 import { ChatPanel, type ChatAnswer } from "../../../src/renderer/src/features/chat/ChatPanel";
 import { PersonNode } from "../../../src/renderer/src/features/tree/PersonNode";
@@ -14,6 +15,34 @@ vi.mock("@xyflow/react", () => ({
 
 afterEach(cleanup);
 beforeEach(() => window.localStorage.clear());
+
+const relationshipResult = (primaryTerm: string | null): AppResult<RelationshipResultDto> => ({
+  ok: true,
+  value: {
+    primaryTerm,
+    reverseTerm: null,
+    description: "关系路径",
+    ruleVersion: "test",
+    signature: {
+      steps: [], generationDelta: 0, lineageSide: "self", bloodAffinity: "blood",
+      viewpointGender: "unknown", targetGender: "unknown", relativeAgeOrder: "unknown",
+      pathPersonIds: [], pathRelationIds: []
+    },
+    alternatives: [],
+    uncertainty: []
+  }
+});
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
+function LabelsHarness({ personIds }: { personIds: string[] }): React.JSX.Element {
+  const viewpoint = useViewpoint();
+  return <>{personIds.map((personId) => <span data-testid={`label-${personId}`} key={personId}>{viewpoint.relationshipLabels[personId] ?? "none"}</span>)}</>;
+}
 
 function ViewpointHarness(): React.JSX.Element {
   const viewpoint = useViewpoint();
@@ -107,6 +136,115 @@ describe("ViewpointProvider", () => {
 
     await waitFor(() => expect(query.calculateRelationship).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByText("旧称谓")).not.toBeInTheDocument());
+  });
+
+  it("clears labels immediately and ignores an older viewpoint response", async () => {
+    window.localStorage.setItem("family-agent:viewpoint:workspace-a", "parent");
+    const pending = new Map<string, ReturnType<typeof deferred<AppResult<RelationshipResultDto>>>>();
+    const query = {
+      calculateRelationship: vi.fn(({ viewpointId }: { viewpointId: string; targetId: string }) => {
+        const request = deferred<AppResult<RelationshipResultDto>>();
+        pending.set(viewpointId, request);
+        return request.promise;
+      })
+    };
+
+    render(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={["target"]} query={query}>
+        <ViewpointHarness />
+      </ViewpointProvider>
+    );
+    await waitFor(() => expect(pending.has("parent")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "切换视角" }));
+    expect(screen.getByTestId("target-label")).toHaveTextContent("none");
+    await waitFor(() => expect(pending.has("child")).toBe(true));
+
+    pending.get("child")!.resolve(relationshipResult("child->target"));
+    await waitFor(() => expect(screen.getByTestId("target-label")).toHaveTextContent("child->target"));
+    pending.get("parent")!.resolve(relationshipResult("parent->target"));
+    await waitFor(() => expect(screen.getByTestId("target-label")).toHaveTextContent("child->target"));
+  });
+
+  it("keeps successful target labels when another target query rejects", async () => {
+    window.localStorage.setItem("family-agent:viewpoint:workspace-a", "parent");
+    const query = {
+      calculateRelationship: vi.fn(async ({ targetId }: { viewpointId: string; targetId: string }) => {
+        if (targetId === "bad") throw new Error("query unavailable");
+        return relationshipResult("good->target");
+      })
+    };
+
+    render(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={["bad", "good"]} query={query}>
+        <LabelsHarness personIds={["bad", "good"]} />
+      </ViewpointProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId("label-good")).toHaveTextContent("good->target"));
+    expect(screen.getByTestId("label-bad")).toHaveTextContent("none");
+  });
+
+  it("clears labels when visible people change and ignores the old batch", async () => {
+    window.localStorage.setItem("family-agent:viewpoint:workspace-a", "parent");
+    const pending = new Map<string, ReturnType<typeof deferred<AppResult<RelationshipResultDto>>>>();
+    const query = {
+      calculateRelationship: vi.fn(({ targetId }: { viewpointId: string; targetId: string }) => {
+        const request = deferred<AppResult<RelationshipResultDto>>();
+        pending.set(targetId, request);
+        return request.promise;
+      })
+    };
+
+    const rendered = render(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={["old"]} query={query}>
+        <LabelsHarness personIds={["old", "new"]} />
+      </ViewpointProvider>
+    );
+    await waitFor(() => expect(pending.has("old")).toBe(true));
+    pending.get("old")!.resolve(relationshipResult("old-label"));
+    await waitFor(() => expect(screen.getByTestId("label-old")).toHaveTextContent("old-label"));
+
+    rendered.rerender(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={["new"]} query={query}>
+        <LabelsHarness personIds={["old", "new"]} />
+      </ViewpointProvider>
+    );
+    expect(screen.getByTestId("label-old")).toHaveTextContent("none");
+    await waitFor(() => expect(pending.has("new")).toBe(true));
+    pending.get("new")!.resolve(relationshipResult("new-label"));
+    await waitFor(() => expect(screen.getByTestId("label-new")).toHaveTextContent("new-label"));
+  });
+
+  it("invalidates old labels when the workspace changes", async () => {
+    window.localStorage.setItem("family-agent:viewpoint:workspace-a", "parent");
+    window.localStorage.setItem("family-agent:viewpoint:workspace-b", "other");
+    const pending = new Map<string, ReturnType<typeof deferred<AppResult<RelationshipResultDto>>>>();
+    const query = {
+      calculateRelationship: vi.fn(({ viewpointId }: { viewpointId: string; targetId: string }) => {
+        const request = deferred<AppResult<RelationshipResultDto>>();
+        pending.set(viewpointId, request);
+        return request.promise;
+      })
+    };
+
+    const rendered = render(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={["target"]} query={query}>
+        <LabelsHarness personIds={["target"]} />
+      </ViewpointProvider>
+    );
+    await waitFor(() => expect(pending.has("parent")).toBe(true));
+    pending.get("parent")!.resolve(relationshipResult("parent-label"));
+    await waitFor(() => expect(screen.getByTestId("label-target")).toHaveTextContent("parent-label"));
+
+    rendered.rerender(
+      <ViewpointProvider workspaceId="workspace-b" visiblePersonIds={["target"]} query={query}>
+        <LabelsHarness personIds={["target"]} />
+      </ViewpointProvider>
+    );
+    expect(screen.getByTestId("label-target")).toHaveTextContent("none");
+    await waitFor(() => expect(pending.has("other")).toBe(true));
+    pending.get("other")!.resolve(relationshipResult("other-label"));
+    await waitFor(() => expect(screen.getByTestId("label-target")).toHaveTextContent("other-label"));
   });
 });
 

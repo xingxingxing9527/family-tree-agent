@@ -1,4 +1,6 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import Database from "better-sqlite3";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,6 +67,39 @@ describe("query IPC boundary", () => {
       ok: false,
       error: { code: "INTERNAL", message: "Unable to complete query request" }
     });
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("opens query databases read-only without changing on-disk state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "query-read-only-"));
+    const databasePath = join(directory, "genealogy.sqlite");
+    const database = new Database(databasePath);
+    applyMigrations(database);
+    database.close();
+
+    const beforeBytes = await readFile(databasePath);
+    const beforeWal = existsSync(`${databasePath}-wal`);
+    const beforeShm = existsSync(`${databasePath}-shm`);
+    const beforeCheck = new Database(databasePath);
+    const beforeJournalMode = beforeCheck.pragma("journal_mode", { simple: true });
+    const beforeOperationCount = beforeCheck.prepare("SELECT COUNT(*) AS count FROM operation_group").get() as { count: number };
+    beforeCheck.close();
+
+    const gateway = new WorkspaceQueryGateway({
+      getOpenWorkspaceContext: () => ({ workspaceId, databasePath })
+    });
+    await expect(gateway.searchPeople({ query: "张", limit: 20 })).resolves.toEqual({ ok: true, value: [] });
+
+    const afterBytes = await readFile(databasePath);
+    const afterCheck = new Database(databasePath);
+    const afterJournalMode = afterCheck.pragma("journal_mode", { simple: true });
+    const afterOperationCount = afterCheck.prepare("SELECT COUNT(*) AS count FROM operation_group").get() as { count: number };
+    afterCheck.close();
+    expect(afterBytes).toEqual(beforeBytes);
+    expect(afterJournalMode).toBe(beforeJournalMode);
+    expect(afterOperationCount).toEqual(beforeOperationCount);
+    expect(existsSync(`${databasePath}-wal`)).toBe(beforeWal);
+    expect(existsSync(`${databasePath}-shm`)).toBe(beforeShm);
     await rm(directory, { recursive: true, force: true });
   });
 });

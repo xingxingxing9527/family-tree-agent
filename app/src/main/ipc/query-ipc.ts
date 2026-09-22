@@ -11,7 +11,8 @@ import type {
   RelationshipResultDto,
   WikiSearchHit
 } from "../../shared/contracts.js";
-import { openDatabase, type WorkspaceDatabase } from "../database/open-database.js";
+import { openQueryDatabase } from "../database/open-query-database.js";
+import type { WorkspaceDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 import { QUERY_TOOL_SCHEMAS, QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
 
@@ -71,7 +72,7 @@ export class WorkspaceQueryGateway implements QueryGateway {
     if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete query request");
     let database: WorkspaceDatabase | null = null;
     try {
-      database = openDatabase(context.databasePath);
+      database = openQueryDatabase(context.databasePath);
       return { ok: true, value: operation(new QueryToolRegistry(database, context.workspaceId).tools) };
     } catch (error) {
       if (error instanceof QueryNotFoundError) return failure("NOT_FOUND", "Requested record was not found");
