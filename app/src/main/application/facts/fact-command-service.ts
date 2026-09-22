@@ -50,19 +50,15 @@ export class FactCommandService {
       return { operationGroupId: "", changedEntityIds: [], warnings: prepared.warnings };
     }
 
-    return this.unitOfWork.run(command.type, (ctx) => {
-      const current = this.prepare(command);
-      this.throwOnErrors(current.errors);
-      if (current.warnings.length > 0 && !options.confirmWarnings) {
-        throw new FactCommandError(current.warnings);
-      }
-      const changedEntityId = this.apply(ctx, command, current.ids);
-      return {
-        operationGroupId: ctx.operationGroupId,
-        changedEntityIds: [changedEntityId],
-        warnings: current.warnings
-      };
-    });
+    return this.unitOfWork.run(command.type, (ctx) => this.executeInTransaction(ctx, command, options));
+  }
+
+  executeInTransaction(ctx: TransactionContext, command: FactCommand, options: ExecuteFactCommandOptions = {}): MutationResult {
+    const current = this.prepare(command);
+    this.throwOnErrors(current.errors);
+    if (current.warnings.length > 0 && !options.confirmWarnings) throw new FactCommandError(current.warnings);
+    const changedEntityId = this.apply(ctx, command, current.ids, options.recordSource !== false);
+    return { operationGroupId: ctx.operationGroupId, changedEntityIds: [changedEntityId], warnings: current.warnings };
   }
 
   private prepare(command: FactCommand): PreparedCommand {
@@ -118,12 +114,13 @@ export class FactCommandService {
       case "marriage.add": {
         this.requireOpenWorkspace(command.draft.workspaceId, errors);
         this.validateOptionalDate(command.draft.start, errors);
+        this.validateOptionalDate(command.draft.end, errors);
         const spouseA = this.loadPerson(command.draft.spouseAId, "spouseAId", ids, errors);
         const spouseB = this.loadPerson(command.draft.spouseBId, "spouseBId", ids, errors);
         if (!spouseA || !spouseB) break;
         this.mergeValidation(validateMarriageFact(spouseA, spouseB), errors, warnings);
         const activeMarriages = this.relations.listMarriages().filter((marriage) => marriage.status === "active");
-        if (activeMarriages.some((marriage) => this.marriageContains(marriage, spouseA.id) || this.marriageContains(marriage, spouseB.id))) {
+        if ((command.draft.status ?? "active") === "active" && activeMarriages.some((marriage) => this.marriageContains(marriage, spouseA.id) || this.marriageContains(marriage, spouseB.id))) {
           errors.push(issue("ACTIVE_MARRIAGE_EXISTS", "Each spouse must end their active marriage before starting another"));
         }
         break;
@@ -147,10 +144,10 @@ export class FactCommandService {
     return { ids, errors, warnings };
   }
 
-  private apply(ctx: TransactionContext, command: FactCommand, ids: Readonly<Record<string, string>>): string {
+  private apply(ctx: TransactionContext, command: FactCommand, ids: Readonly<Record<string, string>>, recordSource = true): string {
     switch (command.type) {
       case "person.create": {
-        ctx.sources.create(ctx, command.source);
+        if (recordSource) ctx.sources.create(ctx, command.source);
         const person = ctx.people.create(ctx, {
           id: command.draft.id,
           displayName: command.draft.displayName,
@@ -163,14 +160,14 @@ export class FactCommandService {
         return person.id;
       }
       case "person.update": {
-        ctx.sources.create(ctx, command.source);
+        if (recordSource) ctx.sources.create(ctx, command.source);
         const { aliases, ...personPatch } = command.patch;
         const person = ctx.people.update(ctx, ids.person!, personPatch);
         this.syncAliases(ctx, person.id, aliases);
         return person.id;
       }
       case "parentChild.add": {
-        ctx.sources.create(ctx, command.source);
+        if (recordSource) ctx.sources.create(ctx, command.source);
         return ctx.relations.createParentChild(ctx, {
           id: command.draft.id,
           parentId: ids.parentId!,
@@ -179,16 +176,18 @@ export class FactCommandService {
         }).id;
       }
       case "marriage.add": {
-        ctx.sources.create(ctx, command.source);
+        if (recordSource) ctx.sources.create(ctx, command.source);
         return ctx.relations.createMarriage(ctx, {
           id: command.draft.id,
           spouseAId: ids.spouseAId!,
           spouseBId: ids.spouseBId!,
-          start: command.draft.start
+          start: command.draft.start,
+          status: command.draft.status,
+          end: command.draft.end
         }).id;
       }
       case "marriage.divorce": {
-        ctx.sources.create(ctx, command.source);
+        if (recordSource) ctx.sources.create(ctx, command.source);
         return ctx.relations.divorceMarriage(ctx, ids.marriage!, command.endDate).id;
       }
       case "fact.softDelete": {

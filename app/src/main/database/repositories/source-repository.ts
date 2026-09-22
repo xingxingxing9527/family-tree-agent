@@ -22,6 +22,10 @@ const toRecord = (row: SourceRow): SourceRecord => ({ id: row.id, workspaceId: r
 
 export class SourceRepository {
   constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string) {}
+  getByKey(sourceKey: string, options: ReadOptions = {}): SourceRecord | null {
+    const row = this.database.prepare(`SELECT * FROM source WHERE workspace_id = ? AND source_key = ?${options.includeArchived ? "" : " AND deleted_at IS NULL"}`).get(this.workspaceId, sourceKey) as SourceRow | undefined;
+    return row ? toRecord(row) : null;
+  }
   get(id: string, options: ReadOptions = {}): SourceRecord | null {
     const row = this.database.prepare(`SELECT * FROM source WHERE workspace_id = ? AND id = ?${options.includeArchived ? "" : " AND deleted_at IS NULL"}`).get(this.workspaceId, id) as SourceRow | undefined;
     return row ? toRecord(row) : null;

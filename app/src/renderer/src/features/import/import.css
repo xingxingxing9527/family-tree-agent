@@ -1,0 +1,12 @@
+.import-shell { max-width: 960px; display: grid; gap: 1rem; color: var(--text-primary); }
+.import-card, .import-preview { padding: 1rem; border: 1px solid var(--border); background: var(--surface); display: grid; gap: 0.75rem; }
+.mapping-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.mapping-grid label, .import-card > label { display: grid; gap: 0.35rem; color: var(--text-primary); }
+.issue-list { margin: 0; padding-left: 1.5rem; }
+.issue-error { color: #991b1b; font-weight: 700; }
+.issue-warning { color: #854d0e; font-weight: 700; }
+.action-list { display: grid; gap: 0.5rem; }
+.import-action { padding: 0.75rem; border: 1px solid var(--border); background: var(--surface); }
+.confirmation { color: var(--text-primary); font-weight: 700; }
+.template-export { grid-template-columns: 1fr auto; align-items: end; }
+.template-export h2 { grid-column: 1 / -1; }

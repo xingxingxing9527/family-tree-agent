@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { WorkspaceDatabase } from "./open-database.js";
 import { AuditRepository } from "./repositories/audit-repository.js";
 import { LineageRepository } from "./repositories/lineage-repository.js";
+import { ImportIdentityRepository } from "./repositories/import-identity-repository.js";
 import { PersonRepository } from "./repositories/person-repository.js";
 import { RelationRepository } from "./repositories/relation-repository.js";
 import { SourceRepository } from "./repositories/source-repository.js";
@@ -15,6 +16,7 @@ export interface TransactionContext {
   people: PersonRepository;
   relations: RelationRepository;
   lineages: LineageRepository;
+  importIdentities: ImportIdentityRepository;
   sources: SourceRepository;
   audit: AuditRepository;
 }
@@ -33,6 +35,7 @@ export class SqliteUnitOfWork implements UnitOfWork {
         people: new PersonRepository(this.database, this.workspaceId),
         relations: new RelationRepository(this.database, this.workspaceId),
         lineages: new LineageRepository(this.database, this.workspaceId),
+        importIdentities: new ImportIdentityRepository(this.database, this.workspaceId),
         sources: new SourceRepository(this.database, this.workspaceId),
         audit: new AuditRepository(this.database, this.workspaceId, operationGroupId)
       };

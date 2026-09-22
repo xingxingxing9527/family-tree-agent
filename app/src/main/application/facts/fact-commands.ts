@@ -31,6 +31,8 @@ export interface MarriageDraft {
   spouseAId: string;
   spouseBId: string;
   start?: PartialDate | null;
+  status?: "active" | "divorced";
+  end?: PartialDate | null;
 }
 
 export type SourceDraft = CreateSourceInput;
@@ -53,4 +55,5 @@ export interface MutationResult {
 
 export interface ExecuteFactCommandOptions {
   confirmWarnings?: boolean;
+  recordSource?: boolean;
 }

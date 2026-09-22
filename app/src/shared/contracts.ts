@@ -209,6 +209,72 @@ export interface MarriageDraft {
   sourceDescription: string;
 }
 
+export type ImportSheetDto = "People" | "ParentChild" | "Marriages";
+export type ImportEntityTypeDto = "person" | "parentChild" | "marriage";
+export type ImportActionKindDto = "create" | "update" | "unchanged" | "blocked";
+export type ImportCellValueDto = string | number | boolean | null;
+
+export interface ImportSourceRowDto {
+  sheet: ImportSheetDto;
+  row: number;
+  raw: Record<string, ImportCellValueDto>;
+}
+
+export interface ImportIssueDto {
+  id: string;
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  actionId?: string;
+  evidence: Readonly<Record<string, unknown>>;
+}
+
+export interface ImportActionDto {
+  id: string;
+  entityType: ImportEntityTypeDto;
+  kind: ImportActionKindDto;
+  sourceRow: ImportSourceRowDto;
+  entityId?: string;
+  expectedRowVersion?: number;
+  changes: Array<{ field: string; before: unknown; after: unknown }>;
+  issueIds: string[];
+}
+
+export interface ImportPlanDto {
+  id: string;
+  sourceKey: string;
+  fileName: string;
+  actions: ImportActionDto[];
+  issues: ImportIssueDto[];
+  summary: { creates: number; updates: number; unchanged: number; blocked: number };
+}
+
+export interface ImportCommitReportDto {
+  planId: string;
+  sourceKey: string;
+  operationGroupId: string | null;
+  rows: Array<{
+    actionId: string;
+    sheet: ImportSheetDto;
+    row: number;
+    disposition: "committed" | "unchanged" | "blocked" | "excluded";
+    entityId: string | null;
+    operationGroupId: string | null;
+    issueCodes: string[];
+  }>;
+}
+
+export interface ImportApi {
+  parse(input: {
+    filePath: string;
+    sourceKey: string;
+    csvEntityType?: ImportSheetDto;
+    fieldMapping?: Record<string, string>;
+  }): Promise<AppResult<ImportPlanDto>>;
+  commit(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
+  exportTemplate(input: { targetFile: string }): Promise<AppResult<{ filePath: string }>>;
+}
+
 export interface DesktopApi {
   app: { getVersion(): Promise<string> };
   workspaces: {
@@ -228,5 +294,6 @@ export interface DesktopApi {
     addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
   };
+  imports: ImportApi;
   query: QueryApi;
 }
