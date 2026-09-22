@@ -8,6 +8,7 @@ import { FactCommandService } from "../../../src/main/application/facts/fact-com
 import { QueryToolRegistry } from "../../../src/main/application/query/query-tool-registry";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import { openQueryDatabase } from "../../../src/main/database/open-query-database";
 import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
 import { QUERY_CHANNELS, registerQueryIpc, WorkspaceQueryGateway, type QueryGateway } from "../../../src/main/ipc/query-ipc";
 
@@ -89,6 +90,13 @@ describe("query IPC boundary", () => {
       getOpenWorkspaceContext: () => ({ workspaceId, databasePath })
     });
     await expect(gateway.searchPeople({ query: "张", limit: 20 })).resolves.toEqual({ ok: true, value: [] });
+
+    const queryDatabase = openQueryDatabase(databasePath);
+    try {
+      expect(() => queryDatabase.exec("CREATE TABLE query_write_probe (id INTEGER)")).toThrow(/readonly|read-only/i);
+    } finally {
+      queryDatabase.close();
+    }
 
     const afterBytes = await readFile(databasePath);
     const afterCheck = new Database(databasePath);
