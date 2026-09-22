@@ -106,4 +106,17 @@ describe("idempotent spreadsheet re-import", () => {
     expect(database.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()).toBe(0);
     expect(database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()).toBe(0);
   });
+
+  it("rejects a selected relationship when its planned person prerequisite is excluded", () => {
+    const plan = planner.plan(parsed("dependent-selection", [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      { sheet: "ParentChild", row: 2, raw: { parent_external_id: "A", child_external_id: "B", parent_role: "father" } }
+    ]));
+    const relationship = plan.actions.find((action) => action.entityType === "parentChild")!;
+
+    expect(() => committer.commitImport(plan.id, [relationship.id])).toThrow(/prerequisite/i);
+    expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()).toBe(0);
+  });
 });

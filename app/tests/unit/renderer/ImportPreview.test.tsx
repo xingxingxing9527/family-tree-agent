@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ImportPlanDto } from "../../../src/shared/contracts";
 import { FieldMappingStep } from "../../../src/renderer/src/features/import/FieldMappingStep";
 import { ImportPreview } from "../../../src/renderer/src/features/import/ImportPreview";
+import { ImportPage } from "../../../src/renderer/src/features/import/ImportPage";
 
 afterEach(cleanup);
 
@@ -21,7 +22,8 @@ const plan: ImportPlanDto = {
     entityId: "person-a",
     expectedRowVersion: 1,
     changes: [{ field: "displayName", before: "旧姓名", after: "新姓名" }],
-    issueIds: ["warning-1"]
+    issueIds: ["warning-1"],
+    dependsOnActionIds: []
   }],
   issues: [
     { id: "warning-1", severity: "warning", code: "SAME_NAME_CANDIDATE", message: "发现同名候选", actionId: "People:2:person", evidence: { candidateEntityIds: ["person-b"] } },
@@ -52,5 +54,41 @@ describe("ImportPreview", () => {
     fireEvent.change(screen.getByLabelText("CSV 实体类型"), { target: { value: "ParentChild" } });
     expect(onEntityTypeChange).toHaveBeenCalledWith("ParentChild");
     expect(screen.getByLabelText("name 对应列")).toHaveValue("姓名");
+  });
+
+  it("disables a relationship whose selected prerequisite has been excluded", () => {
+    const dependent: ImportPlanDto = { ...plan, actions: [{
+      ...plan.actions[0]!, id: "ParentChild:2:parentChild", entityType: "parentChild",
+      sourceRow: { sheet: "ParentChild", row: 2, raw: {} }, dependsOnActionIds: ["People:2:person"]
+    }] };
+    render(<ImportPreview plan={dependent} excludedActionIds={new Set(["People:2:person"])} onToggleAction={vi.fn()} />);
+
+    expect(screen.getByRole("checkbox", { name: "包含 ParentChild 第 2 行" })).toBeDisabled();
+    expect(screen.getByText(/需要先包含/)).toBeVisible();
+  });
+
+  it("renders every final report row with disposition, entity, issues, and operation group", async () => {
+    const api = {
+      selectFile: vi.fn().mockResolvedValue({ ok: true, value: { fileToken: "11111111-1111-4111-8111-111111111111", fileName: "family.xlsx" } }),
+      parse: vi.fn().mockResolvedValue({ ok: true, value: plan }),
+      commit: vi.fn().mockResolvedValue({ ok: true, value: {
+        planId: plan.id, sourceKey: plan.sourceKey, operationGroupId: "group-1", rows: [
+          { actionId: "a", sheet: "People", row: 2, disposition: "committed", entityId: "person-a", issueCodes: ["WARN"], operationGroupId: "group-1" },
+          { actionId: "b", sheet: "ParentChild", row: 3, disposition: "excluded", entityId: null, issueCodes: ["MISSING_REFERENCE"], operationGroupId: null }
+        ]
+      } }), exportTemplate: vi.fn()
+    } as never;
+    render(<ImportPage api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择导入文件" }));
+    await waitFor(() => expect(screen.getByLabelText("已选导入文件")).toHaveTextContent("family.xlsx"));
+    fireEvent.change(screen.getByLabelText("来源键"), { target: { value: "archive" } });
+    fireEvent.click(screen.getByRole("button", { name: "解析并预览" }));
+    await screen.findByText("导入预览");
+    fireEvent.click(screen.getByRole("checkbox", { name: /我已核对/ }));
+    fireEvent.click(screen.getByRole("button", { name: /确认导入/ }));
+    await waitFor(() => expect(screen.getByLabelText("导入报告")).toBeVisible());
+    const report = screen.getByLabelText("导入报告");
+    expect(screen.getAllByText(/People 第 2 行/).find((node) => node.closest("section") === report)).toHaveTextContent(/committed.*person-a.*WARN.*group-1/);
+    expect(screen.getByText(/ParentChild 第 3 行/)).toHaveTextContent(/excluded.*MISSING_REFERENCE/);
   });
 });

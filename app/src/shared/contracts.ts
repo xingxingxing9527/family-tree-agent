@@ -238,6 +238,7 @@ export interface ImportActionDto {
   expectedRowVersion?: number;
   changes: Array<{ field: string; before: unknown; after: unknown }>;
   issueIds: string[];
+  dependsOnActionIds: string[];
 }
 
 export interface ImportPlanDto {
@@ -265,14 +266,15 @@ export interface ImportCommitReportDto {
 }
 
 export interface ImportApi {
+  selectFile(): Promise<AppResult<{ fileToken: string; fileName: string }>>;
   parse(input: {
-    filePath: string;
+    fileToken: string;
     sourceKey: string;
     csvEntityType?: ImportSheetDto;
     fieldMapping?: Record<string, string>;
   }): Promise<AppResult<ImportPlanDto>>;
   commit(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
-  exportTemplate(input: { targetFile: string }): Promise<AppResult<{ filePath: string }>>;
+  exportTemplate(): Promise<AppResult<{ saved: boolean }>>;
 }
 
 export interface DesktopApi {

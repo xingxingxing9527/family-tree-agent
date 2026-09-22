@@ -73,6 +73,7 @@ export interface ImportAction {
   expectedRowVersion?: number;
   changes: ImportFieldChange[];
   issueIds: string[];
+  dependsOnActionIds: string[];
 }
 
 export interface ImportPlan {

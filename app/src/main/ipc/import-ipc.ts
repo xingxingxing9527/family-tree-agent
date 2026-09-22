@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import type { IpcMain, IpcMainInvokeEvent } from "electron";
+import { realpath, stat } from "node:fs/promises";
+import { basename, extname } from "node:path";
+import { dialog, type IpcMain, type IpcMainInvokeEvent } from "electron";
 import { z } from "zod";
 import type { AppResult, ImportCommitReportDto, ImportPlanDto } from "../../shared/contracts.js";
 import { ImportCommitter } from "../application/import/import-committer.js";
@@ -9,108 +12,75 @@ import { applyMigrations } from "../database/migrations/index.js";
 import { openDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 
-export const IMPORT_CHANNELS = {
-  parse: "imports:parse",
-  commit: "imports:commit",
-  exportTemplate: "imports:export-template"
-} as const;
-
-export interface ImportGateway {
-  parseImport(input: { filePath: string; sourceKey: string; csvEntityType?: "People" | "ParentChild" | "Marriages"; fieldMapping?: Record<string, string> }): Promise<AppResult<ImportPlanDto>>;
-  commitImport(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
-  exportTemplate(input: { targetFile: string }): Promise<AppResult<{ filePath: string }>>;
+export const IMPORT_CHANNELS = { selectFile: "imports:select-file", parse: "imports:parse", commit: "imports:commit", exportTemplate: "imports:export-template" } as const;
+type ImportSheet = "People" | "ParentChild" | "Marriages";
+type ParseInput = { fileToken: string; sourceKey: string; csvEntityType?: ImportSheet; fieldMapping?: Record<string, string> };
+export interface ImportDialogs {
+  showOpenDialog(options: { title: string; properties: string[]; filters: Array<{ name: string; extensions: string[] }> }): Promise<{ canceled: boolean; filePaths: string[] }>;
+  showSaveDialog(options: { title: string; defaultPath: string; filters: Array<{ name: string; extensions: string[] }> }): Promise<{ canceled: boolean; filePath?: string }>;
 }
+export interface ImportGateway {
+  selectImportFile(): Promise<AppResult<{ fileToken: string; fileName: string }>>;
+  parseImport(input: ParseInput): Promise<AppResult<ImportPlanDto>>;
+  commitImport(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
+  exportTemplate(): Promise<AppResult<{ saved: boolean }>>;
+}
+const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "PATH_DENIED" | "INTERNAL", message: string): AppResult<T> => ({ ok: false, error: { code, message } });
+const extensionAllowed = (path: string): boolean => [".xlsx", ".csv"].includes(extname(path).toLowerCase());
+const nativeDialogs: ImportDialogs = {
+  showOpenDialog: (options) => dialog.showOpenDialog(options as Parameters<typeof dialog.showOpenDialog>[0]),
+  showSaveDialog: (options) => dialog.showSaveDialog(options as Parameters<typeof dialog.showSaveDialog>[0])
+};
 
-const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "PATH_DENIED" | "INTERNAL", message: string, details?: unknown): AppResult<T> => ({
-  ok: false,
-  error: { code, message, ...(details === undefined ? {} : { details }) }
-});
+class ImportCapabilityStore {
+  private readonly entries = new Map<string, { path: string; workspaceId: string; expiresAt: number }>();
+  issue(path: string, workspaceId: string): string { const token = randomUUID(); this.entries.set(token, { path, workspaceId, expiresAt: Date.now() + 5 * 60_000 }); return token; }
+  consume(token: string, workspaceId: string): string | null { const entry = this.entries.get(token); this.entries.delete(token); return entry && entry.workspaceId === workspaceId && entry.expiresAt >= Date.now() ? entry.path : null; }
+}
 
 export class WorkspaceImportGateway implements ImportGateway {
   private readonly plans = new ImportPlanStore();
+  private readonly capabilities: ImportCapabilityStore;
+  constructor(private readonly workspaces: OpenWorkspaceContextProvider, private readonly dialogs: ImportDialogs = nativeDialogs, capabilities?: ImportCapabilityStore) { this.capabilities = capabilities ?? new ImportCapabilityStore(); }
 
-  constructor(private readonly workspaces: OpenWorkspaceContextProvider) {}
-
-  async parseImport(input: { filePath: string; sourceKey: string; csvEntityType?: "People" | "ParentChild" | "Marriages"; fieldMapping?: Record<string, string> }): Promise<AppResult<ImportPlanDto>> {
-    const context = this.workspaces.getOpenWorkspaceContext();
-    if (!context) return failure("NOT_FOUND", "No workspace is open");
-    if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request");
+  async selectImportFile(): Promise<AppResult<{ fileToken: string; fileName: string }>> {
+    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open");
+    const selected = await this.dialogs.showOpenDialog({ title: "选择导入表格", properties: ["openFile"], filters: [{ name: "Spreadsheet", extensions: ["xlsx", "csv"] }] });
+    if (selected.canceled || selected.filePaths.length !== 1) return failure("VALIDATION", "No import file was selected");
     try {
-      const parsed = await parseImport(input.filePath, input.sourceKey, { csvEntityType: input.csvEntityType, fieldMapping: input.fieldMapping });
-      const database = openDatabase(context.databasePath);
-      try {
-        applyMigrations(database);
-        return { ok: true, value: new ImportPlanner(database, context.workspaceId, this.plans).plan(parsed) };
-      } finally {
-        database.close();
-      }
-    } catch {
-      return failure("VALIDATION", "Import file is invalid");
-    }
+      const path = await realpath(selected.filePaths[0]!); const metadata = await stat(path);
+      if (!metadata.isFile() || !extensionAllowed(path)) return failure("VALIDATION", "Selected file is not a supported spreadsheet");
+      return { ok: true, value: { fileToken: this.capabilities.issue(path, context.workspaceId), fileName: basename(path) } };
+    } catch { return failure("VALIDATION", "Selected file is unavailable"); }
   }
-
+  async parseImport(input: ParseInput): Promise<AppResult<ImportPlanDto>> {
+    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open"); if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request");
+    const path = this.capabilities.consume(input.fileToken, context.workspaceId); if (!path) return failure("PATH_DENIED", "Import file selection expired; select it again");
+    try {
+      const parsed = await parseImport(path, input.sourceKey, { csvEntityType: input.csvEntityType, fieldMapping: input.fieldMapping });
+      const database = openDatabase(context.databasePath); try { applyMigrations(database); return { ok: true, value: new ImportPlanner(database, context.workspaceId, this.plans).plan(parsed) }; } finally { database.close(); }
+    } catch { return failure("VALIDATION", "Import file is invalid"); }
+  }
   async commitImport(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>> {
-    const context = this.workspaces.getOpenWorkspaceContext();
-    if (!context) return failure("NOT_FOUND", "No workspace is open");
-    if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request");
-    const database = openDatabase(context.databasePath);
-    try {
-      applyMigrations(database);
-      return { ok: true, value: new ImportCommitter(database, context.workspaceId, this.plans).commitImport(input.planId, input.selectedActionIds) };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (/changed since preview/i.test(message)) return failure("CONFLICT", "Import data changed since preview; create a new preview");
-      return failure("VALIDATION", "Import selection could not be committed");
-    } finally {
-      database.close();
-    }
+    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open"); if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request"); const database = openDatabase(context.databasePath);
+    try { applyMigrations(database); return { ok: true, value: new ImportCommitter(database, context.workspaceId, this.plans).commitImport(input.planId, input.selectedActionIds) }; }
+    catch (error) { const stale = /changed since preview/i.test(error instanceof Error ? error.message : ""); return failure(stale ? "CONFLICT" : "VALIDATION", stale ? "Import data changed since preview; create a new preview" : "Import selection could not be committed"); }
+    finally { database.close(); }
   }
-
-  async exportTemplate(input: { targetFile: string }): Promise<AppResult<{ filePath: string }>> {
-    try {
-      return { ok: true, value: { filePath: await exportImportTemplate(input.targetFile) } };
-    } catch {
-      return failure("INTERNAL", "Unable to export import template");
-    }
+  async exportTemplate(): Promise<AppResult<{ saved: boolean }>> {
+    const selected = await this.dialogs.showSaveDialog({ title: "保存导入模板", defaultPath: "family-import-template.xlsx", filters: [{ name: "Excel workbook", extensions: ["xlsx"] }] });
+    if (selected.canceled || !selected.filePath) return { ok: true, value: { saved: false } };
+    try { await exportImportTemplate(selected.filePath); return { ok: true, value: { saved: true } }; } catch { return failure("INTERNAL", "Unable to export import template"); }
   }
 }
 
 type IpcMainLike = Pick<IpcMain, "handle">;
-const pathSchema = z.string().min(1).max(4096);
 const sourceKeySchema = z.string().max(500).refine((entry) => entry.trim().length > 0);
 const mappingSchema = z.record(z.string().min(1).max(100), z.string().min(1).max(200)).refine((mapping) => Object.keys(mapping).length <= 30);
-const parseSchema = z.object({
-  filePath: pathSchema.refine((entry) => /\.(xlsx|csv)$/i.test(entry)),
-  sourceKey: sourceKeySchema,
-  csvEntityType: z.enum(["People", "ParentChild", "Marriages"]).optional(),
-  fieldMapping: mappingSchema.optional()
-}).strict().superRefine((input, context) => {
-  if (/\.csv$/i.test(input.filePath) && !input.csvEntityType) context.addIssue({ code: "custom", message: "CSV entity type is required", path: ["csvEntityType"] });
-});
-const commitSchema = z.object({
-  planId: z.string().min(1).max(200),
-  selectedActionIds: z.array(z.string().min(1).max(200)).max(10_000)
-}).strict().refine((input) => new Set(input.selectedActionIds).size === input.selectedActionIds.length, { message: "Action IDs must be unique" });
-const exportSchema = z.object({ targetFile: pathSchema.refine((entry) => /\.xlsx$/i.test(entry)) }).strict();
-const denied = (): AppResult<never> => ({ ok: false, error: { code: "PATH_DENIED", message: "IPC sender was denied" } });
-const invalid = (): AppResult<never> => ({ ok: false, error: { code: "VALIDATION", message: "Invalid request" } });
-const internal = (): AppResult<never> => ({ ok: false, error: { code: "INTERNAL", message: "Unable to complete import request" } });
-
+const parseSchema = z.object({ fileToken: z.string().uuid(), sourceKey: sourceKeySchema, csvEntityType: z.enum(["People", "ParentChild", "Marriages"]).optional(), fieldMapping: mappingSchema.optional() }).strict();
+const commitSchema = z.object({ planId: z.string().min(1).max(200), selectedActionIds: z.array(z.string().min(1).max(200)).max(10_000) }).strict().refine((input) => new Set(input.selectedActionIds).size === input.selectedActionIds.length);
+const emptySchema = z.object({}).strict(); const denied = (): AppResult<never> => failure("PATH_DENIED", "IPC sender was denied"); const invalid = (): AppResult<never> => failure("VALIDATION", "Invalid request"); const internal = (): AppResult<never> => failure("INTERNAL", "Unable to complete import request");
 export function registerImportIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, imports: ImportGateway): void {
-  const trusted = (event: IpcMainInvokeEvent): boolean => event.sender.id === mainWindowId();
-  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>): void => {
-    ipc.handle(channel, async (event, input: unknown) => {
-      if (!trusted(event)) return denied();
-      const parsed = schema.safeParse(input);
-      if (!parsed.success) return invalid();
-      try {
-        return await operation(parsed.data);
-      } catch {
-        return internal();
-      }
-    });
-  };
-  register(IMPORT_CHANNELS.parse, parseSchema, (input) => imports.parseImport(input));
-  register(IMPORT_CHANNELS.commit, commitSchema, (input) => imports.commitImport(input));
-  register(IMPORT_CHANNELS.exportTemplate, exportSchema, (input) => imports.exportTemplate(input));
+  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>): void => ipc.handle(channel, async (event: IpcMainInvokeEvent, input: unknown) => { if (event.sender.id !== mainWindowId()) return denied(); const parsed = schema.safeParse(input); if (!parsed.success) return invalid(); try { return await operation(parsed.data); } catch { return internal(); } });
+  register(IMPORT_CHANNELS.selectFile, emptySchema, () => imports.selectImportFile()); register(IMPORT_CHANNELS.parse, parseSchema, (input) => imports.parseImport(input)); register(IMPORT_CHANNELS.commit, commitSchema, (input) => imports.commitImport(input)); register(IMPORT_CHANNELS.exportTemplate, emptySchema, () => imports.exportTemplate());
 }

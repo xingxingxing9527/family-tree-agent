@@ -197,7 +197,9 @@ export class ImportPlanner {
         kind = "blocked";
       }
     }
-    return { action: this.action(id, row, "parentChild", kind, payload, rowIssues, entityId, expectedRowVersion), issues: this.attachIssues(id, rowIssues) };
+    const action = this.action(id, row, "parentChild", kind, payload, rowIssues, entityId, expectedRowVersion);
+    action.dependsOnActionIds = this.personDependencies(plannedPeople, [payload.parentExternalId, payload.childExternalId]);
+    return { action, issues: this.attachIssues(id, rowIssues) };
   }
 
   private planMarriage(sourceKey: string, row: ParsedImportRow, plannedPeople: Map<string, PlannedPerson>): { action: ImportAction; issues: ImportIssue[] } {
@@ -237,7 +239,9 @@ export class ImportPlanner {
         kind = "blocked";
       }
     }
-    return { action: this.action(id, row, "marriage", kind, payload, rowIssues, entityId, expectedRowVersion), issues: this.attachIssues(id, rowIssues) };
+    const action = this.action(id, row, "marriage", kind, payload, rowIssues, entityId, expectedRowVersion);
+    action.dependsOnActionIds = this.personDependencies(plannedPeople, [payload.spouseAExternalId, payload.spouseBExternalId]);
+    return { action, issues: this.attachIssues(id, rowIssues) };
   }
 
   private resolvePerson(
@@ -272,6 +276,13 @@ export class ImportPlanner {
     return cycleRows;
   }
 
+  private personDependencies(plannedPeople: Map<string, PlannedPerson>, externalIds: string[]): string[] {
+    return [...new Set(externalIds.flatMap((externalId) => {
+      const action = plannedPeople.get(externalId)?.action;
+      return action?.kind === "create" ? [action.id] : [];
+    }))];
+  }
+
   private personChanges(person: PersonRecord, payload: ImportPersonPayload): ImportAction["changes"] {
     const desired: Array<[string, unknown, unknown]> = [
       ["displayName", person.displayName, payload.displayName],
@@ -301,7 +312,8 @@ export class ImportPlanner {
       ...(entityId ? { entityId } : {}),
       ...(expectedRowVersion === undefined ? {} : { expectedRowVersion }),
       changes: [],
-      issueIds: issues.map((issue) => issue.id)
+      issueIds: issues.map((issue) => issue.id),
+      dependsOnActionIds: []
     };
   }
 

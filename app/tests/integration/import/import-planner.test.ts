@@ -157,4 +157,16 @@ describe("spreadsheet import planning", () => {
     expect(plan.actions.find((action) => action.sourceRow.sheet === "People" && action.sourceRow.row === 3)?.kind).toBe("blocked");
     expect(plan.actions.find((action) => action.sourceRow.sheet === "ParentChild" && action.sourceRow.row === 4)?.kind).toBe("blocked");
   });
+
+  it("makes planned relationship rows depend on the planned person creates", () => {
+    const plan = planner.plan(parsed("dependency-source", [
+      peopleRow(2, "PARENT", "父"),
+      peopleRow(3, "CHILD", "子"),
+      relationRow(2, "PARENT", "CHILD", "father")
+    ]));
+
+    expect(plan.actions.find((action) => action.entityType === "parentChild")?.dependsOnActionIds).toEqual([
+      "People:2:person", "People:3:person"
+    ]);
+  });
 });

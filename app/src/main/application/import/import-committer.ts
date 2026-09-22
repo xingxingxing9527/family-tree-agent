@@ -36,6 +36,11 @@ export class ImportCommitter {
     if (selectedActions.some((action) => action.kind !== "create" && action.kind !== "update")) {
       throw new Error("Only create and update actions can be committed");
     }
+    for (const action of selectedActions) {
+      if (action.dependsOnActionIds.some((dependency) => !selected.has(dependency))) {
+        throw new Error(`Selected action has an unselected prerequisite: ${action.id}`);
+      }
+    }
     if (selectedActions.length === 0) return this.report(plan, selected, null, new Map());
 
     const committed = createUnitOfWork(this.database, this.workspaceId).run("spreadsheet.import", (ctx) => {

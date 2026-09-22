@@ -23,9 +23,10 @@ const desktopApi: DesktopApi = {
     divorce: (input) => ipcRenderer.invoke("relations:divorce", input)
   },
   imports: {
+    selectFile: () => ipcRenderer.invoke("imports:select-file", {}),
     parse: (input) => ipcRenderer.invoke("imports:parse", input),
     commit: (input) => ipcRenderer.invoke("imports:commit", input),
-    exportTemplate: (input) => ipcRenderer.invoke("imports:export-template", input)
+    exportTemplate: () => ipcRenderer.invoke("imports:export-template", {})
   },
   query: {
     searchPeople: (input) => ipcRenderer.invoke("query:search-people", input),

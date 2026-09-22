@@ -32,18 +32,21 @@ export function ImportPreview({ plan, excludedActionIds, onToggleAction }: Impor
       <div className="action-list">
         {plan.actions.map((action) => {
           const selectable = action.kind === "create" || action.kind === "update";
+          const missingPrerequisites = action.dependsOnActionIds.filter((id) => excludedActionIds.has(id));
+          const disabled = !selectable || missingPrerequisites.length > 0;
           return (
             <article className="import-action" key={action.id}>
               <label>
                 <input
                   type="checkbox"
                   aria-label={`包含 ${action.sourceRow.sheet} 第 ${action.sourceRow.row} 行`}
-                  checked={selectable && !excludedActionIds.has(action.id)}
-                  disabled={!selectable}
+                  checked={selectable && !excludedActionIds.has(action.id) && missingPrerequisites.length === 0}
+                  disabled={disabled}
                   onChange={() => onToggleAction(action.id)}
                 />
                 <strong>{action.sourceRow.sheet} 第 {action.sourceRow.row} 行</strong> — {action.kind}
               </label>
+              {missingPrerequisites.length > 0 && <p className="text-secondary">需要先包含所依赖的人物行。</p>}
               {action.changes.length > 0 && <ul>{action.changes.map((change) => <li key={change.field}>{change.field}: {display(change.before)} → {display(change.after)}</li>)}</ul>}
             </article>
           );
