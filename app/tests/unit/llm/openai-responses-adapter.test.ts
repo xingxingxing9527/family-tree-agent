@@ -24,6 +24,17 @@ describe("OpenAIResponsesAdapter", () => {
     expect(request.text.format.schema.required).toEqual(expect.arrayContaining([
       "candidatePeople", "parentChildFacts", "marriages", "sources", "fieldConfidence", "unresolvedReferences"
     ]));
+    const inspectSchema = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      const record = value as Record<string, unknown>;
+      expect(Object.keys(record)).not.toEqual(expect.arrayContaining(["allOf", "not", "if", "then", "else", "dependentRequired", "dependentSchemas"]));
+      if (record.type === "object" && record.properties && typeof record.properties === "object") {
+        expect(record.additionalProperties).toBe(false);
+        expect(new Set(record.required as string[])).toEqual(new Set(Object.keys(record.properties as object)));
+      }
+      Object.values(record).forEach(inspectSchema);
+    };
+    inspectSchema(request.text.format.schema);
     expect(JSON.stringify(request)).not.toContain("sk-private");
     expect(JSON.stringify(request)).not.toMatch(/localPath|mediaBytes|private|Users\\me|etc\\?\/passwd|sensitive\.test|sk-secret|无关人物/i);
     expect(request).toMatchObject({ max_output_tokens: expect.any(Number) });
@@ -34,6 +45,25 @@ describe("OpenAIResponsesAdapter", () => {
     const adapter = new OpenAIResponsesAdapter({ apiKey: "sk-private", model: "gpt-test", client: { responses: { create } } as never });
 
     await expect(adapter.extractDraft({ text: "text", candidatePeople: [] })).rejects.toMatchObject({ code: "MODEL_PROTOCOL" });
+  });
+
+  it("enforces whole-value secrecy and ambiguity-safe candidates on the final extraction envelope", async () => {
+    const create = vi.fn().mockResolvedValue({ status: "completed", output_text: JSON.stringify(emptyDraft), output: [] });
+    const adapter = new OpenAIResponsesAdapter({ apiKey: "key", model: "m", client: { responses: { create } } as never });
+    await adapter.extractDraft({
+      text: "张敏 2026/09/28 1/2 C:\\Family Files\\tree.db OPENAI_API_KEY=env-secret file:///Users/me/a.jpg",
+      candidatePeople: [
+        { id: "p1", displayName: "张敏", aliases: ["敏"], gender: "female", birth: null, parentHints: [] },
+        { id: "p2", displayName: "张敏", aliases: [], gender: "female", birth: null, parentHints: [] },
+        { id: "p3", displayName: "王敏", aliases: ["敏"], gender: "female", birth: null, parentHints: [] }
+      ]
+    });
+    const request = create.mock.calls[0]![0];
+    const envelope = JSON.parse(request.input);
+    expect(envelope.text).toBe("[REDACTED]");
+    expect(envelope.candidatePeople.map((entry: { id: string }) => entry.id)).toEqual(["p1", "p2"]);
+    expect(JSON.stringify(request)).not.toMatch(/Family Files|tree\.db|OPENAI_API_KEY|env-secret|file:\/\/\/Users/i);
+    expect(JSON.stringify(request.text.format.schema)).toMatch(/minLength|maxLength|minimum|maxItems/);
   });
 
   it("defines only six strict read tools and correlates outputs with the original call_id", async () => {
@@ -101,6 +131,31 @@ describe("OpenAIResponsesAdapter", () => {
     expect(create.mock.calls[1]![0].input).toEqual([
       expect.objectContaining({ role: "user" }), reasoning, call,
       expect.objectContaining({ type: "function_call_output", call_id: "call-1" })
+    ]);
+  });
+
+  it("replays a complete interleaved history across three sequential tool rounds", async () => {
+    const reasoning = (id: number) => ({ type: "reasoning", id: `r${id}`, encrypted_content: `opaque-${id}`, summary: [] });
+    const call = (id: number) => ({ type: "function_call", status: "completed", call_id: `c${id}`, name: "get_person", arguments: `{"personId":"p${id}"}` });
+    const create = vi.fn()
+      .mockResolvedValueOnce({ status: "completed", output_text: "", output: [reasoning(1), call(1)] })
+      .mockResolvedValueOnce({ status: "completed", output_text: "", output: [reasoning(2), call(2)] })
+      .mockResolvedValueOnce({ status: "completed", output_text: "", output: [reasoning(3), call(3)] })
+      .mockResolvedValueOnce({ status: "completed", output_text: JSON.stringify({ answer: "完成" }), output: [] });
+    const adapter = new OpenAIResponsesAdapter({ apiKey: "key", model: "m", client: { responses: { create } } as never });
+    const results = (count: number) => Array.from({ length: count }, (_, index) => ({
+      callId: `c${index + 1}`, name: "get_person" as const, arguments: { personId: `p${index + 1}` },
+      output: { id: `p${index + 1}`, displayName: `人物${index + 1}`, gender: "unknown" }
+    }));
+    let turn = await adapter.continueWithTools({ question: "q", viewpointId: "v", selectedPersonId: null, toolResults: [] });
+    turn = await adapter.continueWithTools({ question: "q", viewpointId: "v", selectedPersonId: null, toolResults: results(1), continuation: turn.continuation });
+    turn = await adapter.continueWithTools({ question: "q", viewpointId: "v", selectedPersonId: null, toolResults: results(2), continuation: turn.continuation });
+    await adapter.continueWithTools({ question: "q", viewpointId: "v", selectedPersonId: null, toolResults: results(3), continuation: turn.continuation });
+    expect(create.mock.calls[3]![0].input).toEqual([
+      expect.objectContaining({ role: "user" }),
+      reasoning(1), call(1), expect.objectContaining({ type: "function_call_output", call_id: "c1" }),
+      reasoning(2), call(2), expect.objectContaining({ type: "function_call_output", call_id: "c2" }),
+      reasoning(3), call(3), expect.objectContaining({ type: "function_call_output", call_id: "c3" })
     ]);
   });
 

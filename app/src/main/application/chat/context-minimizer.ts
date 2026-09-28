@@ -3,9 +3,19 @@ import type { MinimizedConversationContext, QueryToolName, ToolResult } from "..
 
 const MAX_QUESTION_CHARS = 4_000;
 const MAX_TOOL_RESULT_CHARS = 32_000;
-const SENSITIVE_TEXT = /(?:[a-z][a-z0-9+.-]*:\/\/\S+|(?:[a-z]:[\\/]|\\\\)[^\s,;，。]+|\/(?:[^\s/,;，。]+\/)*[^\s,;，。]+|\b(?:sk-[a-z0-9_-]{8,}|AKIA[A-Z0-9]{16}|ghp_[a-z0-9]{20,}|github_pat_[a-z0-9_]+)\b|\bBearer\s+\S+|\b(?:api[_ -]?key|token|secret)\s*[:=]\s*\S+|\b(?:mediaBytes|base64|data:(?:image|audio|video)\/)[^\s,;，。]*)/gi;
+const SENSITIVE_PATTERNS = [
+  /\b[a-z][a-z0-9+.-]*:\/\/\S+/i,
+  /(?:[a-z]:[\\/]|\\\\)[^\r\n,;，。]+/i,
+  /\/(?:[a-z._-][^/\s]*\/)*[a-z._-][^\s,;，。]*/i,
+  /(?:~|\$HOME|\$\{HOME\}|%USERPROFILE%)[\\/]\S+/i,
+  /\b[A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*\S+/i,
+  /\b(?:sk-[a-z0-9_-]{8,}|AKIA[A-Z0-9]{16}|ghp_[a-z0-9]{20,}|github_pat_[a-z0-9_]+)\b/i,
+  /\bBearer\s+\S+/i,
+  /\b(?:api[_ -]?key|token|secret)\s*[:=]\s*\S+/i,
+  /\b(?:mediaBytes|base64|data:(?:image|audio|video)\/)[^\s,;，。]*/i
+] as const;
 
-export const redactProviderText = (value: string): string => value.replace(SENSITIVE_TEXT, "[REDACTED]");
+export const redactProviderText = (value: string): string => SENSITIVE_PATTERNS.some((pattern) => pattern.test(value)) ? "[REDACTED]" : value;
 const cleanValue = (value: unknown): unknown => {
   if (typeof value === "string") return redactProviderText(value);
   if (Array.isArray(value)) return value.map(cleanValue);
@@ -63,7 +73,16 @@ const allowlistedOutput = (name: QueryToolName, value: unknown): unknown => {
 
 export function selectRelevantCandidates(text: string, candidates: PersonCandidate[], knownIds: readonly string[] = []): PersonCandidate[] {
   const ids = new Set(knownIds);
-  return candidates.filter((entry) => ids.has(entry.id) || text.includes(entry.id) || [entry.displayName, ...entry.aliases].some((name) => name.length > 0 && text.includes(name)));
+  const hasIdentifier = (raw: string): boolean => {
+    const identifier = raw.trim();
+    if ([...identifier].length < 2) return false;
+    if (/^[\p{L}\p{N}_-]+$/u.test(identifier) && /^[\x00-\x7F]+$/.test(identifier)) {
+      const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(^|[^\\p{L}\\p{N}_-])${escaped}($|[^\\p{L}\\p{N}_-])`, "iu").test(text);
+    }
+    return text.includes(identifier);
+  };
+  return candidates.filter((entry) => ids.has(entry.id) || hasIdentifier(entry.id) || [entry.displayName, ...entry.aliases].some(hasIdentifier));
 }
 
 export function minimizeConversationContext(input: {

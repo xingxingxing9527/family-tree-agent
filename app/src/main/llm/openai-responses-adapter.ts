@@ -28,9 +28,9 @@ const strictTools: Tool[] = toolNames.map((name) => ({
   parameters: name === "summarize_lineage" ? nullableGenerationSchema : jsonSchema(QUERY_TOOL_SCHEMAS[name])
 }));
 
-const safeJson = (value: unknown): string => {
+const safeJson = (value: unknown, maxChars = 32_000): string => {
   const text = JSON.stringify(value);
-  if (text.length > 32_000) throw new ModelProtocolError("Tool output exceeds the online context limit");
+  if (text.length > maxChars) throw new ModelProtocolError("Tool output exceeds the online context limit");
   return text;
 };
 const MAX_CALLS_PER_RESPONSE = 4;
@@ -47,13 +47,54 @@ const assertCompleted = (response: Response): void => {
   }
 };
 
-const boundedContinuation = (previous: ModelContinuation | undefined, output: Response["output"]): ModelContinuation | undefined => {
+const validateContinuationItems = (items: unknown[]): void => {
+  if (items.length > MAX_CONTINUATION_ITEMS || safeJson(items, MAX_CONTINUATION_CHARS).length > MAX_CONTINUATION_CHARS) throw new ModelProtocolError("Model continuation exceeds the allowed size");
+  const calls = new Set<string>(); const outputs = new Set<string>();
+  for (const item of items) {
+    if (!isRecord(item) || !["reasoning", "function_call", "function_call_output"].includes(String(item.type))) throw new ModelProtocolError("Invalid model continuation item");
+    if (item.type === "function_call") {
+      if (typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 200 || calls.has(item.call_id)) throw new ModelProtocolError("Invalid model continuation call ID");
+      calls.add(item.call_id);
+    }
+    if (item.type === "function_call_output") {
+      if (typeof item.call_id !== "string" || !calls.has(item.call_id) || outputs.has(item.call_id)) throw new ModelProtocolError("Invalid model continuation output correlation");
+      outputs.add(item.call_id);
+    }
+  }
+};
+
+const completeContinuation = (previous: ModelContinuation | undefined, toolResults: ToolResult[]): unknown[] => {
   if (previous && previous.provider !== "openai-responses") throw new ModelProtocolError("Unsupported model continuation");
-  const prior = previous?.items ?? [];
-  const current = output.filter((item) => item.type === "reasoning" || item.type === "function_call");
-  const items = [...prior, ...current];
+  const items = [...(previous?.items ?? [])];
+  validateContinuationItems(items);
+  const calls = new Map<string, Record<string, unknown>>(); const outputs = new Set<string>();
+  for (const item of items) if (isRecord(item)) {
+    if (item.type === "function_call") calls.set(item.call_id as string, item);
+    if (item.type === "function_call_output") outputs.add(item.call_id as string);
+  }
+  const resultIds = new Set<string>();
+  for (const result of toolResults) {
+    if (!result.callId || result.callId.length > 200 || resultIds.has(result.callId)) throw new ModelProtocolError("Invalid or duplicate tool-result call ID");
+    resultIds.add(result.callId);
+    const existing = calls.get(result.callId);
+    if (existing && existing.name !== result.name) throw new ModelProtocolError("Tool result does not match its call");
+    if (!existing) {
+      const call = { type: "function_call", call_id: result.callId, name: result.name, arguments: JSON.stringify(result.arguments) };
+      items.push(call); calls.set(result.callId, call);
+    }
+    if (!outputs.has(result.callId)) {
+      items.push({ type: "function_call_output", call_id: result.callId, output: safeJson(result.output) });
+      outputs.add(result.callId);
+    }
+  }
+  validateContinuationItems(items);
+  return items;
+};
+
+const appendResponseContinuation = (completed: unknown[], output: Response["output"]): ModelContinuation | undefined => {
+  const items = [...completed, ...output.filter((item) => item.type === "reasoning" || item.type === "function_call")];
   if (items.length === 0) return undefined;
-  if (items.length > MAX_CONTINUATION_ITEMS || safeJson(items).length > MAX_CONTINUATION_CHARS) throw new ModelProtocolError("Model continuation exceeds the allowed size");
+  validateContinuationItems(items);
   return { provider: "openai-responses", items };
 };
 
@@ -88,24 +129,11 @@ export class OpenAIResponsesAdapter implements ModelAdapter {
   async continueWithTools(input: { question: string; viewpointId: string; selectedPersonId: string | null; toolResults: ToolResult[]; continuation?: ModelContinuation }) {
     try {
       const minimized = minimizeConversationContext({ ...input, candidatePeople: [], neededCandidateIds: [] });
+      const completedContinuation = completeContinuation(input.continuation, minimized.toolResults);
       const responseInput: ResponseCreateParamsNonStreaming["input"] = [{
         role: "user", content: JSON.stringify({ question: minimized.question, viewpointId: minimized.viewpointId, selectedPersonId: minimized.selectedPersonId })
       }];
-      if (input.continuation) {
-        if (input.continuation.provider !== "openai-responses" || input.continuation.items.length > MAX_CONTINUATION_ITEMS || safeJson(input.continuation.items).length > MAX_CONTINUATION_CHARS) {
-          throw new ModelProtocolError("Invalid model continuation");
-        }
-        for (const item of input.continuation.items) {
-          if (!isRecord(item) || (item.type !== "reasoning" && item.type !== "function_call")) throw new ModelProtocolError("Invalid model continuation item");
-          responseInput.push(item as never);
-        }
-      }
-      for (const result of minimized.toolResults) {
-        if (!input.continuation?.items.some((item) => isRecord(item) && item.type === "function_call" && item.call_id === result.callId)) {
-          responseInput.push({ type: "function_call", call_id: result.callId, name: result.name, arguments: JSON.stringify(result.arguments) });
-        }
-        responseInput.push({ type: "function_call_output", call_id: result.callId, output: safeJson(result.output) });
-      }
+      for (const item of completedContinuation) responseInput.push(item as never);
       const response = await this.client.responses.create({
         model: this.model,
         store: false,
@@ -118,7 +146,7 @@ export class OpenAIResponsesAdapter implements ModelAdapter {
         text: { format: { type: "json_schema", name: "family_answer", strict: true, schema: jsonSchema(modelAnswerSchema) } }
       });
       assertCompleted(response);
-      const continuation = boundedContinuation(input.continuation, response.output);
+      const continuation = appendResponseContinuation(completedContinuation, response.output);
       const calls = response.output.filter((item): item is ResponseFunctionToolCall => item.type === "function_call").map((call) => {
         if ("status" in call && call.status !== "completed") throw new ModelProtocolError("The model returned an incomplete tool call");
         if (!isToolName(call.name)) throw new ModelProtocolError("The model requested an unknown tool");

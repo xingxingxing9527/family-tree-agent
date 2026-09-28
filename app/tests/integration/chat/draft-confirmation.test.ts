@@ -154,4 +154,86 @@ describe("DraftService confirmation", () => {
     expect(() => service.confirm(preview.id, preview.version + 1, ids, {}, preview.warnings.map((warning) => warning.code))).toThrow(/version/i);
     expect(() => service.confirm(preview.id, preview.version, ids, {}, preview.warnings.map((warning) => warning.code))).not.toThrow();
   });
+
+  it("stores an immutable nested draft snapshot for preview and confirmation", () => {
+    const mutable = structuredClone({
+      ...familyDraft,
+      candidatePeople: [
+        { ...familyDraft.candidatePeople[0]!, aliases: ["强叔"], birth: { calendar: "solar" as const, year: 1970, month: 1, day: 2, leapMonth: false, precision: "day" as const } },
+        { ...familyDraft.candidatePeople[1]!, birth: { calendar: "solar" as const, year: 2000, month: 2, day: 3, leapMonth: false, precision: "day" as const } },
+        { ...familyDraft.candidatePeople[1]!, referenceId: "spouse", displayName: "李华", aliases: [], gender: "female" as const, birth: { calendar: "solar" as const, year: 1972, month: 4, day: 5, leapMonth: false, precision: "day" as const } }
+      ],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father" as const, sourceRef: "source", confidence: 0.9 }],
+      marriages: [{ spouseARef: "father", spouseBRef: "spouse", start: { calendar: "solar" as const, year: 1995, month: 6, day: 7, leapMonth: false, precision: "day" as const }, sourceRef: "source", confidence: 0.9 }],
+      sources: [{ referenceId: "source", title: "原始来源", kind: "book", citation: "第1页" }]
+    });
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage(mutable);
+    mutable.candidatePeople[0]!.displayName = "篡改人物";
+    mutable.candidatePeople[0]!.aliases[0] = "篡改别名";
+    mutable.candidatePeople[0]!.birth!.year = 1900;
+    mutable.parentChildFacts[0]!.parentRole = "mother";
+    mutable.marriages[0]!.start!.year = 2020;
+    mutable.sources[0]!.title = "篡改来源";
+    mutable.sources[0]!.citation = "篡改引文";
+
+    service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, preview.warnings.map((warning) => warning.code));
+    expect(new FactQueries(database, workspaceId).listPeople()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ displayName: "张国强", birth: expect.objectContaining({ year: 1970 }) })
+    ]));
+    expect(new FactQueries(database, workspaceId).listAliases(preview.changes.find((change) => change.summary.includes("张国强"))!.entityId).map((alias) => alias.name)).toEqual(["强叔"]);
+    expect(new FactQueries(database, workspaceId).listParentChild()[0]).toMatchObject({ parentRole: "father" });
+    expect(new FactQueries(database, workspaceId).listMarriages()[0]).toMatchObject({ start: expect.objectContaining({ year: 1995 }) });
+    expect(database.prepare("SELECT title, citation FROM source WHERE workspace_id = ?").all(workspaceId)).toEqual(expect.arrayContaining([expect.objectContaining({ title: "原始来源", citation: "第1页" })]));
+  });
+
+  it("previews validator issues from existing relations and marriage dates", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    for (const person of [
+      { id: "parent", displayName: "父", birth: { calendar: "solar" as const, year: 1970, month: 1, day: null, leapMonth: false, precision: "month" as const } },
+      { id: "child", displayName: "子", birth: { calendar: "solar" as const, year: 2000, month: 1, day: null, leapMonth: false, precision: "month" as const } }
+    ]) facts.execute({ type: "person.create", draft: { ...person, workspaceId, gender: "unknown" }, source: { sourceKey: person.id, title: person.id, kind: "test" } });
+    facts.execute({ type: "parentChild.add", draft: { id: "edge", workspaceId, parentId: "parent", childId: "child", parentRole: "father" }, source: { sourceKey: "edge", title: "edge", kind: "test" } });
+    const service = new DraftService(database, workspaceId);
+    const relationPreview = service.stage({
+      ...familyDraft, parentChildFacts: [],
+      candidatePeople: [{ referenceId: "parent", statedFields: ["birth"], displayName: "父", aliases: [], gender: "unknown", birth: { calendar: "solar", year: 1995, month: 1, day: null, leapMonth: false, precision: "month" }, death: null, notes: null, matchedPersonId: "parent" }]
+    });
+    expect(relationPreview.warnings).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PARENT_AGE_OUTLIER" })]));
+
+    const invalidMarriage = structuredClone({ ...familyDraft, parentChildFacts: [], marriages: [{ spouseARef: "father", spouseBRef: "child", start: { calendar: "solar", year: 2025, month: 2, day: 31, leapMonth: false, precision: "day" }, sourceRef: null, confidence: 1 }] }) as never;
+    expect(service.stage(invalidMarriage).conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ code: "INVALID_DATE" })]));
+  });
+
+  it("validates interacting prospective relation commands as one graph", () => {
+    const person = (referenceId: string, displayName: string) => ({
+      ...familyDraft.candidatePeople[0]!, referenceId, displayName, gender: "unknown" as const
+    });
+    const preview = new DraftService(database, workspaceId).stage({
+      ...familyDraft,
+      candidatePeople: [person("father-a", "父甲"), person("father-b", "父乙"), person("child", "孩子")],
+      parentChildFacts: [
+        { parentRef: "father-a", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 },
+        { parentRef: "father-b", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }
+      ]
+    });
+    expect(preview.conflicts).toEqual(expect.arrayContaining([expect.objectContaining({ code: "PARENT_ROLE_OCCUPIED" })]));
+  });
+
+  it("requires restaging when the exact validator issue set changes before confirmation", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    for (const person of [
+      { id: "parent", displayName: "父", birth: { calendar: "solar" as const, year: 1970, month: 1, day: null, leapMonth: false, precision: "month" as const } },
+      { id: "child", displayName: "子", birth: { calendar: "solar" as const, year: 2000, month: 1, day: null, leapMonth: false, precision: "month" as const } }
+    ]) facts.execute({ type: "person.create", draft: { ...person, workspaceId, gender: "unknown" }, source: { sourceKey: person.id, title: person.id, kind: "test" } });
+    facts.execute({ type: "parentChild.add", draft: { id: "edge", workspaceId, parentId: "parent", childId: "child", parentRole: "father" }, source: { sourceKey: "edge", title: "edge", kind: "test" } });
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage({
+      ...familyDraft, parentChildFacts: [],
+      candidatePeople: [{ referenceId: "parent", statedFields: ["notes"], displayName: "父", aliases: [], gender: "unknown", birth: null, death: null, notes: "新备注", matchedPersonId: "parent" }]
+    });
+    expect(preview.warnings).toEqual([]);
+    facts.execute({ type: "person.update", personId: "child", expectedVersion: 1, patch: { birth: { calendar: "solar", year: 1975, month: 1, day: null, leapMonth: false, precision: "month" } }, source: { sourceKey: "child-update", title: "child-update", kind: "test" } }, { confirmWarnings: true });
+    expect(() => service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), { parent: 1 }, [])).toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT" }));
+  });
 });

@@ -60,4 +60,27 @@ describe("minimizeConversationContext", () => {
     expect(selectRelevantCandidates("请更新国强", candidates, ["p1"])).toEqual([candidates[0]]);
     expect(selectRelevantCandidates("请更新张国强", candidates, [])).toEqual([candidates[0]]);
   });
+
+  it("redacts an entire sensitive string without corrupting dates or fractions", () => {
+    const minimized = minimizeConversationContext({
+      question: "日期 2026/09/28，比例 1/2；文件 C:\\Family Files\\tree.db；OPENAI_API_KEY=env-secret",
+      viewpointId: "v", selectedPersonId: null, neededCandidateIds: [], candidatePeople: [], toolResults: [{
+        callId: "c", name: "search_wiki", arguments: { query: "q", limit: 1 },
+        output: [{ wikiEntryId: "w", title: "日期 2026/09/28 比例 1/2", excerpt: "see file:///Users/me/tree.db and trailing words", sourceIds: [] }]
+      }]
+    });
+    expect(minimized.question).toBe("[REDACTED]");
+    expect(minimized.toolResults[0]?.output).toEqual([{ wikiEntryId: "w", title: "日期 2026/09/28 比例 1/2", excerpt: "[REDACTED]", sourceIds: [] }]);
+    expect(JSON.stringify(minimized)).not.toMatch(/Family Files|tree\.db|OPENAI_API_KEY|env-secret|trailing words/i);
+  });
+
+  it("ignores ambiguous one-character aliases while retaining every duplicate full-name match", () => {
+    const candidates = [
+      { id: "p1", displayName: "张敏", aliases: ["敏"], gender: "female", birth: null, parentHints: [] },
+      { id: "p2", displayName: "张敏", aliases: ["小敏"], gender: "female", birth: null, parentHints: [] },
+      { id: "p3", displayName: "王敏", aliases: ["敏"], gender: "female", birth: null, parentHints: [] }
+    ] as never;
+    expect(selectRelevantCandidates("敏是谁", candidates)).toEqual([]);
+    expect(selectRelevantCandidates("张敏是谁", candidates).map((entry) => entry.id)).toEqual(["p1", "p2"]);
+  });
 });

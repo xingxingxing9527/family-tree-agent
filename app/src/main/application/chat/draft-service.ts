@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { ConversationConfirmationReceipt, ConversationDraftChangeDto, ConversationDraftPreview, ConversationMutationDraft } from "../../../shared/chat.js";
+import { conversationMutationDraftSchema, type ConversationConfirmationReceipt, type ConversationDraftChangeDto, type ConversationDraftPreview, type ConversationMutationDraft } from "../../../shared/chat.js";
 import type { PersonCandidate } from "../../../shared/contracts.js";
 import type { WorkspaceDatabase } from "../../database/open-database.js";
-import { createUnitOfWork } from "../../database/unit-of-work.js";
-import { FactCommandService } from "../facts/fact-command-service.js";
+import { createUnitOfWork, type TransactionContext } from "../../database/unit-of-work.js";
+import { FactCommandError, FactCommandService } from "../facts/fact-command-service.js";
 import type { FactCommand } from "../facts/fact-commands.js";
 import { FactQueries } from "../facts/fact-queries.js";
 import type { ModelAdapter } from "../../llm/model-adapter.js";
@@ -17,7 +17,7 @@ interface InternalChange {
   expectedVersion?: number;
   command(expectedVersions: Readonly<Record<string, number>>): FactCommand;
 }
-interface StoredDraft { preview: ConversationDraftPreview; changes: Map<string, InternalChange>; status: DraftStatus; }
+interface StoredDraft { preview: ConversationDraftPreview; changes: Map<string, InternalChange>; expectedVersions: Readonly<Record<string, number>>; status: DraftStatus; }
 
 export class DraftValidationError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = "DraftValidationError"; }
@@ -32,6 +32,9 @@ const deepFreeze = <T>(value: T): T => {
   }
   return value;
 };
+class PlanRollback extends Error {
+  constructor(readonly warnings: DomainIssue[], readonly conflicts: DomainIssue[]) { super("Rollback prospective draft validation"); }
+}
 
 export class DraftService {
   private readonly drafts = new Map<string, StoredDraft>();
@@ -54,11 +57,13 @@ export class DraftService {
 
   stage(draft: ConversationMutationDraft, version = 1): ConversationDraftPreview {
     this.evictTerminalDrafts();
+    draft = deepFreeze(conversationMutationDraftSchema.parse(structuredClone(draft)));
     this.ensureUniqueReferences(draft);
     const queries = new FactQueries(this.database, this.workspaceId);
     const existing = queries.listPeople();
     const id = randomUUID();
     const internal: InternalChange[] = [];
+    const stagedVersions: Record<string, number> = {};
     const warnings: Array<{ code: string; message: string }> = [];
     const conflicts: Array<{ code: string; message: string }> = [];
     const unresolved = draft.unresolvedReferences.map((entry) => ({ ...entry, candidatePersonIds: [...entry.candidatePersonIds] }));
@@ -121,6 +126,7 @@ export class DraftService {
         || !equalJson(match.birth, merged.birth) || !equalJson(match.death, merged.death)
         || match.notes !== merged.notes || !equalJson(aliases, [...merged.aliases].sort());
       if (changed) {
+        stagedVersions[match.id] = match.rowVersion;
         const changeId = randomUUID();
         const fieldChanges = [
           ["displayName", match.displayName, merged.displayName], ["aliases", aliases, merged.aliases], ["gender", match.gender, merged.gender],
@@ -190,6 +196,10 @@ export class DraftService {
       });
     }
 
+    const canonicalValidation = this.validatePlan(internal, stagedVersions);
+    warnings.splice(0, warnings.length, ...canonicalValidation.warnings);
+    conflicts.splice(0, conflicts.length, ...canonicalValidation.conflicts);
+
     const preview = deepFreeze<ConversationDraftPreview>({
       id, workspaceId: this.workspaceId, version, expiresAt: new Date(this.now() + this.ttlMs).toISOString(),
       changes: internal.map((change) => change.public),
@@ -197,7 +207,7 @@ export class DraftService {
       updates: internal.filter((change) => change.public.kind === "update").length,
       warnings, conflicts, unresolvedReferences: unresolved
     });
-    this.drafts.set(id, { preview, changes: new Map(internal.map((change) => [change.public.id, change])), status: "active" });
+    this.drafts.set(id, { preview, changes: new Map(internal.map((change) => [change.public.id, change])), expectedVersions: Object.freeze({ ...stagedVersions }), status: "active" });
     return preview;
   }
 
@@ -237,6 +247,10 @@ export class DraftService {
     }
     const service = new FactCommandService(this.database, this.workspaceId);
     const result = createUnitOfWork(this.database, this.workspaceId).run("conversation.confirm", (ctx) => {
+      const currentValidation = this.validatePlanInSavepoint(ctx, [...stored.changes.values()], stored.expectedVersions);
+      if (!this.sameIssues(stored.preview.warnings, currentValidation.warnings) || !this.sameIssues(stored.preview.conflicts, currentValidation.conflicts)) {
+        throw new DraftValidationError("VERSION_CONFLICT", "Draft validation changed; restage before confirmation");
+      }
       const changedEntityIds: string[] = [];
       for (const change of stored.changes.values()) {
         if (!selected.has(change.public.id)) continue;
@@ -274,5 +288,50 @@ export class DraftService {
 
   private evictTerminalDrafts(): void {
     for (const [id, draft] of this.drafts) if (draft.status !== "active" || Date.parse(draft.preview.expiresAt) < this.now()) this.drafts.delete(id);
+  }
+
+  private validatePlan(changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
+    try {
+      createUnitOfWork(this.database, this.workspaceId).run("conversation.validate", (ctx) => {
+        const validation = this.collectPlanValidation(ctx, changes, expectedVersions);
+        throw new PlanRollback(validation.warnings, validation.conflicts);
+      });
+    } catch (error) {
+      if (error instanceof PlanRollback) return { warnings: error.warnings, conflicts: error.conflicts };
+      throw error;
+    }
+    throw new Error("Prospective validation did not roll back");
+  }
+
+  private validatePlanInSavepoint(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
+    this.database.exec("SAVEPOINT conversation_draft_validation");
+    try { return this.collectPlanValidation(ctx, changes, expectedVersions); }
+    finally {
+      this.database.exec("ROLLBACK TO conversation_draft_validation");
+      this.database.exec("RELEASE conversation_draft_validation");
+    }
+  }
+
+  private collectPlanValidation(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
+    const warnings: DomainIssue[] = []; const conflicts: DomainIssue[] = [];
+    const add = (target: DomainIssue[], issues: readonly DomainIssue[]): void => {
+      for (const entry of issues) if (!target.some((known) => known.code === entry.code && known.message === entry.message)) target.push({ code: entry.code, message: entry.message });
+    };
+    const service = new FactCommandService(this.database, this.workspaceId);
+    for (const change of changes) {
+      try {
+        add(warnings, service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: true, recordSource: false }).warnings);
+      } catch (error) {
+        if (error instanceof FactCommandError) add(conflicts, error.issues);
+        else throw error;
+      }
+    }
+    return { warnings, conflicts };
+  }
+
+  private sameIssues(left: readonly DomainIssue[], right: readonly DomainIssue[]): boolean {
+    const normalizeIssues = (issues: readonly DomainIssue[]) => issues.map(({ code, message }) => ({ code, message }))
+      .sort((a, b) => a.code.localeCompare(b.code) || a.message.localeCompare(b.message));
+    return equalJson(normalizeIssues(left), normalizeIssues(right));
   }
 }
