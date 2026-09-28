@@ -15,9 +15,18 @@ type DraftStatus = "active" | "superseded" | "confirmed" | "invalidated";
 interface InternalChange {
   public: ConversationDraftChangeDto;
   expectedVersion?: number;
+  readVersions: Readonly<Record<string, number>>;
   command(expectedVersions: Readonly<Record<string, number>>): FactCommand;
 }
-interface StoredDraft { preview: ConversationDraftPreview; changes: Map<string, InternalChange>; expectedVersions: Readonly<Record<string, number>>; status: DraftStatus; }
+interface IssueFingerprint { changeId: string; severity: "warning" | "conflict"; code: string; message: string; occurrence: number; }
+interface PlanValidation { fingerprints: IssueFingerprint[]; }
+interface StoredDraft {
+  preview: ConversationDraftPreview;
+  changes: Map<string, InternalChange>;
+  expectedVersions: Readonly<Record<string, number>>;
+  fingerprints: readonly IssueFingerprint[];
+  status: DraftStatus;
+}
 
 export class DraftValidationError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = "DraftValidationError"; }
@@ -32,8 +41,13 @@ const deepFreeze = <T>(value: T): T => {
   }
   return value;
 };
+const existingEdgesForPerson = (edges: ReadonlyArray<{ parentId: string; childId: string }>, personId: string): string[] => edges.flatMap((edge) => {
+  if (edge.parentId === personId) return [edge.childId];
+  if (edge.childId === personId) return [edge.parentId];
+  return [];
+});
 class PlanRollback extends Error {
-  constructor(readonly warnings: DomainIssue[], readonly conflicts: DomainIssue[]) { super("Rollback prospective draft validation"); }
+  constructor(readonly validation: PlanValidation) { super("Rollback prospective draft validation"); }
 }
 
 export class DraftService {
@@ -61,13 +75,20 @@ export class DraftService {
     this.ensureUniqueReferences(draft);
     const queries = new FactQueries(this.database, this.workspaceId);
     const existing = queries.listPeople();
+    const existingById = new Map(existing.map((person) => [person.id, person]));
     const id = randomUUID();
     const internal: InternalChange[] = [];
     const stagedVersions: Record<string, number> = {};
     const warnings: Array<{ code: string; message: string }> = [];
     const conflicts: Array<{ code: string; message: string }> = [];
     const unresolved = draft.unresolvedReferences.map((entry) => ({ ...entry, candidatePersonIds: [...entry.candidatePersonIds] }));
-    const resolved = new Map<string, { entityId: string; dependencyId?: string; birth: ConversationMutationDraft["candidatePeople"][number]["birth"] }>();
+    const resolved = new Map<string, { entityId: string; dependencyId?: string; birth: ConversationMutationDraft["candidatePeople"][number]["birth"]; rowVersion?: number }>();
+    const snapshotVersions = (personIds: readonly string[]): Readonly<Record<string, number>> => Object.freeze(Object.fromEntries(
+      [...new Set(personIds)].flatMap((personId) => {
+        const person = existingById.get(personId);
+        return person ? [[personId, person.rowVersion] as const] : [];
+      })
+    ));
     const addIssues = (issues: DomainIssue[], target: Array<{ code: string; message: string }>): void => {
       for (const entry of issues) if (!target.some((known) => known.code === entry.code && known.message === entry.message)) target.push({ code: entry.code, message: entry.message });
     };
@@ -104,6 +125,7 @@ export class DraftService {
               { field: "death", before: null, after: candidate.death }, { field: "notes", before: null, after: candidate.notes }
             ]
           },
+          readVersions: Object.freeze({}),
           command: () => ({
             type: "person.create",
             draft: { id: entityId, workspaceId: this.workspaceId, displayName: candidate.displayName, aliases: candidate.aliases, gender: candidate.gender, birth: candidate.birth, death: candidate.death, notes: candidate.notes },
@@ -121,7 +143,6 @@ export class DraftService {
         death: stated.has("death") ? candidate.death : match.death,
         notes: stated.has("notes") ? candidate.notes : match.notes
       };
-      resolved.set(candidate.referenceId, { entityId: match.id, birth: merged.birth });
       const changed = match.displayName !== merged.displayName || match.gender !== merged.gender
         || !equalJson(match.birth, merged.birth) || !equalJson(match.death, merged.death)
         || match.notes !== merged.notes || !equalJson(aliases, [...merged.aliases].sort());
@@ -135,12 +156,16 @@ export class DraftService {
         internal.push({
           public: { id: changeId, kind: "update", entityType: "person", entityId: match.id, summary: `更新人物 ${candidate.displayName}`, dependsOnChangeIds: [], fieldChanges },
           expectedVersion: match.rowVersion,
+          readVersions: snapshotVersions([match.id, ...existingEdgesForPerson(queries.listParentChild(), match.id)]),
           command: (versions) => ({
             type: "person.update", personId: match!.id, expectedVersion: versions[match!.id]!,
             patch: Object.fromEntries(fieldChanges.map((change) => [change.field, change.after])),
             source: this.source(id, changeId, draft, "对话修订")
           })
         });
+        resolved.set(candidate.referenceId, { entityId: match.id, dependencyId: changeId, birth: merged.birth, rowVersion: match.rowVersion });
+      } else {
+        resolved.set(candidate.referenceId, { entityId: match.id, birth: merged.birth, rowVersion: match.rowVersion });
       }
     }
 
@@ -168,6 +193,7 @@ export class DraftService {
           dependsOnChangeIds: [parent.dependencyId, child.dependencyId].filter((value): value is string => Boolean(value)),
           fieldChanges: [{ field: "parentId", before: null, after: parent.entityId }, { field: "childId", before: null, after: child.entityId }, { field: "parentRole", before: null, after: relation.parentRole }]
         },
+        readVersions: snapshotVersions([parent.entityId, child.entityId]),
         command: () => ({
           type: "parentChild.add", draft: { id: entityId, workspaceId: this.workspaceId, parentId: parent.entityId, childId: child.entityId, parentRole: relation.parentRole },
           source: this.source(id, changeId, draft, "对话亲子事实", relation.sourceRef)
@@ -189,6 +215,7 @@ export class DraftService {
           dependsOnChangeIds: [spouseA.dependencyId, spouseB.dependencyId].filter((value): value is string => Boolean(value)),
           fieldChanges: [{ field: "spouseAId", before: null, after: spouseA.entityId }, { field: "spouseBId", before: null, after: spouseB.entityId }, { field: "start", before: null, after: marriage.start }]
         },
+        readVersions: snapshotVersions([spouseA.entityId, spouseB.entityId]),
         command: () => ({
           type: "marriage.add", draft: { id: entityId, workspaceId: this.workspaceId, spouseAId: spouseA.entityId, spouseBId: spouseB.entityId, start: marriage.start },
           source: this.source(id, changeId, draft, "对话婚姻事实", marriage.sourceRef)
@@ -197,8 +224,8 @@ export class DraftService {
     }
 
     const canonicalValidation = this.validatePlan(internal, stagedVersions);
-    warnings.splice(0, warnings.length, ...canonicalValidation.warnings);
-    conflicts.splice(0, conflicts.length, ...canonicalValidation.conflicts);
+    warnings.splice(0, warnings.length, ...canonicalValidation.fingerprints.filter((entry) => entry.severity === "warning"));
+    conflicts.splice(0, conflicts.length, ...canonicalValidation.fingerprints.filter((entry) => entry.severity === "conflict"));
 
     const preview = deepFreeze<ConversationDraftPreview>({
       id, workspaceId: this.workspaceId, version, expiresAt: new Date(this.now() + this.ttlMs).toISOString(),
@@ -207,7 +234,13 @@ export class DraftService {
       updates: internal.filter((change) => change.public.kind === "update").length,
       warnings, conflicts, unresolvedReferences: unresolved
     });
-    this.drafts.set(id, { preview, changes: new Map(internal.map((change) => [change.public.id, change])), expectedVersions: Object.freeze({ ...stagedVersions }), status: "active" });
+    this.drafts.set(id, {
+      preview,
+      changes: new Map(internal.map((change) => [change.public.id, change])),
+      expectedVersions: Object.freeze({ ...stagedVersions }),
+      fingerprints: Object.freeze(canonicalValidation.fingerprints.map((entry) => Object.freeze({ ...entry }))),
+      status: "active"
+    });
     return preview;
   }
 
@@ -226,12 +259,6 @@ export class DraftService {
     if (Date.parse(stored.preview.expiresAt) < this.now()) throw new DraftValidationError("EXPIRED", "Draft has expired");
     if (stored.preview.version !== draftVersion) throw new DraftValidationError("VERSION_CONFLICT", "Draft version does not match the confirmation");
     if (stored.preview.unresolvedReferences.length > 0) throw new DraftValidationError("UNRESOLVED_REFERENCES", "Draft contains unresolved references");
-    if (stored.preview.conflicts.length > 0) throw new DraftValidationError("CONFLICT", "Draft contains conflicts");
-    const requiredWarnings = [...new Set(stored.preview.warnings.map((warning) => warning.code))].sort();
-    const acknowledged = [...new Set(acknowledgedWarningCodes)].sort();
-    if (acknowledged.length !== acknowledgedWarningCodes.length || !equalJson(requiredWarnings, acknowledged)) {
-      throw new DraftValidationError("WARNING_ACK_REQUIRED", "Every draft warning must be explicitly acknowledged");
-    }
     const selected = new Set(selectedChangeIds);
     if (selected.size === 0) throw new DraftValidationError("INVALID_SELECTION", "Select at least one change to confirm");
     if (selected.size !== selectedChangeIds.length || [...selected].some((id) => !stored.changes.has(id))) throw new DraftValidationError("INVALID_SELECTION", "Unknown or duplicate change selection");
@@ -245,16 +272,28 @@ export class DraftService {
         }
       }
     }
+    const selectedChanges = [...stored.changes.values()].filter((change) => selected.has(change.public.id));
+    const expectedFingerprints = stored.fingerprints.filter((entry) => selected.has(entry.changeId));
+    if (expectedFingerprints.some((entry) => entry.severity === "conflict")) throw new DraftValidationError("CONFLICT", "Selected draft changes contain conflicts");
+    const requiredWarnings = [...new Set(expectedFingerprints.filter((entry) => entry.severity === "warning").map((entry) => entry.code))].sort();
+    const acknowledged = [...new Set(acknowledgedWarningCodes)].sort();
+    if (acknowledged.length !== acknowledgedWarningCodes.length || !equalJson(requiredWarnings, acknowledged)) {
+      throw new DraftValidationError("WARNING_ACK_REQUIRED", "Every selected draft warning must be explicitly acknowledged");
+    }
+    const warningChangeIds = new Set(expectedFingerprints.filter((entry) => entry.severity === "warning").map((entry) => entry.changeId));
     const service = new FactCommandService(this.database, this.workspaceId);
     const result = createUnitOfWork(this.database, this.workspaceId).run("conversation.confirm", (ctx) => {
-      const currentValidation = this.validatePlanInSavepoint(ctx, [...stored.changes.values()], stored.expectedVersions);
-      if (!this.sameIssues(stored.preview.warnings, currentValidation.warnings) || !this.sameIssues(stored.preview.conflicts, currentValidation.conflicts)) {
+      const currentQueries = new FactQueries(this.database, this.workspaceId);
+      for (const change of selectedChanges) for (const [personId, rowVersion] of Object.entries(change.readVersions)) {
+        if (currentQueries.getPerson(personId)?.rowVersion !== rowVersion) throw new DraftValidationError("VERSION_CONFLICT", "A person read by the draft changed; restage before confirmation");
+      }
+      const currentValidation = this.validatePlanInSavepoint(ctx, selectedChanges, stored.expectedVersions);
+      if (!this.sameFingerprints(expectedFingerprints, currentValidation.fingerprints)) {
         throw new DraftValidationError("VERSION_CONFLICT", "Draft validation changed; restage before confirmation");
       }
       const changedEntityIds: string[] = [];
-      for (const change of stored.changes.values()) {
-        if (!selected.has(change.public.id)) continue;
-        changedEntityIds.push(...service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: requiredWarnings.length > 0 }).changedEntityIds);
+      for (const change of selectedChanges) {
+        changedEntityIds.push(...service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: warningChangeIds.has(change.public.id) }).changedEntityIds);
       }
       return { operationGroupId: ctx.operationGroupId, changedEntityIds };
     });
@@ -290,20 +329,20 @@ export class DraftService {
     for (const [id, draft] of this.drafts) if (draft.status !== "active" || Date.parse(draft.preview.expiresAt) < this.now()) this.drafts.delete(id);
   }
 
-  private validatePlan(changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
+  private validatePlan(changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): PlanValidation {
     try {
       createUnitOfWork(this.database, this.workspaceId).run("conversation.validate", (ctx) => {
         const validation = this.collectPlanValidation(ctx, changes, expectedVersions);
-        throw new PlanRollback(validation.warnings, validation.conflicts);
+        throw new PlanRollback(validation);
       });
     } catch (error) {
-      if (error instanceof PlanRollback) return { warnings: error.warnings, conflicts: error.conflicts };
+      if (error instanceof PlanRollback) return error.validation;
       throw error;
     }
     throw new Error("Prospective validation did not roll back");
   }
 
-  private validatePlanInSavepoint(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
+  private validatePlanInSavepoint(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): PlanValidation {
     this.database.exec("SAVEPOINT conversation_draft_validation");
     try { return this.collectPlanValidation(ctx, changes, expectedVersions); }
     finally {
@@ -312,26 +351,32 @@ export class DraftService {
     }
   }
 
-  private collectPlanValidation(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): { warnings: DomainIssue[]; conflicts: DomainIssue[] } {
-    const warnings: DomainIssue[] = []; const conflicts: DomainIssue[] = [];
-    const add = (target: DomainIssue[], issues: readonly DomainIssue[]): void => {
-      for (const entry of issues) if (!target.some((known) => known.code === entry.code && known.message === entry.message)) target.push({ code: entry.code, message: entry.message });
+  private collectPlanValidation(ctx: TransactionContext, changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): PlanValidation {
+    const fingerprints: IssueFingerprint[] = [];
+    const add = (changeId: string, severity: IssueFingerprint["severity"], issues: readonly DomainIssue[]): void => {
+      const occurrences = new Map<string, number>();
+      for (const { code, message } of issues) {
+        const key = `${severity}\u0000${code}\u0000${message}`;
+        const occurrence = (occurrences.get(key) ?? 0) + 1; occurrences.set(key, occurrence);
+        fingerprints.push({ changeId, severity, code, message, occurrence });
+      }
     };
     const service = new FactCommandService(this.database, this.workspaceId);
     for (const change of changes) {
       try {
-        add(warnings, service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: true, recordSource: false }).warnings);
+        add(change.public.id, "warning", service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: true, recordSource: false }).warnings);
       } catch (error) {
-        if (error instanceof FactCommandError) add(conflicts, error.issues);
+        if (error instanceof FactCommandError) add(change.public.id, "conflict", error.issues);
         else throw error;
       }
     }
-    return { warnings, conflicts };
+    return { fingerprints };
   }
 
-  private sameIssues(left: readonly DomainIssue[], right: readonly DomainIssue[]): boolean {
-    const normalizeIssues = (issues: readonly DomainIssue[]) => issues.map(({ code, message }) => ({ code, message }))
-      .sort((a, b) => a.code.localeCompare(b.code) || a.message.localeCompare(b.message));
+  private sameFingerprints(left: readonly IssueFingerprint[], right: readonly IssueFingerprint[]): boolean {
+    const normalizeIssues = (issues: readonly IssueFingerprint[]) => [...issues]
+      .sort((a, b) => a.changeId.localeCompare(b.changeId) || a.severity.localeCompare(b.severity) || a.code.localeCompare(b.code)
+        || a.message.localeCompare(b.message) || a.occurrence - b.occurrence);
     return equalJson(normalizeIssues(left), normalizeIssues(right));
   }
 }

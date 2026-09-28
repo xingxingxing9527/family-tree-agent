@@ -74,6 +74,24 @@ describe("minimizeConversationContext", () => {
     expect(JSON.stringify(minimized)).not.toMatch(/Family Files|tree\.db|OPENAI_API_KEY|env-secret|trailing words/i);
   });
 
+  it.each([
+    "/2026/09/001.jpg",
+    "~/family/private.txt",
+    "./family/private.txt",
+    "../family/private.txt",
+    "family/photos/private.jpg",
+    "OPENAI_KEY=env-secret",
+    "DB_PASS=hunter2",
+    "SESSION_PWD=private"
+  ])("whole-redacts numeric, relative, and env-sensitive value %s", (question) => {
+    expect(minimizeConversationContext({ question, viewpointId: "v", selectedPersonId: null, neededCandidateIds: [], candidatePeople: [], toolResults: [] }).question).toBe("[REDACTED]");
+  });
+
+  it("preserves ordinary slash dates, fractions, and Chinese prose", () => {
+    const question = "生于 1970/01/02，份额是 1/2，这是普通中文。";
+    expect(minimizeConversationContext({ question, viewpointId: "v", selectedPersonId: null, neededCandidateIds: [], candidatePeople: [], toolResults: [] }).question).toBe(question);
+  });
+
   it("ignores ambiguous one-character aliases while retaining every duplicate full-name match", () => {
     const candidates = [
       { id: "p1", displayName: "张敏", aliases: ["敏"], gender: "female", birth: null, parentHints: [] },

@@ -70,6 +70,28 @@ describe("controlled chat UI", () => {
     expect(screen.queryByRole("button", { name: "确认写入" })).not.toBeInTheDocument();
   });
 
+  it("acknowledges only selected contextual warnings and ignores unselected conflicts", () => {
+    const onConfirm = vi.fn();
+    const preview: ConversationDraftPreview = {
+      id: "selected", workspaceId: "workspace", version: 1, expiresAt: "2099-01-01T00:00:00Z",
+      changes: [
+        { id: "c1", kind: "update", entityType: "person", entityId: "p1", summary: "更新甲", dependsOnChangeIds: [], fieldChanges: [] },
+        { id: "c2", kind: "update", entityType: "person", entityId: "p2", summary: "更新乙", dependsOnChangeIds: [], fieldChanges: [] }
+      ], creates: 0, updates: 2,
+      warnings: [
+        { changeId: "c1", occurrence: 1, code: "PARENT_AGE_OUTLIER", message: "年龄异常" },
+        { changeId: "c2", occurrence: 1, code: "PARENT_AGE_OUTLIER", message: "年龄异常" }
+      ],
+      conflicts: [{ changeId: "c2", occurrence: 1, code: "CONFLICT", message: "乙冲突" }], unresolvedReferences: []
+    };
+    render(<MutationDraftPreview preview={preview} onConfirm={onConfirm} />);
+    expect(screen.queryByRole("button", { name: "确认写入" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "更新乙" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /已阅读并确认/ }));
+    fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
+    expect(onConfirm).toHaveBeenCalledWith(["c1"], { draftVersion: 1, acknowledgedWarningCodes: ["PARENT_AGE_OUTLIER"] });
+  });
+
   it("resets selected changes when editing produces a new immutable draft version", () => {
     const onConfirm = vi.fn();
     const preview: ConversationDraftPreview = {

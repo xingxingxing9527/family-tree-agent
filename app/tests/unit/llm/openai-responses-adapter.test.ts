@@ -66,6 +66,19 @@ describe("OpenAIResponsesAdapter", () => {
     expect(JSON.stringify(request.text.format.schema)).toMatch(/minLength|maxLength|minimum|maxItems/);
   });
 
+  it("redacts numeric and relative paths plus general env credentials in final SDK envelopes while preserving dates", async () => {
+    const create = vi.fn().mockResolvedValue({ status: "completed", output_text: JSON.stringify(emptyDraft), output: [] });
+    const adapter = new OpenAIResponsesAdapter({ apiKey: "key", model: "m", client: { responses: { create } } as never });
+    for (const text of ["照片 /2026/09/001.jpg", "附件 ./family/private.txt", "附件 ../family/private.txt", "附件 family/photos/private.jpg", "OPENAI_KEY=env-secret", "DB_PASS=hunter2"]) {
+      await adapter.extractDraft({ text, candidatePeople: [] });
+    }
+    const clean = "生于 1970/01/02，份额 1/2，普通中文";
+    await adapter.extractDraft({ text: clean, candidatePeople: [] });
+    expect(create.mock.calls.slice(0, -1).map((entry) => JSON.parse(entry[0].input).text)).toEqual(Array(6).fill("[REDACTED]"));
+    expect(JSON.parse(create.mock.calls.at(-1)![0].input).text).toBe(clean);
+    expect(JSON.stringify(create.mock.calls)).not.toMatch(/001\.jpg|private\.txt|private\.jpg|env-secret|hunter2/);
+  });
+
   it("defines only six strict read tools and correlates outputs with the original call_id", async () => {
     const create = vi.fn().mockResolvedValue({ status: "completed", output_text: JSON.stringify({ answer: "完成" }), output: [] });
     const adapter = new OpenAIResponsesAdapter({ apiKey: "sk-private", model: "gpt-test", client: { responses: { create } } as never });

@@ -236,4 +236,70 @@ describe("DraftService confirmation", () => {
     facts.execute({ type: "person.update", personId: "child", expectedVersion: 1, patch: { birth: { calendar: "solar", year: 1975, month: 1, day: null, leapMonth: false, precision: "month" } }, source: { sourceKey: "child-update", title: "child-update", kind: "test" } }, { confirmWarnings: true });
     expect(() => service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), { parent: 1 }, [])).toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT" }));
   });
+
+  it("makes a relation depend on a staged update whose prospective person values it used", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({ type: "person.create", draft: { id: "parent", workspaceId, displayName: "父", gender: "male", birth: { calendar: "solar", year: 1970, month: 1, day: null, leapMonth: false, precision: "month" } }, source: { sourceKey: "parent", title: "parent", kind: "test" } });
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [
+        { referenceId: "parent", statedFields: ["birth"], displayName: "父", aliases: [], gender: "male", birth: { calendar: "solar", year: 1995, month: 1, day: null, leapMonth: false, precision: "month" }, death: null, notes: null, matchedPersonId: "parent" },
+        { ...familyDraft.candidatePeople[1]!, referenceId: "child", birth: { calendar: "solar", year: 2000, month: 1, day: null, leapMonth: false, precision: "month" } }
+      ],
+      parentChildFacts: [{ parentRef: "parent", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    });
+    const update = preview.changes.find((change) => change.kind === "update")!;
+    const child = preview.changes.find((change) => change.entityType === "person" && change.kind === "create")!;
+    const relation = preview.changes.find((change) => change.entityType === "parentChild")!;
+    expect(relation.dependsOnChangeIds).toEqual(expect.arrayContaining([update.id, child.id]));
+    expect(() => service.confirm(preview.id, preview.version, [child.id, relation.id], {}, preview.warnings.map((warning) => warning.code))).toThrow(/dependency/i);
+  });
+
+  it("snapshots referenced existing-person versions even when they are not directly updated", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({ type: "person.create", draft: { id: "parent", workspaceId, displayName: "父", gender: "male" }, source: { sourceKey: "parent", title: "parent", kind: "test" } });
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [
+        { referenceId: "parent", statedFields: [], displayName: "父", aliases: [], gender: "male", birth: null, death: null, notes: null, matchedPersonId: "parent" },
+        familyDraft.candidatePeople[1]!
+      ],
+      parentChildFacts: [{ parentRef: "parent", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    });
+    facts.execute({ type: "person.update", personId: "parent", expectedVersion: 1, patch: { notes: "外部修改" }, source: { sourceKey: "parent-update", title: "parent-update", kind: "test" } });
+    expect(() => service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, [])).toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT" }));
+  });
+
+  it("preserves same-code issue multiplicity and validates only the selected change graph", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    const birth = (year: number) => ({ calendar: "solar" as const, year, month: 1, day: null, leapMonth: false, precision: "month" as const });
+    for (const id of ["p1", "p2"]) {
+      facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: id, gender: "male", birth: birth(1970) }, source: { sourceKey: id, title: id, kind: "test" } });
+      facts.execute({ type: "person.create", draft: { id: `c-${id}`, workspaceId, displayName: `c-${id}`, gender: "unknown", birth: birth(1975) }, source: { sourceKey: `c-${id}`, title: `c-${id}`, kind: "test" } });
+      facts.execute({ type: "parentChild.add", draft: { id: `e-${id}`, workspaceId, parentId: id, childId: `c-${id}`, parentRole: "father" }, source: { sourceKey: `e-${id}`, title: `e-${id}`, kind: "test" } }, { confirmWarnings: true });
+    }
+    const draft = (): ConversationMutationDraft => ({
+      ...familyDraft, parentChildFacts: [],
+      candidatePeople: ["p1", "p2"].map((id) => ({ referenceId: id, statedFields: ["notes"], displayName: id, aliases: [], gender: "male", birth: null, death: null, notes: `note-${id}`, matchedPersonId: id }))
+    });
+
+    const partialService = new DraftService(database, workspaceId);
+    const partial = partialService.stage(draft());
+    const p1Change = partial.changes.find((change) => change.entityId === "p1")!;
+    partialService.confirm(partial.id, partial.version, [p1Change.id], { p1: 1 }, ["PARENT_AGE_OUTLIER"]);
+    expect(new FactQueries(database, workspaceId).getPerson("p1")?.notes).toBe("note-p1");
+    expect(new FactQueries(database, workspaceId).getPerson("p2")?.notes).toBeNull();
+
+    const collisionService = new DraftService(database, workspaceId);
+    const collision = collisionService.stage({
+      ...draft(),
+      candidatePeople: draft().candidatePeople.map((candidate) => candidate.referenceId === "p1" ? { ...candidate, notes: "note-p1-again" } : candidate)
+    });
+    const selected = collision.changes.find((change) => change.entityId === "p1")!;
+    facts.execute({ type: "person.update", personId: "c-p1", expectedVersion: 1, patch: { birth: birth(2000) }, source: { sourceKey: "c-p1-update", title: "c-p1-update", kind: "test" } });
+    expect(() => collisionService.confirm(collision.id, collision.version, [selected.id], { p1: 2 }, ["PARENT_AGE_OUTLIER"]))
+      .toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT" }));
+  });
 });

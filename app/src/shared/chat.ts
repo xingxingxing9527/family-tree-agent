@@ -88,8 +88,8 @@ export interface ConversationDraftPreview {
   changes: ConversationDraftChangeDto[];
   creates: number;
   updates: number;
-  warnings: Array<{ code: string; message: string }>;
-  conflicts: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string; changeId?: string; occurrence?: number }>;
+  conflicts: Array<{ code: string; message: string; changeId?: string; occurrence?: number }>;
   unresolvedReferences: ConversationMutationDraft["unresolvedReferences"];
 }
 
