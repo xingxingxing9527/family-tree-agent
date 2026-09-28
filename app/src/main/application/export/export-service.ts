@@ -242,9 +242,19 @@ export class ExportService {
     const destination = resolve(selectedDestination);
     if (dirname(destination) === destination) throw new ExportValidationError("TARGET_INVALID", "Export destination is unsafe");
     await requirePlainDirectory(destination);
-    const [realDestination, realWorkspace, realAppData, realMedia] = await Promise.all([
-      realpath(destination), realpath(this.workspace.workspaceRoot), realpath(this.workspace.appDataRoot), realpath(this.workspace.mediaRoot)
+    const [realDestination, realWorkspace, realAppData] = await Promise.all([
+      realpath(destination), realpath(this.workspace.workspaceRoot), realpath(this.workspace.appDataRoot)
     ]).catch(() => { throw new ExportValidationError("TARGET_INVALID", "Export roots are unavailable"); });
+    let realMedia: string;
+    try {
+      const mediaInfo = await lstat(this.workspace.mediaRoot);
+      if (!mediaInfo.isDirectory() || mediaInfo.isSymbolicLink()) throw new Error("linked media root");
+      realMedia = await realpath(this.workspace.mediaRoot);
+      const expectedMedia = resolve(realWorkspace, "media");
+      if (normalizeCase(realMedia) !== normalizeCase(expectedMedia) || !contains(normalizeCase(realWorkspace), normalizeCase(realMedia))) throw new Error("unexpected media root");
+    } catch {
+      throw new ExportValidationError("MEDIA_INVALID", "Managed media root is linked or outside the workspace");
+    }
     if (overlaps(normalizeCase(realDestination), normalizeCase(realWorkspace)) || overlaps(normalizeCase(realDestination), normalizeCase(realAppData))) {
       throw new ExportValidationError("TARGET_INVALID", "Export destination overlaps protected application data");
     }

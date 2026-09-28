@@ -8,6 +8,8 @@ import { applyMigrations, LATEST_SCHEMA_VERSION } from "../database/migrations/i
 import { openDatabase } from "../database/open-database.js";
 import { WorkspaceIndex } from "./workspace-index.js";
 import { resolveWorkspacePaths } from "./workspace-paths.js";
+import { workspaceSummarySchema } from "./workspace-schema.js";
+import { ZodError } from "zod";
 
 const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "PATH_DENIED" | "INTERNAL", message: string, details?: unknown): AppResult<T> => ({ ok: false, error: { code, message, ...(details === undefined ? {} : { details }) } });
 
@@ -41,7 +43,9 @@ export class WorkspaceManager {
     if (!name) return failure("VALIDATION", "Workspace name is required", { field: "name" });
     const id = randomUUID(); const directory = randomUUID(); const paths = resolveWorkspacePaths(this.root, directory);
     if (!paths) return failure("PATH_DENIED", "Workspace directory was denied", { id });
-    const summary: WorkspaceSummary = { id, name, directory, originPersonId: null, lastOpenedAt: null, schemaVersion: LATEST_SCHEMA_VERSION };
+    const parsedSummary = workspaceSummarySchema.safeParse({ id, name, directory, originPersonId: null, lastOpenedAt: null, schemaVersion: LATEST_SCHEMA_VERSION });
+    if (!parsedSummary.success) return failure("VALIDATION", "Workspace name is invalid", { field: "name" });
+    const summary = parsedSummary.data;
     try {
       await mkdir(this.root, { recursive: true });
       await this.createFiles(paths, summary);
@@ -56,6 +60,10 @@ export class WorkspaceManager {
       const paths = resolveWorkspacePaths(this.root, workspace.directory);
       if (!paths) return failure("PATH_DENIED", "Workspace directory was denied", { id: input.id });
       if (!await this.hasRequiredFiles(paths)) return failure("NOT_FOUND", "Workspace files were not found", { id: input.id });
+      const persisted = workspaceSummarySchema.safeParse(JSON.parse(await readFile(paths.manifest, "utf8")));
+      if (!persisted.success || JSON.stringify(persisted.data) !== JSON.stringify(workspace)) {
+        return failure("PATH_DENIED", "Workspace manifest did not match its index entry", { id: input.id });
+      }
       const database = openDatabase(paths.database);
       let migratedVersion: number;
       try {
@@ -73,9 +81,11 @@ export class WorkspaceManager {
       } finally {
         database.close();
       }
-      const updated = { ...workspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() }; await this.index.write(workspaces.map((entry) => entry.id === updated.id ? updated : entry));
+      const updated = workspaceSummarySchema.parse({ ...workspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() });
+      await writeFile(paths.manifest, JSON.stringify(updated, null, 2));
+      await this.index.write(workspaces.map((entry) => entry.id === updated.id ? updated : entry));
       this.openWorkspaceContext = this.context(updated, paths); return { ok: true, value: updated };
-    } catch { return failure("INTERNAL", "Unable to open workspace", { id: input.id }); }
+    } catch (error) { return failure(error instanceof ZodError ? "PATH_DENIED" : "INTERNAL", "Unable to open workspace", { id: input.id }); }
   }
   async close(): Promise<AppResult<null>> { this.openWorkspaceContext = null; return { ok: true, value: null }; }
   getOpenWorkspaceContext(): OpenWorkspaceContext | null {
@@ -96,6 +106,7 @@ export class WorkspaceManager {
     return {
       workspaceId: workspace.id,
       workspaceName: workspace.name,
+      directory: workspace.directory,
       rootPath: paths.root,
       databasePath: paths.database,
       mediaPath: paths.media,
@@ -115,16 +126,24 @@ export class WorkspaceManager {
     if (!previous) throw new Error("Restore target disappeared");
     const paths = resolveWorkspacePaths(this.root, previous.directory);
     if (!paths) throw new Error("Restore target path was denied");
-    const restoredManifest = JSON.parse(await readFile(paths.manifest, "utf8")) as { originPersonId?: unknown };
-    const originPersonId = restoredManifest.originPersonId === null || typeof restoredManifest.originPersonId === "string" ? restoredManifest.originPersonId : previous.originPersonId;
-    const updated: WorkspaceSummary = {
+    const restoredManifest = workspaceSummarySchema.parse(JSON.parse(await readFile(paths.manifest, "utf8")));
+    if (
+      restoredManifest.id !== workspaceId || restoredManifest.directory !== previous.directory || restoredManifest.name !== manifest.workspaceName ||
+      restoredManifest.schemaVersion !== schemaVersion || restoredManifest.originPersonId === null
+    ) throw new Error("Restored workspace manifest is inconsistent");
+    const database = openDatabase(paths.database);
+    try {
+      const origin = database.prepare("SELECT 1 FROM person WHERE id=? AND workspace_id=? AND deleted_at IS NULL").get(restoredManifest.originPersonId, workspaceId);
+      if (!origin) throw new Error("Restored workspace origin person is missing");
+    } finally { database.close(); }
+    const updated: WorkspaceSummary = workspaceSummarySchema.parse({
       id: previous.id,
       name: manifest.workspaceName,
       directory: previous.directory,
-      originPersonId,
+      originPersonId: restoredManifest.originPersonId,
       lastOpenedAt: reopen ? new Date().toISOString() : previous.lastOpenedAt,
       schemaVersion
-    };
+    });
     await writeFile(paths.manifest, JSON.stringify(updated, null, 2));
     await this.index.write(workspaces.map((entry) => entry.id === workspaceId ? updated : entry));
     if (reopen) this.openWorkspaceContext = this.context(updated, paths);

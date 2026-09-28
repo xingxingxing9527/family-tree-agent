@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { workspaceIdSchema, workspaceNameSchema } from "../../workspaces/workspace-schema.js";
 
-const boundedText = z.string().min(1).max(500).refine((value) => !/[\0\r\n]/u.test(value), "Control characters are not allowed");
 const count = z.number().int().min(0).max(1_000_000_000);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u);
 
@@ -19,8 +19,8 @@ export const backupFileSchema = z.object({
 
 export const backupManifestSchema = z.object({
   formatVersion: z.literal(1),
-  workspaceId: boundedText,
-  workspaceName: boundedText,
+  workspaceId: workspaceIdSchema,
+  workspaceName: workspaceNameSchema,
   schemaVersion: z.number().int().min(1).max(1_000_000),
   createdAt: z.string().datetime(),
   files: z.array(backupFileSchema).min(2).max(100_000),

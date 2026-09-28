@@ -2,11 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, createWriteStream } from "node:fs";
 import { lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { once } from "node:events";
 import archiver from "archiver";
-import { z } from "zod";
 import { openDatabase } from "../../database/open-database.js";
+import { validateCurrentSchema } from "../../database/migrations/index.js";
+import { workspaceSummarySchema } from "../../workspaces/workspace-schema.js";
 import { backupManifestSchema, canonicalArchivePath, type BackupManifest } from "./backup-manifest.js";
 import { BackupValidationError, inspectBackupArchive } from "./restore-service.js";
 
@@ -27,15 +28,6 @@ export interface BackupResult {
 
 interface MediaRow { relative_path: string; sha256: string; byte_size: number; }
 interface Payload { path: string; sourcePath: string; size: number; sha256: string; }
-
-const workspaceManifestSchema = z.object({
-  id: z.string().min(1).max(500),
-  name: z.string().min(1).max(500),
-  directory: z.string().min(1).max(500),
-  originPersonId: z.string().nullable(),
-  lastOpenedAt: z.string().datetime().nullable(),
-  schemaVersion: z.number().int().positive()
-}).strict();
 
 const inside = (root: string, candidate: string): boolean => {
   const part = relative(root, candidate);
@@ -124,7 +116,9 @@ export class BackupService {
         schemaVersion = Number(snapshot.pragma("user_version", { simple: true }));
         const integrity = snapshot.pragma("integrity_check", { simple: true });
         if (integrity !== "ok" || (snapshot.pragma("foreign_key_check") as unknown[]).length > 0) throw new BackupValidationError("DATABASE_INVALID", "Workspace database failed verification");
-        const identity = snapshot.prepare("SELECT workspace_id, name FROM workspace_meta").all() as Array<{ workspace_id: string; name: string }>;
+        try { validateCurrentSchema(snapshot); }
+        catch { throw new BackupValidationError("DATABASE_INVALID", "Workspace migration ledger or schema is inconsistent"); }
+        const identity = snapshot.prepare("SELECT workspace_id, name, origin_person_id FROM workspace_meta").all() as Array<{ workspace_id: string; name: string; origin_person_id: string | null }>;
         if (identity.length !== 1 || identity[0]?.workspace_id !== this.workspace.workspaceId || identity[0]?.name !== this.workspace.workspaceName) {
           throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace database identity does not match the selected workspace");
         }
@@ -139,8 +133,11 @@ export class BackupService {
         media = snapshot.prepare("SELECT relative_path, sha256, byte_size FROM media_asset ORDER BY relative_path, id").all() as MediaRow[];
       } finally { snapshot.close(); }
 
-      const persistedWorkspace = workspaceManifestSchema.parse(JSON.parse(await readFile(this.workspace.manifestPath, "utf8")));
-      if (persistedWorkspace.id !== this.workspace.workspaceId || persistedWorkspace.name !== this.workspace.workspaceName) throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace manifest identity does not match");
+      const persistedWorkspace = workspaceSummarySchema.parse(JSON.parse(await readFile(this.workspace.manifestPath, "utf8")));
+      if (
+        persistedWorkspace.id !== this.workspace.workspaceId || persistedWorkspace.name !== this.workspace.workspaceName ||
+        persistedWorkspace.directory.toLocaleLowerCase("en-US") !== basename(dirname(this.workspace.manifestPath)).toLocaleLowerCase("en-US")
+      ) throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace manifest identity or directory does not match");
       const snapshotWorkspacePath = join(staging, "workspace.json");
       await writeFile(snapshotWorkspacePath, JSON.stringify({ ...persistedWorkspace, schemaVersion }, null, 2));
 

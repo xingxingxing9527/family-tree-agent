@@ -16,6 +16,7 @@ import { CredentialVault } from "./security/credential-vault.js";
 import { WorkspaceChatGateway } from "./ipc/chat-ipc.js";
 import { OpenAIResponsesAdapter } from "./llm/openai-responses-adapter.js";
 import { WorkspaceDataManagementGateway } from "./ipc/data-management-ipc.js";
+import { WorkspaceMutationGate } from "./workspaces/workspace-mutation-gate.js";
 
 const rendererRoot = resolve(__dirname, "../renderer");
 
@@ -68,28 +69,30 @@ app.enableSandbox();
 app.whenReady().then(() => {
   let mainWindow: BrowserWindow | null = null;
   const workspaceManager = new WorkspaceManager(join(app.getPath("userData"), "workspaces"));
+  const workspaceMutations = new WorkspaceMutationGate();
   registerAppProtocol(workspaceManager);
   ipcMain.handle("desktop:get-version", () => app.getVersion());
   mainWindow = createWindow();
-  registerWorkspaceIpc(ipcMain, () => mainWindow?.webContents.id, workspaceManager);
-  registerFactsIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceFactsGateway(workspaceManager));
+  registerWorkspaceIpc(ipcMain, () => mainWindow?.webContents.id, workspaceManager, workspaceMutations);
+  registerFactsIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceFactsGateway(workspaceManager), workspaceMutations);
   registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager));
-  registerImportIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceImportGateway(workspaceManager));
-  registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager));
+  registerImportIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceImportGateway(workspaceManager), workspaceMutations);
+  registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager), workspaceMutations);
   const mediaGateway = new WorkspaceMediaGateway(workspaceManager);
-  registerMediaIpc(ipcMain, () => mainWindow?.webContents.id, mediaGateway);
+  registerMediaIpc(ipcMain, () => mainWindow?.webContents.id, mediaGateway, workspaceMutations);
   const credentialVault = new CredentialVault(join(app.getPath("userData"), "secrets"), safeStorage);
   const chatGateway = new WorkspaceChatGateway(workspaceManager, credentialVault, (apiKey) => new OpenAIResponsesAdapter({
     apiKey,
     model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini"
   }));
-  registerChatIpc(ipcMain, () => mainWindow?.webContents.id, chatGateway);
+  registerChatIpc(ipcMain, () => mainWindow?.webContents.id, chatGateway, workspaceMutations);
   const dataManagementGateway = new WorkspaceDataManagementGateway(workspaceManager, undefined, {
-    disposeWorkspaceServices: () => { mediaGateway.dispose(); chatGateway.dispose(); }
+    disposeWorkspaceServices: () => { mediaGateway.dispose(); chatGateway.dispose(); },
+    mutationGate: workspaceMutations
   });
-  registerDataManagementIpc(ipcMain, () => mainWindow?.webContents.id, dataManagementGateway);
+  registerDataManagementIpc(ipcMain, () => mainWindow?.webContents.id, dataManagementGateway, workspaceMutations);
   app.once("before-quit", () => { mediaGateway.dispose(); chatGateway.dispose(); void dataManagementGateway.dispose(); });
-  registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager));
+  registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager), workspaceMutations);
   registerModelSettingsIpc(ipcMain, () => mainWindow?.webContents.id, credentialVault);
 
   app.on("activate", () => {

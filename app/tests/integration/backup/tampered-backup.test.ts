@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BackupService } from "../../../src/main/application/backup/backup-service";
-import { BackupValidationError, inspectBackupArchive, type ArchiveBounds } from "../../../src/main/application/backup/restore-service";
+import { BackupValidationError, inspectBackupArchive, RestoreService, type ArchiveBounds } from "../../../src/main/application/backup/restore-service";
 import { createBackupFixture } from "./backup-fixture";
 import { readZipEntries, replaceZipEntryName, rewriteZip, writeZip } from "./backup-test-support";
 
@@ -57,6 +57,24 @@ describe("backup archive security preflight", () => {
     await expect(inspectBackupArchive(missing, { stagingParent: value.root })).rejects.toThrowError(failure("ENTRY_WHITELIST"));
   });
 
+  it("rejects a correctly hashed payload outside the format-1 semantic set and removes its stage", async () => {
+    const value = await createBackupFixture(cleanup);
+    await new BackupService(value.workspace).createBackup(value.archivePath);
+    const forged = join(value.root, "archives", "forged-extra.zip");
+    await writeZip(forged, entriesFrom(await readZipEntries(value.archivePath)));
+    await rewriteZip(forged, (entries) => {
+      const extra = Buffer.from("correctly hashed but not semantically allowed");
+      entries.set("notes.txt", extra);
+      const manifest = JSON.parse(entries.get("backup-manifest.json")!.toString("utf8")) as { files: Array<{ path: string; size: number; sha256: string }> };
+      manifest.files.push({ path: "notes.txt", size: extra.length, sha256: createHash("sha256").update(extra).digest("hex") });
+      entries.set("backup-manifest.json", Buffer.from(JSON.stringify(manifest)));
+      return entriesFrom(entries);
+    });
+
+    await expect(inspectBackupArchive(forged, { stagingParent: value.root })).rejects.toThrowError(failure("ENTRY_WHITELIST"));
+    expect((await readdir(value.root)).filter((name) => name.startsWith(".family-restore-stage-"))).toEqual([]);
+  });
+
   it("rejects a payload whose bytes no longer match the manifest hash", async () => {
     const value = await createBackupFixture(cleanup);
     await new BackupService(value.workspace).createBackup(value.archivePath);
@@ -97,6 +115,61 @@ describe("backup archive security preflight", () => {
     const value = await createBackupFixture(cleanup);
     await new BackupService(value.workspace).createBackup(value.archivePath);
     await expect(inspectBackupArchive(value.archivePath, { stagingParent: value.root, bounds })).rejects.toThrowError(failure(code));
+  });
+
+  it("enforces aggregate compression-ratio limits when entries individually stay below the threshold", async () => {
+    const value = await createBackupFixture(cleanup);
+    const archive = join(value.root, "archives", "split-ratio.zip");
+    await writeZip(archive, ["a", "b", "c", "d"].map((name) => ({ name: `${name}.txt`, data: Buffer.alloc(100, 0x41) })));
+
+    await expect(inspectBackupArchive(archive, {
+      stagingParent: value.root,
+      bounds: { minRatioBytes: 150, maxCompressionRatio: 2 }
+    })).rejects.toThrowError(failure("ARCHIVE_LIMIT"));
+  });
+
+  it("applies independent tight limits to backup and workspace control files", async () => {
+    const value = await createBackupFixture(cleanup);
+    await new BackupService(value.workspace).createBackup(value.archivePath);
+
+    await expect(inspectBackupArchive(value.archivePath, {
+      stagingParent: value.root,
+      bounds: { maxBackupManifestBytes: 16 }
+    })).rejects.toThrowError(failure("ARCHIVE_LIMIT"));
+    await expect(inspectBackupArchive(value.archivePath, {
+      stagingParent: value.root,
+      bounds: { maxWorkspaceManifestBytes: 16 }
+    })).rejects.toThrowError(failure("ARCHIVE_LIMIT"));
+  });
+
+  it("rejects a restore without an existing non-null origin person", async () => {
+    const value = await createBackupFixture(cleanup);
+    await new BackupService(value.workspace).createBackup(value.archivePath);
+    const invalid = join(value.root, "archives", "missing-origin.zip");
+    await writeZip(invalid, entriesFrom(await readZipEntries(value.archivePath)));
+    await rewriteZip(invalid, (entries) => {
+      const workspace = JSON.parse(entries.get("workspace.json")!.toString("utf8")) as Record<string, unknown>;
+      const bytes = Buffer.from(JSON.stringify({ ...workspace, originPersonId: null }));
+      entries.set("workspace.json", bytes);
+      const manifest = JSON.parse(entries.get("backup-manifest.json")!.toString("utf8")) as { files: Array<{ path: string; size: number; sha256: string }> };
+      const file = manifest.files.find((entry) => entry.path === "workspace.json")!;
+      file.size = bytes.length;
+      file.sha256 = createHash("sha256").update(bytes).digest("hex");
+      entries.set("backup-manifest.json", Buffer.from(JSON.stringify(manifest)));
+      return entriesFrom(entries);
+    });
+    const restore = new RestoreService({
+      resolveTarget: async () => value.target,
+      acquireExclusive: async () => ({ release: () => undefined }),
+      createVerifiedSnapshot: async () => undefined,
+      deactivate: async () => undefined,
+      commitActivation: async () => undefined,
+      rollbackActivation: async () => undefined
+    });
+
+    await expect(restore.inspectBackup({ archivePath: invalid, targetWorkspaceId: value.target.workspaceId }))
+      .rejects.toThrowError(failure("WORKSPACE_MISMATCH"));
+    expect((await readdir(join(value.root, "workspaces"))).filter((name) => name.startsWith(".family-restore-stage-"))).toEqual([]);
   });
 
   it("rejects Windows drive, ADS, reserved, trailing-dot, empty, and overlong names", async () => {

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { applyMigrations } from "../../../src/main/database/migrations";
+import { initialSchemaMigration } from "../../../src/main/database/migrations/001-initial-schema";
 
 describe("database migrations", () => {
   const roots: string[] = [];
@@ -71,6 +72,47 @@ describe("database migrations", () => {
     expect(() => database.prepare("INSERT INTO parent_child (id, workspace_id, parent_id, child_id, parent_role, relationship_type, created_at, updated_at) VALUES ('father-2', 'workspace-1', 'b', 'child', 'father', 'biological', ?, ?)").run(now, now)).toThrow();
     expect(() => database.prepare("INSERT INTO marriage (id, workspace_id, spouse_a_id, spouse_b_id, created_at, updated_at) VALUES ('unordered', 'workspace-1', 'b', 'a', ?, ?)").run(now, now)).toThrow();
 
+    database.close();
+  });
+
+  it.each([
+    ["a renamed ledger row", "UPDATE schema_migrations SET name = 'forged' WHERE version = 2"],
+    ["a gap in the ledger", "DELETE FROM schema_migrations WHERE version = 2"],
+    ["an unknown future ledger row", "INSERT INTO schema_migrations (version, name, applied_at) VALUES (5, 'future', '2026-09-16T00:00:00.000Z')"],
+    ["a missing required index", "DROP INDEX operation_group_history_idx"]
+  ])("rejects %s instead of trusting user_version", async (_case, mutation) => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    try {
+      applyMigrations(database);
+      database.exec(mutation);
+      expect(() => applyMigrations(database)).toThrow(/migration|schema/i);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("accepts a genuine contiguous version-1 database and migrates it exactly to the latest version", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    database.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);
+      ${initialSchemaMigration.sql}
+      INSERT INTO schema_migrations (version, name, applied_at)
+      VALUES (1, '${initialSchemaMigration.name}', '2026-09-16T00:00:00.000Z');
+      PRAGMA user_version = 1;
+    `);
+
+    expect(applyMigrations(database)).toBe(4);
+    expect(database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all()).toEqual([
+      { version: 1, name: "initial schema" },
+      { version: 2, name: "merge history" },
+      { version: 3, name: "wiki full-text search" },
+      { version: 4, name: "operation group undo state" }
+    ]);
+    expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
     database.close();
   });
 });

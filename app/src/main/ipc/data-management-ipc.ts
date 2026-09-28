@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { dialog, type IpcMain, type IpcMainInvokeEvent } from "electron";
@@ -15,6 +15,8 @@ import { ExportService, ExportValidationError } from "../application/export/expo
 import { applyMigrations } from "../database/migrations/index.js";
 import { openDatabase } from "../database/open-database.js";
 import type { WorkspaceManager, WorkspaceManagerState } from "../workspaces/workspace-manager.js";
+import { canonicalPlainDirectory, normalizePathIdentity, pathContains, pathsOverlap } from "../workspaces/workspace-path-security.js";
+import { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export const DATA_MANAGEMENT_CHANNELS = {
   auditList: "data-management:audit-list",
@@ -59,6 +61,7 @@ function safeError<T>(error: unknown, fallback: string): AppResult<T> {
     if (error.code === "TOKEN_INVALID") return failure("PATH_DENIED", "Backup selection expired or was already used");
     if (error.code === "TARGET_INVALID") return failure("NOT_FOUND", "Restore target is unavailable");
     if (error.code === "CONFIRMATION_REQUIRED") return failure("VALIDATION", "Replacement confirmation is required");
+    if (error.code === "ROLLBACK_FAILED") return failure("CONFLICT", "Restore failed and automatic rollback could not be confirmed");
     if (error.code === "ACTIVATION_FAILED") return failure("CONFLICT", "Restore activation failed; the original workspace was preserved");
     return failure("VALIDATION", "Backup could not be verified");
   }
@@ -72,9 +75,14 @@ function safeError<T>(error: unknown, fallback: string): AppResult<T> {
 
 class WorkspaceRestoreController implements RestoreController {
   private readonly states = new Map<string, WorkspaceManagerState>();
-  constructor(private readonly workspaces: WorkspaceManager, private readonly disposeWorkspaceServices: () => void | Promise<void>) {}
+  constructor(
+    private readonly workspaces: WorkspaceManager,
+    private readonly disposeWorkspaceServices: () => void | Promise<void>,
+    private readonly mutations: WorkspaceMutationGate
+  ) {}
 
   resolveTarget(workspaceId: string): Promise<RestoreTarget | null> { return this.workspaces.resolveRestoreTarget(workspaceId); }
+  acquireExclusive(): ReturnType<WorkspaceMutationGate["acquireExclusive"]> { return this.mutations.acquireExclusive(); }
 
   async createVerifiedSnapshot(target: RestoreTarget): Promise<void> {
     const state = await this.workspaces.captureRestoreState();
@@ -82,8 +90,14 @@ class WorkspaceRestoreController implements RestoreController {
     try {
       const snapshotRoot = this.workspaces.getAutomaticSnapshotRoot();
       await mkdir(snapshotRoot, { recursive: true });
+      const [canonicalSnapshotRoot, canonicalTargetRoot] = await Promise.all([
+        canonicalPlainDirectory(snapshotRoot), canonicalPlainDirectory(target.rootPath)
+      ]).catch(() => { throw new BackupValidationError("ACTIVATION_FAILED", "Automatic snapshot root is linked or unavailable"); });
+      if (pathsOverlap(normalizePathIdentity(canonicalSnapshotRoot), normalizePathIdentity(canonicalTargetRoot))) {
+        throw new BackupValidationError("ACTIVATION_FAILED", "Automatic snapshot root overlaps the restore target");
+      }
       const stamp = new Date().toISOString().replaceAll(":", "-");
-      const destination = join(snapshotRoot, `${target.workspaceId}-${stamp}-${randomUUID()}.zip`);
+      const destination = join(canonicalSnapshotRoot, `${target.workspaceId}-${stamp}-${randomUUID()}.zip`);
       await new BackupService({
         workspaceId: target.workspaceId,
         workspaceName: target.workspaceName,
@@ -93,6 +107,11 @@ class WorkspaceRestoreController implements RestoreController {
         manifestPath: target.manifestPath,
         backupsRoot: target.backupsPath
       }).createBackup(destination);
+      const archiveInfo = await lstat(destination);
+      const canonicalArchive = await realpath(destination);
+      if (!archiveInfo.isFile() || archiveInfo.isSymbolicLink() || !pathContains(canonicalSnapshotRoot, canonicalArchive)) {
+        throw new BackupValidationError("ACTIVATION_FAILED", "Automatic snapshot escaped its managed root");
+      }
     } catch (error) {
       this.states.delete(target.workspaceId);
       throw error;
@@ -132,13 +151,15 @@ export class WorkspaceDataManagementGateway implements DataManagementGateway {
   constructor(
     private readonly workspaces: WorkspaceManager,
     private readonly dialogs: DataManagementDialogs = nativeDialogs,
-    options: { selectionTtlMs?: number; disposeWorkspaceServices?: () => void | Promise<void> } = {}
+    options: { selectionTtlMs?: number; disposeWorkspaceServices?: () => void | Promise<void>; mutationGate?: WorkspaceMutationGate } = {}
   ) {
     this.selectionTtlMs = options.selectionTtlMs ?? 5 * 60_000;
-    this.restore = new RestoreService(new WorkspaceRestoreController(workspaces, options.disposeWorkspaceServices ?? (() => undefined)));
+    this.mutationGate = options.mutationGate ?? new WorkspaceMutationGate();
+    this.restore = new RestoreService(new WorkspaceRestoreController(workspaces, options.disposeWorkspaceServices ?? (() => undefined), this.mutationGate));
   }
 
   private readonly selectionTtlMs: number;
+  private readonly mutationGate: WorkspaceMutationGate;
 
   async listAudit(): Promise<AppResult<AuditOperationGroupDto[]>> {
     const context = this.workspaces.getOpenWorkspaceContext();
@@ -229,7 +250,7 @@ export class WorkspaceDataManagementGateway implements DataManagementGateway {
     finally { await rm(selection.ownerRoot, { recursive: true, force: true }); }
   }
 
-  async restoreBackup(input: { restoreToken: string; targetWorkspaceId: string; confirmReplace: true }): Promise<AppResult<{ restored: true; automaticSnapshotVerified: true }>> {
+  async restoreBackup(input: { restoreToken: string; targetWorkspaceId: string; confirmReplace: true }): Promise<AppResult<{ restored: true; automaticSnapshotVerified: true; cleanupPending: boolean }>> {
     try { return { ok: true, value: await this.restore.restoreBackup(input) }; }
     catch (error) { return safeError(error, "Unable to restore backup"); }
   }
@@ -291,22 +312,22 @@ const undoSchema = z.object({ operationGroupId: identifier }).strict();
 const inspectSchema = z.object({ fileToken: identifier, targetWorkspaceId: identifier }).strict();
 const activateSchema = z.object({ restoreToken: identifier, targetWorkspaceId: identifier, confirmReplace: z.literal(true) }).strict();
 
-export function registerDataManagementIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, data: DataManagementGateway): void {
-  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>): void => {
+export function registerDataManagementIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, data: DataManagementGateway, mutations?: WorkspaceMutationGate): void {
+  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>, mutates = false): void => {
     ipc.handle(channel, async (event: IpcMainInvokeEvent, raw: unknown) => {
       if (event.sender.id !== mainWindowId()) return failure("PATH_DENIED", "IPC sender was denied");
       const parsed = schema.safeParse(raw);
       if (!parsed.success) return failure("VALIDATION", "Invalid request");
-      try { return await operation(parsed.data); }
+      try { return await (mutates && mutations ? mutations.runMutation(() => operation(parsed.data)) : operation(parsed.data)); }
       catch { return failure("INTERNAL", "Unable to complete data-management request"); }
     });
   };
   register(DATA_MANAGEMENT_CHANNELS.auditList, emptySchema, () => data.listAudit());
-  register(DATA_MANAGEMENT_CHANNELS.auditUndo, undoSchema, (input) => data.undoOperationGroup(input));
-  register(DATA_MANAGEMENT_CHANNELS.backupCreate, emptySchema, () => data.createBackup());
+  register(DATA_MANAGEMENT_CHANNELS.auditUndo, undoSchema, (input) => data.undoOperationGroup(input), true);
+  register(DATA_MANAGEMENT_CHANNELS.backupCreate, emptySchema, () => data.createBackup(), true);
   register(DATA_MANAGEMENT_CHANNELS.restoreTargets, emptySchema, () => data.listRestoreTargets());
   register(DATA_MANAGEMENT_CHANNELS.restoreSelect, emptySchema, () => data.selectRestoreFile());
   register(DATA_MANAGEMENT_CHANNELS.restoreInspect, inspectSchema, (input) => data.inspectBackup(input));
   register(DATA_MANAGEMENT_CHANNELS.restoreActivate, activateSchema, (input) => data.restoreBackup(input));
-  register(DATA_MANAGEMENT_CHANNELS.exportCreate, emptySchema, () => data.exportWorkspace());
+  register(DATA_MANAGEMENT_CHANNELS.exportCreate, emptySchema, () => data.exportWorkspace(), true);
 }

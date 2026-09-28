@@ -46,7 +46,10 @@ export function DataManagementPage({ api }: DataManagementPageProps): JSX.Elemen
   };
   const restore = async (): Promise<void> => {
     if (!inspection || !confirmed) return;
-    await run(() => api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true }), "恢复完成，自动快照已验证");
+    setError(null); setMessage(null);
+    const result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
+    if (!result.ok) { setError(result.error.message); return; }
+    setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
   };
 
   return <main>

@@ -11,6 +11,7 @@ import { exportImportTemplate, parseImport } from "../application/import/workboo
 import { applyMigrations } from "../database/migrations/index.js";
 import { openDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export const IMPORT_CHANNELS = { selectFile: "imports:select-file", parse: "imports:parse", commit: "imports:commit", exportTemplate: "imports:export-template" } as const;
 type ImportSheet = "People" | "ParentChild" | "Marriages";
@@ -80,7 +81,8 @@ const mappingSchema = z.record(z.string().min(1).max(100), z.string().min(1).max
 const parseSchema = z.object({ fileToken: z.string().uuid(), sourceKey: sourceKeySchema, csvEntityType: z.enum(["People", "ParentChild", "Marriages"]).optional(), fieldMapping: mappingSchema.optional() }).strict();
 const commitSchema = z.object({ planId: z.string().min(1).max(200), selectedActionIds: z.array(z.string().min(1).max(200)).max(10_000) }).strict().refine((input) => new Set(input.selectedActionIds).size === input.selectedActionIds.length);
 const emptySchema = z.object({}).strict(); const denied = (): AppResult<never> => failure("PATH_DENIED", "IPC sender was denied"); const invalid = (): AppResult<never> => failure("VALIDATION", "Invalid request"); const internal = (): AppResult<never> => failure("INTERNAL", "Unable to complete import request");
-export function registerImportIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, imports: ImportGateway): void {
+export function registerImportIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, imports: ImportGateway, mutations?: WorkspaceMutationGate): void {
+  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
   const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>): void => ipc.handle(channel, async (event: IpcMainInvokeEvent, input: unknown) => { if (event.sender.id !== mainWindowId()) return denied(); const parsed = schema.safeParse(input); if (!parsed.success) return invalid(); try { return await operation(parsed.data); } catch { return internal(); } });
-  register(IMPORT_CHANNELS.selectFile, emptySchema, () => imports.selectImportFile()); register(IMPORT_CHANNELS.parse, parseSchema, (input) => imports.parseImport(input)); register(IMPORT_CHANNELS.commit, commitSchema, (input) => imports.commitImport(input)); register(IMPORT_CHANNELS.exportTemplate, emptySchema, () => imports.exportTemplate());
+  register(IMPORT_CHANNELS.selectFile, emptySchema, () => imports.selectImportFile()); register(IMPORT_CHANNELS.parse, parseSchema, (input) => imports.parseImport(input)); register(IMPORT_CHANNELS.commit, commitSchema, (input) => mutate(() => imports.commitImport(input))); register(IMPORT_CHANNELS.exportTemplate, emptySchema, () => imports.exportTemplate());
 }

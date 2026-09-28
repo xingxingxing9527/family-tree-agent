@@ -14,6 +14,7 @@ import { ConversationService } from "../application/chat/conversation-service.js
 import type { ModelAdapter } from "../llm/model-adapter.js";
 import type { OpenWorkspaceContext, OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 import { selectRelevantCandidates } from "../application/chat/context-minimizer.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 type Operation = "extract" | "ask";
 interface Binding { workspaceId: string; sessionId: string; operation: Operation; payload: unknown; }
@@ -182,12 +183,13 @@ const handler = <T>(trusted: (event: IpcMainInvokeEvent) => boolean, schema: Zod
     return operation(parsed.data);
   };
 
-export function registerChatIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: ChatGateway): void {
+export function registerChatIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: ChatGateway, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
+  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
   ipc.handle(CHAT_CHANNELS.authorize, handler(trusted, disclosureRequestSchema, (input) => gateway.authorize(input)));
   ipc.handle(CHAT_CHANNELS.stageMutation, handler(trusted, stageMutationRequestSchema, (input) => gateway.stageMutation(input)));
   ipc.handle(CHAT_CHANNELS.ask, handler(trusted, askRequestSchema, (input) => gateway.ask(input)));
-  ipc.handle(CHAT_CHANNELS.confirm, handler(trusted, confirmDraftRequestSchema, (input) => gateway.confirm(input)));
+  ipc.handle(CHAT_CHANNELS.confirm, handler(trusted, confirmDraftRequestSchema, (input) => mutate(() => gateway.confirm(input))));
   ipc.handle(CHAT_CHANNELS.revise, handler(trusted, reviseDraftRequestSchema, (input) => gateway.revise(input)));
 }
 

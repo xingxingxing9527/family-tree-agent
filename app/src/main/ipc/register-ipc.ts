@@ -2,6 +2,7 @@ import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import { z } from "zod";
 import type { AppResult } from "../../shared/contracts.js";
 import type { WorkspaceManager } from "../workspaces/workspace-manager.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export { FACT_CHANNELS, registerFactsIpc } from "./facts-ipc.js";
 export { QUERY_CHANNELS, registerQueryIpc } from "./query-ipc.js";
@@ -19,10 +20,11 @@ const openSchema = z.object({ id: z.string().uuid() });
 const denied = <T>(): AppResult<T> => ({ ok: false, error: { code: "PATH_DENIED", message: "IPC sender was denied" } });
 const invalid = <T>(field: string): AppResult<T> => ({ ok: false, error: { code: "VALIDATION", message: "Invalid request", details: { field } } });
 
-export function registerWorkspaceIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, manager: WorkspaceManager): void {
+export function registerWorkspaceIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, manager: WorkspaceManager, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
+  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
   ipc.handle(WORKSPACE_CHANNELS.list, (event) => trusted(event) ? manager.list() : denied());
-  ipc.handle(WORKSPACE_CHANNELS.create, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = createSchema.safeParse(input); return parsed.success ? manager.create(parsed.data) : invalid("name"); });
-  ipc.handle(WORKSPACE_CHANNELS.open, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = openSchema.safeParse(input); return parsed.success ? manager.open(parsed.data) : invalid("id"); });
-  ipc.handle(WORKSPACE_CHANNELS.close, (event) => trusted(event) ? manager.close() : denied());
+  ipc.handle(WORKSPACE_CHANNELS.create, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = createSchema.safeParse(input); return parsed.success ? mutate(() => manager.create(parsed.data)) : invalid("name"); });
+  ipc.handle(WORKSPACE_CHANNELS.open, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = openSchema.safeParse(input); return parsed.success ? mutate(() => manager.open(parsed.data)) : invalid("id"); });
+  ipc.handle(WORKSPACE_CHANNELS.close, (event) => trusted(event) ? mutate(() => manager.close()) : denied());
 }

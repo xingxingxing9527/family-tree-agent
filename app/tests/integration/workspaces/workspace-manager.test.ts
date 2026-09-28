@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
+import { WorkspaceIndex } from "../../../src/main/workspaces/workspace-index";
 
 describe("WorkspaceManager", () => {
   const roots: string[] = [];
@@ -45,6 +46,12 @@ describe("WorkspaceManager", () => {
     await expect(readFile(join(workspaceRoot, "genealogy.sqlite"))).resolves.toBeInstanceOf(Buffer);
     expect((await stat(join(workspaceRoot, "media"))).isDirectory()).toBe(true);
     expect((await stat(join(workspaceRoot, "backups"))).isDirectory()).toBe(true);
+  });
+
+  it("validates a new workspace with the shared strict schema before creating files", async () => {
+    const { root, manager } = await createManager();
+    await expect(manager.create({ name: "x".repeat(201) })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    expect(await readdir(root)).toEqual([]);
   });
 
   it.each(["workspace.json", "genealogy.sqlite", "media", "backups"])("does not open an indexed workspace with a missing required %s", async (missingPath) => {
@@ -112,5 +119,40 @@ describe("WorkspaceManager", () => {
     await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
     const index = JSON.parse(await readFile(join(root, "index.json"), "utf8")) as { workspaces: Array<{ id: string; lastOpenedAt: string | null }> };
     expect(index.workspaces.find((workspace) => workspace.id === created.value.id)?.lastOpenedAt).toBeNull();
+  });
+
+  it("validates the complete workspace index before atomically publishing it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-workspaces-"));
+    roots.push(root);
+    const index = new WorkspaceIndex(root);
+    const valid = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Valid family",
+      directory: "22222222-2222-4222-8222-222222222222",
+      originPersonId: null,
+      lastOpenedAt: null,
+      schemaVersion: 4
+    };
+    await index.write([valid]);
+
+    await expect(index.write([{ ...valid, id: "not-a-uuid", directory: "opaque" }])).rejects.toThrow();
+    await expect(index.read()).resolves.toEqual([valid]);
+  });
+
+  it("rejects a workspace whose persisted manifest is not the same strict summary as its index entry", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Bound family" });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const manifestPath = join(root, created.value.directory, "workspace.json");
+    const persisted = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    await writeFile(manifestPath, JSON.stringify({
+      ...persisted,
+      directory: "33333333-3333-4333-8333-333333333333",
+      unexpected: true
+    }));
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(manager.getOpenWorkspaceContext()).toBeNull();
   });
 });

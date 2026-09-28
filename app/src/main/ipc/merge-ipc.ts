@@ -10,6 +10,7 @@ import { applyMigrations } from "../database/migrations/index.js";
 import { openDatabase, type WorkspaceDatabase } from "../database/open-database.js";
 import { MergeRepository } from "../database/repositories/merge-repository.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export const MERGE_CHANNELS = { candidates: "merges:candidates", preview: "merges:preview", merge: "merges:merge", history: "merges:history", canUnmerge: "merges:can-unmerge", unmerge: "merges:unmerge" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;
@@ -36,15 +37,16 @@ export class WorkspaceMergeGateway implements MergeApi {
   }
 }
 
-export function registerMergeIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: MergeApi): void {
+export function registerMergeIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: MergeApi, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
+  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
   const handle = <T>(channel: string, schema: z.ZodType, work: (input: T) => Promise<AppResult<unknown>>) => ipc.handle(channel, async (event, input) => {
     if (!trusted(event)) return failure("INTERNAL", "IPC sender was denied"); const parsed = schema.safeParse(input); if (!parsed.success) return failure("VALIDATION", "Invalid request"); return work(parsed.data as T);
   });
   handle<{ personId: string }>(MERGE_CHANNELS.candidates, z.object({ personId: id }).strict(), (input) => gateway.findDuplicateCandidates(input));
   handle<{ primaryPersonId: string; secondaryPersonId: string }>(MERGE_CHANNELS.preview, z.object({ primaryPersonId: id, secondaryPersonId: id }).strict(), (input) => gateway.preview(input));
-  handle<MergeDecisionDto>(MERGE_CHANNELS.merge, decision, (input) => gateway.merge(input));
+  handle<MergeDecisionDto>(MERGE_CHANNELS.merge, decision, (input) => mutate(() => gateway.merge(input)));
   ipc.handle(MERGE_CHANNELS.history, (event) => trusted(event) ? gateway.history() : failure("INTERNAL", "IPC sender was denied"));
   handle<{ mergeId: string }>(MERGE_CHANNELS.canUnmerge, z.object({ mergeId: id }).strict(), (input) => gateway.canUnmerge(input));
-  handle<{ mergeId: string }>(MERGE_CHANNELS.unmerge, z.object({ mergeId: id }).strict(), (input) => gateway.unmerge(input));
+  handle<{ mergeId: string }>(MERGE_CHANNELS.unmerge, z.object({ mergeId: id }).strict(), (input) => mutate(() => gateway.unmerge(input)));
 }

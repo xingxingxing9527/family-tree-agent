@@ -23,7 +23,7 @@ function api(): DataManagementApi {
     listRestoreTargets: vi.fn().mockResolvedValue({ ok: true, value: [{ id: workspaceId, name: "王氏家谱", directory: "opaque", originPersonId: null, lastOpenedAt: null, schemaVersion: 4 }] }),
     selectRestoreFile: vi.fn().mockResolvedValue({ ok: true, value: { selected: true, fileToken, fileName: "family.zip" } }),
     inspectBackup: vi.fn().mockResolvedValue({ ok: true, value: { restoreToken, targetWorkspaceId: workspaceId, verified: true, expiresAt: "2026-09-16T00:10:00.000Z", manifest: { formatVersion: 1, workspaceId, workspaceName: "王氏家谱", createdAt: "2026-09-16T00:00:00.000Z", schemaVersion: 4, counts } } }),
-    restoreBackup: vi.fn().mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true } }),
+    restoreBackup: vi.fn().mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: false } }),
     exportWorkspace: vi.fn().mockResolvedValue({ ok: true, value: { saved: true, files: 7, mediaAssets: 1 } })
   };
 }
@@ -64,6 +64,21 @@ describe("data-management settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "导出资料" }));
     await waitFor(() => expect(value.createBackup).toHaveBeenCalledWith());
     expect(value.exportWorkspace).toHaveBeenCalledWith();
+  });
+
+  it("distinguishes a committed restore whose old-directory cleanup is still pending", async () => {
+    const value = api();
+    vi.mocked(value.restoreBackup).mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: true } });
+    render(<DataManagementPage api={value} />);
+    await screen.findByRole("option", { name: "王氏家谱" });
+    fireEvent.click(screen.getByRole("button", { name: "选择备份文件" }));
+    await screen.findByText("family.zip");
+    fireEvent.click(screen.getByRole("button", { name: "验证备份" }));
+    await screen.findByText("验证通过");
+    fireEvent.click(screen.getByLabelText("我确认用已验证备份替换王氏家谱"));
+    fireEvent.click(screen.getByRole("button", { name: "替换目标谱册" }));
+
+    expect(await screen.findByText("恢复已提交，旧工作区清理待完成")).toBeVisible();
   });
 
   it("shows the reason a history group cannot be undone and refreshes after an allowed undo", async () => {

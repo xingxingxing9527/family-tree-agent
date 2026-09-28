@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { parse } from "csv-parse/sync";
@@ -185,6 +185,17 @@ describe("workspace export", () => {
 
     await expect(new ExportService(value.workspace).exportWorkspace(linked)).rejects.toMatchObject(code("TARGET_INVALID"));
     expect(await readdir(actual)).toEqual([]);
+  });
+
+  it("rejects a workspace media root replaced by a directory link even when every file stays hash-valid", async () => {
+    const value = await fixture(cleanup);
+    const destination = await value.destination("linked-media-root");
+    const linkedTarget = join(value.root, "outside-media-root");
+    await rename(value.workspace.mediaRoot, linkedTarget);
+    await symlink(linkedTarget, value.workspace.mediaRoot, process.platform === "win32" ? "junction" : "dir");
+
+    await expect(new ExportService(value.workspace).exportWorkspace(destination)).rejects.toMatchObject(code("MEDIA_INVALID"));
+    expect(await readdir(destination)).toEqual([]);
   });
 
   it("fails atomically on a changed media object and removes only its staging directory", async () => {

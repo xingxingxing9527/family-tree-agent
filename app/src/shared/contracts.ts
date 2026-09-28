@@ -382,7 +382,7 @@ export interface DataManagementApi {
   listRestoreTargets(): Promise<AppResult<WorkspaceSummary[]>>;
   selectRestoreFile(): Promise<AppResult<{ selected: boolean; fileToken?: string; fileName?: string }>>;
   inspectBackup(input: { fileToken: string; targetWorkspaceId: string }): Promise<AppResult<BackupInspectionDto>>;
-  restoreBackup(input: { restoreToken: string; targetWorkspaceId: string; confirmReplace: true }): Promise<AppResult<{ restored: true; automaticSnapshotVerified: true }>>;
+  restoreBackup(input: { restoreToken: string; targetWorkspaceId: string; confirmReplace: true }): Promise<AppResult<{ restored: true; automaticSnapshotVerified: true; cleanupPending: boolean }>>;
   exportWorkspace(): Promise<AppResult<{ saved: boolean; files?: number; mediaAssets?: number }>>;
 }
 
