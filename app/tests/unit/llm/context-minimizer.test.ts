@@ -75,15 +75,26 @@ describe("minimizeConversationContext", () => {
   });
 
   it.each([
+    "/001.jpg",
     "/2026/09/001.jpg",
     "~/family/private.txt",
     "./family/private.txt",
     "../family/private.txt",
+    "family/private.txt",
     "family/photos/private.jpg",
+    "家谱/照片.jpg",
+    "C:private.txt",
+    "\\family\\private.txt",
+    "KEY=env-secret",
+    "TOKEN=env-secret",
+    "SECRET=env-secret",
+    "PASSWORD=hunter2",
+    "PASS=hunter2",
+    "PWD=private",
     "OPENAI_KEY=env-secret",
     "DB_PASS=hunter2",
     "SESSION_PWD=private"
-  ])("whole-redacts numeric, relative, and env-sensitive value %s", (question) => {
+  ])("whole-redacts file paths and credential assignments %s", (question) => {
     expect(minimizeConversationContext({ question, viewpointId: "v", selectedPersonId: null, neededCandidateIds: [], candidatePeople: [], toolResults: [] }).question).toBe("[REDACTED]");
   });
 

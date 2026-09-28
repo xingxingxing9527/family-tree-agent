@@ -68,6 +68,68 @@ describe("DraftService confirmation", () => {
     } finally { cleanDatabase.close(); }
   });
 
+  it("rejects duplicate explicit references to one existing person before staging dependencies", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "person.create",
+      draft: {
+        id: "existing-parent", workspaceId, displayName: "父", aliases: ["老父"], gender: "male",
+        birth: { calendar: "solar", year: 1970, month: 1, day: null, leapMonth: false, precision: "month" }
+      },
+      source: { sourceKey: "existing-parent", title: "existing-parent", kind: "test" }
+    });
+    const service = new DraftService(database, workspaceId);
+    const duplicate: ConversationMutationDraft = {
+      ...familyDraft,
+      candidatePeople: [
+        {
+          referenceId: "parent-update", statedFields: ["birth"], displayName: "父", aliases: [], gender: "male",
+          birth: { calendar: "solar", year: 1995, month: 1, day: null, leapMonth: false, precision: "month" },
+          death: null, notes: null, matchedPersonId: "existing-parent"
+        },
+        {
+          referenceId: "parent-relation", statedFields: [], displayName: "父", aliases: [], gender: "male",
+          birth: null, death: null, notes: null, matchedPersonId: "existing-parent"
+        },
+        familyDraft.candidatePeople[1]!
+      ],
+      parentChildFacts: [{ parentRef: "parent-relation", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    };
+
+    expect(() => service.stage(duplicate)).toThrowError(expect.objectContaining({ code: "DUPLICATE_EXISTING_PERSON_REFERENCE" }));
+  });
+
+  it("rejects duplicate name and alias resolutions to one existing person", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "person.create",
+      draft: {
+        id: "existing-parent", workspaceId, displayName: "父", aliases: ["老父"], gender: "male",
+        birth: { calendar: "solar", year: 1970, month: 1, day: null, leapMonth: false, precision: "month" }
+      },
+      source: { sourceKey: "existing-parent", title: "existing-parent", kind: "test" }
+    });
+    const service = new DraftService(database, workspaceId);
+    const duplicate: ConversationMutationDraft = {
+      ...familyDraft,
+      candidatePeople: [
+        {
+          referenceId: "parent-by-name", statedFields: ["birth"], displayName: "父", aliases: [], gender: "male",
+          birth: { calendar: "solar", year: 1995, month: 1, day: null, leapMonth: false, precision: "month" },
+          death: null, notes: null, matchedPersonId: null
+        },
+        {
+          referenceId: "parent-by-alias", statedFields: [], displayName: "老父", aliases: [], gender: "male",
+          birth: null, death: null, notes: null, matchedPersonId: null
+        },
+        familyDraft.candidatePeople[1]!
+      ],
+      parentChildFacts: [{ parentRef: "parent-by-alias", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    };
+
+    expect(() => service.stage(duplicate)).toThrowError(expect.objectContaining({ code: "DUPLICATE_EXISTING_PERSON_REFERENCE" }));
+  });
+
   it("creates immutable revisions, supersedes old drafts, and enforces row versions and lifetime", () => {
     const facts = new FactCommandService(database, workspaceId);
     facts.execute({

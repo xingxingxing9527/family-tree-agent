@@ -83,6 +83,7 @@ export class DraftService {
     const conflicts: Array<{ code: string; message: string }> = [];
     const unresolved = draft.unresolvedReferences.map((entry) => ({ ...entry, candidatePersonIds: [...entry.candidatePersonIds] }));
     const resolved = new Map<string, { entityId: string; dependencyId?: string; birth: ConversationMutationDraft["candidatePeople"][number]["birth"]; rowVersion?: number }>();
+    const existingReferenceByPersonId = new Map<string, string>();
     const snapshotVersions = (personIds: readonly string[]): Readonly<Record<string, number>> => Object.freeze(Object.fromEntries(
       [...new Set(personIds)].flatMap((personId) => {
         const person = existingById.get(personId);
@@ -110,6 +111,13 @@ export class DraftService {
           continue;
         }
         match = matches[0];
+      }
+      if (match) {
+        const priorReference = existingReferenceByPersonId.get(match.id);
+        if (priorReference && priorReference !== candidate.referenceId) {
+          throw new DraftValidationError("DUPLICATE_EXISTING_PERSON_REFERENCE", "Multiple candidate references resolve to the same existing person");
+        }
+        existingReferenceByPersonId.set(match.id, candidate.referenceId);
       }
       if (!match) {
         if (!stated.has("displayName") || !stated.has("gender")) throw new DraftValidationError("MISSING_IDENTITY", "A new person requires explicit display name and gender fields");
