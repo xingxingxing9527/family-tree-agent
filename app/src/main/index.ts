@@ -3,7 +3,8 @@ import { join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installNavigationPolicy } from "./security/navigation-policy.js";
 import { createSecureWebPreferences } from "./security/window-options.js";
-import { registerFactsIpc, registerImportIpc, registerQueryIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { registerFactsIpc, registerImportIpc, registerMergeIpc, registerQueryIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { WorkspaceMergeGateway } from "./ipc/merge-ipc.js";
 import { WorkspaceImportGateway } from "./ipc/import-ipc.js";
 import { WorkspaceFactsGateway } from "./application/facts/facts-gateway.js";
 import { WorkspaceQueryGateway } from "./ipc/query-ipc.js";
@@ -62,6 +63,7 @@ app.whenReady().then(() => {
   registerFactsIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceFactsGateway(workspaceManager));
   registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager));
   registerImportIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceImportGateway(workspaceManager));
+  registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager));
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

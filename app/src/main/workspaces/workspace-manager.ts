@@ -6,7 +6,7 @@ import { openDatabase } from "../database/open-database.js";
 import { WorkspaceIndex } from "./workspace-index.js";
 import { resolveWorkspacePaths } from "./workspace-paths.js";
 
-const schemaVersion = 1;
+const schemaVersion = 2;
 const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "PATH_DENIED" | "INTERNAL", message: string, details?: unknown): AppResult<T> => ({ ok: false, error: { code, message, ...(details === undefined ? {} : { details }) } });
 
 export class WorkspaceManager {

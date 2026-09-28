@@ -28,6 +28,14 @@ const desktopApi: DesktopApi = {
     commit: (input) => ipcRenderer.invoke("imports:commit", input),
     exportTemplate: () => ipcRenderer.invoke("imports:export-template", {})
   },
+  merges: {
+    findDuplicateCandidates: (input) => ipcRenderer.invoke("merges:candidates", input),
+    preview: (input) => ipcRenderer.invoke("merges:preview", input),
+    merge: (input) => ipcRenderer.invoke("merges:merge", input),
+    history: () => ipcRenderer.invoke("merges:history"),
+    canUnmerge: (input) => ipcRenderer.invoke("merges:can-unmerge", input),
+    unmerge: (input) => ipcRenderer.invoke("merges:unmerge", input)
+  },
   query: {
     searchPeople: (input) => ipcRenderer.invoke("query:search-people", input),
     getPerson: (input) => ipcRenderer.invoke("query:get-person", input),

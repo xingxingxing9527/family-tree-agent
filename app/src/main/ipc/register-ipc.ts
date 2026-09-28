@@ -6,6 +6,7 @@ import type { WorkspaceManager } from "../workspaces/workspace-manager.js";
 export { FACT_CHANNELS, registerFactsIpc } from "./facts-ipc.js";
 export { QUERY_CHANNELS, registerQueryIpc } from "./query-ipc.js";
 export { IMPORT_CHANNELS, registerImportIpc } from "./import-ipc.js";
+export { MERGE_CHANNELS, registerMergeIpc } from "./merge-ipc.js";
 
 export const WORKSPACE_CHANNELS = { list: "workspaces:list", create: "workspaces:create", open: "workspaces:open", close: "workspaces:close" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;

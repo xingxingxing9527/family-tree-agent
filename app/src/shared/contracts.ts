@@ -277,6 +277,31 @@ export interface ImportApi {
   exportTemplate(): Promise<AppResult<{ saved: boolean }>>;
 }
 
+export interface MergeDecisionDto {
+  primaryPersonId: string;
+  secondaryPersonId: string;
+  scalarChoices: Record<string, "primary" | "secondary">;
+  expectedVersions: Record<string, number>;
+}
+export interface MergePreviewDto {
+  primary: PersonReadModel; secondary: PersonReadModel;
+  scalarConflicts: Array<{ field: string; primary: unknown; secondary: unknown }>;
+  aliases: Array<Record<string, unknown>>; parents: Array<Record<string, unknown>>; children: Array<Record<string, unknown>>;
+  spouses: Array<Record<string, unknown>>; lineages: Array<Record<string, unknown>>; media: Array<Record<string, unknown>>; sources: Array<Record<string, unknown>>;
+  expectedVersions: Record<string, number>;
+}
+export interface DuplicateCandidateDto { person: PersonReadModel; score: number; reasons: Array<{ code: string; detail: string }>; }
+export interface MergeHistoryDto { id: string; primaryPersonId: string; secondaryPersonId: string; status: "active" | "reversed"; createdAt: string; }
+export interface CanUnmergeDto { allowed: boolean; blockingEntityIds: string[]; reasons: Array<{ entityId: string; entityType: string; expectedVersion: number; actualVersion: number | null }>; }
+export interface MergeApi {
+  findDuplicateCandidates(input: { personId: string }): Promise<AppResult<DuplicateCandidateDto[]>>;
+  preview(input: { primaryPersonId: string; secondaryPersonId: string }): Promise<AppResult<MergePreviewDto>>;
+  merge(input: MergeDecisionDto): Promise<AppResult<{ id: string; status: "active" }>>;
+  history(): Promise<AppResult<MergeHistoryDto[]>>;
+  canUnmerge(input: { mergeId: string }): Promise<AppResult<CanUnmergeDto>>;
+  unmerge(input: { mergeId: string }): Promise<AppResult<{ id: string; status: "reversed" }>>;
+}
+
 export interface DesktopApi {
   app: { getVersion(): Promise<string> };
   workspaces: {
@@ -297,5 +322,6 @@ export interface DesktopApi {
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
   };
   imports: ImportApi;
+  merges: MergeApi;
   query: QueryApi;
 }

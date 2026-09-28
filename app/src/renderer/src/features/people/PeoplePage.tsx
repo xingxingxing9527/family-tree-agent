@@ -3,6 +3,8 @@ import type { DesktopApi, PersonDetailReadModel, PersonDraft, PersonListItem, Wo
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
 import { PersonEditor } from "./PersonEditor";
+import { MergeHistory } from "./MergeHistory";
+import { MergePanel } from "./MergePanel";
 import "./people.css";
 
 interface PeoplePageProps {
@@ -96,10 +98,11 @@ export function PeoplePage({ workspace, api }: PeoplePageProps): JSX.Element {
             />
           )}
           {!creating && !editing && selected && (
-            <PersonDetail detail={selected} relationsApi={api.relations} onEdit={() => setEditing(true)} onChanged={relationsChanged} />
+            <><PersonDetail detail={selected} relationsApi={api.relations} onEdit={() => setEditing(true)} onChanged={relationsChanged} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
           {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} onSaved={relationsChanged} />}
+          <MergeHistory api={api.merges} />
         </div>
       </div>
     </main>
