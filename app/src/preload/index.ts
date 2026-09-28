@@ -55,6 +55,18 @@ const desktopApi: DesktopApi = {
     calculateRelationship: (input) => ipcRenderer.invoke("query:calculate-relationship", input),
     summarizeLineage: (input) => ipcRenderer.invoke("query:summarize-lineage", input),
     searchWiki: (input) => ipcRenderer.invoke("query:search-wiki", input)
+  },
+  chat: {
+    authorize: (input) => ipcRenderer.invoke("chat:authorize-online", input),
+    stageMutation: (input) => ipcRenderer.invoke("chat:stage-mutation", input),
+    ask: (input) => ipcRenderer.invoke("chat:ask", input),
+    confirm: (input) => ipcRenderer.invoke("chat:confirm-draft", input),
+    revise: (input) => ipcRenderer.invoke("chat:revise-draft", input)
+  },
+  modelSettings: {
+    status: () => ipcRenderer.invoke("model-settings:status"),
+    saveKey: (input) => ipcRenderer.invoke("model-settings:save-key", input),
+    clearKey: () => ipcRenderer.invoke("model-settings:clear-key")
   }
 };
 

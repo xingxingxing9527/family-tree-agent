@@ -1,4 +1,5 @@
 import type { PartialDate } from "./domain.js";
+import type { ConversationAnswer, ConversationConfirmationReceipt, ConversationDraftPreview, ConversationMutationDraft } from "./chat.js";
 
 export type AppErrorCode =
   | "VALIDATION"
@@ -361,4 +362,16 @@ export interface DesktopApi {
   media: MediaApi;
   wiki: WikiApi;
   query: QueryApi;
+  chat: {
+    authorize(input: { sessionId: string; operation: "extract"; payload: { text: string; candidatePeople: PersonCandidate[] } } | { sessionId: string; operation: "ask"; payload: { question: string; viewpointId: string; selectedPersonId: string | null } }): Promise<AppResult<{ authorizationToken: string; expiresAt: string }>>;
+    stageMutation(input: { sessionId: string; authorizationToken: string; payload: { text: string; candidatePeople: PersonCandidate[] } }): Promise<AppResult<ConversationDraftPreview>>;
+    ask(input: { sessionId: string; authorizationToken: string; payload: { question: string; viewpointId: string; selectedPersonId: string | null } }): Promise<AppResult<ConversationAnswer>>;
+    confirm(input: { draftId: string; selectedChangeIds: string[]; expectedVersions: Record<string, number> }): Promise<AppResult<ConversationConfirmationReceipt>>;
+    revise(input: { draftId: string; replacement: ConversationMutationDraft }): Promise<AppResult<ConversationDraftPreview>>;
+  };
+  modelSettings: {
+    status(): Promise<AppResult<{ configured: boolean }>>;
+    saveKey(input: { key: string }): Promise<AppResult<null>>;
+    clearKey(): Promise<AppResult<null>>;
+  };
 }

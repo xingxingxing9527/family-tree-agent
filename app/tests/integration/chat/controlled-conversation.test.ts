@@ -1,0 +1,111 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ControlledChatGateway, DisclosureCapabilityService, WorkspaceChatGateway } from "../../../src/main/ipc/chat-ipc";
+import { ConversationService } from "../../../src/main/application/chat/conversation-service";
+import { DraftService } from "../../../src/main/application/chat/draft-service";
+import { QueryToolRegistry } from "../../../src/main/application/query/query-tool-registry";
+import { applyMigrations } from "../../../src/main/database/migrations";
+import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import type { ConversationMutationDraft } from "../../../src/shared/chat";
+
+const workspaceId = "workspace-controlled-chat";
+const emptyDraft: ConversationMutationDraft = {
+  candidatePeople: [], parentChildFacts: [], marriages: [], sources: [], fieldConfidence: [], unresolvedReferences: []
+};
+
+describe("controlled conversational model boundary", () => {
+  let database: WorkspaceDatabase;
+  beforeEach(() => { database = openDatabase(":memory:"); applyMigrations(database); });
+  afterEach(() => database.close());
+
+  it("bounds outstanding disclosure capabilities while preserving single-use semantics", () => {
+    const capabilities = new DisclosureCapabilityService(() => 0, 60_000, 2);
+    const binding = { workspaceId, sessionId: "session", operation: "ask" as const, payload: { question: "q" } };
+    const first = capabilities.issue(binding); capabilities.issue({ ...binding, payload: { question: "q2" } });
+    const latest = capabilities.issue({ ...binding, payload: { question: "q3" } });
+    expect(capabilities.consume(first.authorizationToken, binding)).toBe(false);
+    expect(capabilities.consume(latest.authorizationToken, { ...binding, payload: { question: "q3" } })).toBe(true);
+    expect(capabilities.consume(latest.authorizationToken, { ...binding, payload: { question: "q3" } })).toBe(false);
+  });
+
+  it("requires a short-lived single-use main-process capability bound to the exact payload", async () => {
+    const model = { extractDraft: vi.fn().mockResolvedValue(emptyDraft), continueWithTools: vi.fn() };
+    const drafts = new DraftService(database, workspaceId, model);
+    const gateway = new ControlledChatGateway(
+      () => ({ workspaceId }), new DisclosureCapabilityService(), drafts,
+      new ConversationService(model, new QueryToolRegistry(database, workspaceId))
+    );
+    const payload = { text: "张国强有两个孩子", candidatePeople: [] };
+
+    await expect(gateway.stageMutation({ sessionId: "session-1", authorizationToken: "missing", payload }))
+      .resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(model.extractDraft).not.toHaveBeenCalled();
+
+    const authorized = await gateway.authorize({ sessionId: "session-1", operation: "extract", payload });
+    expect(authorized.ok).toBe(true); if (!authorized.ok) return;
+    await expect(gateway.stageMutation({ sessionId: "session-1", authorizationToken: authorized.value.authorizationToken, payload: { ...payload, text: "tampered" } }))
+      .resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(model.extractDraft).not.toHaveBeenCalled();
+
+    const second = await gateway.authorize({ sessionId: "session-1", operation: "extract", payload });
+    if (!second.ok) return;
+    await expect(gateway.stageMutation({ sessionId: "session-1", authorizationToken: second.value.authorizationToken, payload }))
+      .resolves.toMatchObject({ ok: true, value: { workspaceId } });
+    expect(model.extractDraft).toHaveBeenCalledTimes(1);
+    await expect(gateway.stageMutation({ sessionId: "session-1", authorizationToken: second.value.authorizationToken, payload }))
+      .resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(model.extractDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not read the encrypted key or construct a provider client before live IPC authorization", async () => {
+    const vault = { readKey: vi.fn().mockResolvedValue("sk-runtime") };
+    const model = { extractDraft: vi.fn().mockResolvedValue(emptyDraft), continueWithTools: vi.fn() };
+    const modelFactory = vi.fn(() => model);
+    const gateway = new WorkspaceChatGateway(
+      { getOpenWorkspaceContext: () => ({ workspaceId, databasePath: ":memory:" }) },
+      vault, modelFactory, new DisclosureCapabilityService()
+    );
+    const payload = { text: "张国强有两个孩子", candidatePeople: [] };
+    await expect(gateway.stageMutation({ sessionId: "session", authorizationToken: "missing", payload }))
+      .resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(vault.readKey).not.toHaveBeenCalled(); expect(modelFactory).not.toHaveBeenCalled();
+
+    const authorized = await gateway.authorize({ sessionId: "session", operation: "extract", payload });
+    if (!authorized.ok) return;
+    await expect(gateway.stageMutation({ sessionId: "session", authorizationToken: authorized.value.authorizationToken, payload })).resolves.toMatchObject({ ok: true });
+    expect(vault.readKey).toHaveBeenCalledTimes(1); expect(modelFactory).toHaveBeenCalledWith("sk-runtime");
+    gateway.dispose();
+  });
+
+  it("maps provider failure to MODEL_UNAVAILABLE while the six deterministic local tools remain usable", async () => {
+    const model = { extractDraft: vi.fn(), continueWithTools: vi.fn().mockRejectedValue(new Error("provider leaked details")) };
+    const registry = new QueryToolRegistry(database, workspaceId);
+    const gateway = new ControlledChatGateway(
+      () => ({ workspaceId }), new DisclosureCapabilityService(), new DraftService(database, workspaceId, model),
+      new ConversationService(model, registry)
+    );
+    const payload = { question: "有几个人？", viewpointId: "viewpoint", selectedPersonId: null };
+    const authorized = await gateway.authorize({ sessionId: "session", operation: "ask", payload });
+    if (!authorized.ok) return;
+    await expect(gateway.ask({ sessionId: "session", authorizationToken: authorized.value.authorizationToken, payload }))
+      .resolves.toEqual({ ok: false, error: { code: "MODEL_UNAVAILABLE", message: "The online model is unavailable" } });
+    expect(Object.keys(registry.tools)).toEqual([
+      "search_people", "get_person", "list_relatives", "calculate_relationship", "summarize_lineage", "search_wiki"
+    ]);
+    expect(registry.tools.search_people({ query: "nobody", limit: 20 })).toEqual([]);
+  });
+
+  it("runs a bounded allowlisted tool loop and returns deterministic evidence", async () => {
+    const model = {
+      extractDraft: vi.fn(),
+      continueWithTools: vi.fn()
+        .mockResolvedValueOnce({ answer: null, toolCalls: [{ callId: "call-1", name: "search_people", arguments: { query: "张", limit: 20 } }] })
+        .mockResolvedValueOnce({ answer: "没有找到匹配人物。", toolCalls: [] })
+    };
+    const service = new ConversationService(model, new QueryToolRegistry(database, workspaceId), { maxTurns: 3 });
+    await expect(service.ask({ question: "查找张姓", viewpointId: "v", selectedPersonId: null })).resolves.toEqual({
+      answer: "没有找到匹配人物。", matchedPersonIds: [], sourceIds: [], relationship: null,
+      toolTrace: [{ name: "search_people", arguments: { query: "张", limit: 20 } }]
+    });
+    expect(model.continueWithTools.mock.calls[1]![0].toolResults[0]).toMatchObject({ callId: "call-1", name: "search_people", output: [] });
+  });
+});

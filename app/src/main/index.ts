@@ -1,9 +1,9 @@
-import { app, BrowserWindow, ipcMain, net, protocol, session } from "electron";
+import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, session } from "electron";
 import { join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installNavigationPolicy } from "./security/navigation-policy.js";
 import { createSecureWebPreferences } from "./security/window-options.js";
-import { registerFactsIpc, registerImportIpc, registerMediaIpc, registerMergeIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { registerChatIpc, registerFactsIpc, registerImportIpc, registerMediaIpc, registerMergeIpc, registerModelSettingsIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
 import { WorkspaceMergeGateway } from "./ipc/merge-ipc.js";
 import { WorkspaceImportGateway } from "./ipc/import-ipc.js";
 import { WorkspaceFactsGateway } from "./application/facts/facts-gateway.js";
@@ -12,6 +12,9 @@ import { WorkspaceManager } from "./workspaces/workspace-manager.js";
 import { WorkspaceMediaGateway } from "./ipc/media-ipc.js";
 import { WorkspaceWikiGateway } from "./ipc/wiki-ipc.js";
 import { resolveMediaAssetRequest } from "./media/media-protocol.js";
+import { CredentialVault } from "./security/credential-vault.js";
+import { WorkspaceChatGateway } from "./ipc/chat-ipc.js";
+import { OpenAIResponsesAdapter } from "./llm/openai-responses-adapter.js";
 
 const rendererRoot = resolve(__dirname, "../renderer");
 
@@ -74,8 +77,15 @@ app.whenReady().then(() => {
   registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager));
   const mediaGateway = new WorkspaceMediaGateway(workspaceManager);
   registerMediaIpc(ipcMain, () => mainWindow?.webContents.id, mediaGateway);
-  app.once("before-quit", () => mediaGateway.dispose());
+  const credentialVault = new CredentialVault(join(app.getPath("userData"), "secrets"), safeStorage);
+  const chatGateway = new WorkspaceChatGateway(workspaceManager, credentialVault, (apiKey) => new OpenAIResponsesAdapter({
+    apiKey,
+    model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini"
+  }));
+  registerChatIpc(ipcMain, () => mainWindow?.webContents.id, chatGateway);
+  app.once("before-quit", () => { mediaGateway.dispose(); chatGateway.dispose(); });
   registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager));
+  registerModelSettingsIpc(ipcMain, () => mainWindow?.webContents.id, credentialVault);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
