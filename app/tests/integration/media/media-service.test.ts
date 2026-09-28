@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
-import { ManagedMediaService } from "../../../src/main/media/media-service";
+import { ManagedMediaService, openSelectedMediaFile } from "../../../src/main/media/media-service";
 import { resolveMediaAssetRequest } from "../../../src/main/media/media-protocol";
 
 const roots: string[] = [];
@@ -22,6 +22,17 @@ async function setup(): Promise<{ root: string; mediaRoot: string; database: Ret
 }
 
 describe("managed media", () => {
+  it("imports from the selected open handle after the selected pathname is replaced", async () => {
+    const { root, database, service } = await setup();
+    const selected = join(root, "selected.jpg");
+    await writeFile(selected, jpeg);
+    const capability = await openSelectedMediaFile(selected, "workspace-1");
+    await writeFile(selected, Buffer.from("MZ replacement"));
+    const imported = await service.importMedia({ selection: capability });
+    expect(imported).toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    await expect(service.importMedia({ selection: capability })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    database.close();
+  });
   it("deduplicates image bytes while retaining separate allowed person links", async () => {
     const { root, mediaRoot, database, service } = await setup();
     const image = join(root, "portrait.jpg");
@@ -30,8 +41,8 @@ describe("managed media", () => {
     database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, 'workspace-1', ?, 'unknown', ?, ?)").run("p1", "甲", now, now);
     database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, 'workspace-1', ?, 'unknown', ?, ?)").run("p2", "乙", now, now);
 
-    const first = await service.importMedia({ sourcePath: image, selectedSourcePath: image });
-    const second = await service.importMedia({ sourcePath: image, selectedSourcePath: image });
+    const first = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") });
+    const second = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") });
     expect(first).toMatchObject({ ok: true, value: { mimeType: "image/jpeg", fileName: "portrait.jpg" } });
     expect(second).toMatchObject({ ok: true, value: { id: first.ok ? first.value.id : "" } });
     if (!first.ok) throw new Error("media import fixture failed");
@@ -49,17 +60,24 @@ describe("managed media", () => {
     database.close();
   });
 
+  it("serializes concurrent imports of the same selected bytes", async () => {
+    const { root, database, service } = await setup();
+    const image = join(root, "concurrent.jpg"); await writeFile(image, jpeg);
+    const [left, right] = await Promise.all([
+      service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }),
+      service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") })
+    ]);
+    expect(left.ok && right.ok).toBe(true);
+    expect(database.prepare("SELECT COUNT(*) FROM media_asset WHERE deleted_at IS NULL").pluck().get()).toBe(1);
+    database.close();
+  });
+
   it("rejects an unselected path and executable bytes renamed as an image", async () => {
     const { root, database, service } = await setup();
-    const selected = join(root, "selected.jpg");
-    const outside = join(root, "outside.jpg");
     const renamedExecutable = join(root, "danger.jpg");
-    await writeFile(selected, jpeg);
-    await writeFile(outside, jpeg);
     await writeFile(renamedExecutable, Buffer.from("MZ executable payload"));
 
-    await expect(service.importMedia({ sourcePath: outside, selectedSourcePath: selected })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
-    await expect(service.importMedia({ sourcePath: renamedExecutable, selectedSourcePath: renamedExecutable })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    await expect(service.importMedia({ selection: await openSelectedMediaFile(renamedExecutable, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
     database.close();
   });
 
@@ -67,7 +85,7 @@ describe("managed media", () => {
     const { root, mediaRoot, database, service } = await setup();
     const image = join(root, "portrait.jpg");
     await writeFile(image, jpeg);
-    const imported = await service.importMedia({ sourcePath: image, selectedSourcePath: image });
+    const imported = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") });
     if (!imported.ok) throw new Error("media import fixture failed");
 
     const response = await resolveMediaAssetRequest(`app-media://asset/${imported.value.id}`, { workspaceId: "workspace-1", databasePath: join(root, "genealogy.sqlite"), mediaPath: mediaRoot });

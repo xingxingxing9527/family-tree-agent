@@ -1,28 +1,28 @@
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { open, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { OpenWorkspaceContext } from "../application/facts/facts-gateway.js";
 import { openQueryDatabase } from "../database/open-query-database.js";
-import { isAllowedMediaMime } from "./media-service.js";
+import { isAllowedMediaMime, type ManagedMediaMime } from "./media-service.js";
 
 const assetId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const suffix: Record<ManagedMediaMime, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/mp4": "m4a", "audio/ogg": "ogg" };
 const missing = (): Response => new Response("Not found", { status: 404 });
-const inside = (root: string, candidate: string): boolean => { const path = relative(root, candidate); return !path.startsWith("..") && !isAbsolute(path); };
+const under = (root: string, candidate: string): boolean => { const value = relative(root, candidate); return !value.startsWith("..") && !isAbsolute(value); };
 
 export async function resolveMediaAssetRequest(url: string, context: OpenWorkspaceContext & { mediaPath?: string }): Promise<Response> {
-  const request = new URL(url);
-  const id = request.hostname === "asset" ? request.pathname.slice(1) : "";
+  const request = new URL(url); const id = request.hostname === "asset" ? request.pathname.slice(1) : "";
   if (!assetId.test(id) || request.pathname.includes("/", 1)) return missing();
-  const mediaRoot = resolve(context.mediaPath ?? join(resolve(context.databasePath, ".."), "media"));
   const database = openQueryDatabase(context.databasePath);
   try {
-    const asset = database.prepare("SELECT relative_path, mime_type FROM media_asset WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL").get(id, context.workspaceId) as { relative_path: string; mime_type: string } | undefined;
-    if (!asset || !isAllowedMediaMime(asset.mime_type)) return missing();
-    const stored = asset.relative_path.replaceAll("/", "\\");
-    if (isAbsolute(stored) || !stored.startsWith("media\\")) return missing();
-    const filePath = resolve(join(resolve(mediaRoot, ".."), stored));
-    if (!inside(mediaRoot, filePath)) return missing();
-    const bytes = await readFile(filePath);
-    return new Response(bytes, { status: 200, headers: { "content-type": asset.mime_type, "cache-control": "no-store" } });
-  } catch { return missing(); }
-  finally { database.close(); }
+    const asset = database.prepare("SELECT sha256, mime_type, byte_size, relative_path FROM media_asset WHERE id=? AND workspace_id=? AND deleted_at IS NULL").get(id, context.workspaceId) as { sha256: string; mime_type: string; byte_size: number; relative_path: string } | undefined;
+    if (!asset || !isAllowedMediaMime(asset.mime_type) || !/^[0-9a-f]{64}$/i.test(asset.sha256)) return missing();
+    const mediaRoot = await realpath(resolve(context.mediaPath ?? join(resolve(context.databasePath, ".."), "media")));
+    const expectedRelative = join("media", asset.sha256.slice(0, 2), `${asset.sha256}.${suffix[asset.mime_type]}`);
+    if (asset.relative_path.replaceAll("/", "\\") !== expectedRelative) return missing();
+    const target = join(mediaRoot, asset.sha256.slice(0, 2), `${asset.sha256}.${suffix[asset.mime_type]}`); const actual = await realpath(target); if (!under(mediaRoot, actual)) return missing();
+    const handle = await open(actual, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    try { const data = await handle.readFile(); if (data.length !== asset.byte_size || createHash("sha256").update(data).digest("hex") !== asset.sha256) return missing(); return new Response(data, { status: 200, headers: { "content-type": asset.mime_type, "cache-control": "no-store" } }); } finally { await handle.close(); }
+  } catch { return missing(); } finally { database.close(); }
 }

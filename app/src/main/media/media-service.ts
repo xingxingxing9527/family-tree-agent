@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, open, realpath, rename, rm, stat } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { constants } from "node:fs";
+import { mkdir, open, realpath, rename, rm } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, relative } from "node:path";
 import type { AppErrorCode, AppResult } from "../../shared/contracts.js";
 import type { WorkspaceDatabase } from "../database/open-database.js";
 import { createUnitOfWork } from "../database/unit-of-work.js";
@@ -11,107 +10,47 @@ import { createUnitOfWork } from "../database/unit-of-work.js";
 export type ManagedMediaMime = "image/jpeg" | "image/png" | "image/webp" | "audio/mpeg" | "audio/wav" | "audio/mp4" | "audio/ogg";
 export interface MediaAssetDto { id: string; fileName: string; mimeType: ManagedMediaMime; byteSize: number; sha256: string; url: string; }
 export interface MediaPersonDto extends MediaAssetDto { caption: string | null; }
-type Result<T> = AppResult<T>;
-const failure = <T>(code: AppErrorCode, message: string): Result<T> => ({ ok: false, error: { code, message } });
+export interface SelectedMediaFile { handle: FileHandle; workspaceId: string; fileName: string; extension: string; size: number; mtimeMs: number; dev?: number; ino?: number; expiresAt: number; consumed: boolean; }
+const fail = <T>(code: AppErrorCode, message: string): AppResult<T> => ({ ok: false, error: { code, message } });
+const allowed = new Map<string, ManagedMediaMime>([[".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".png", "image/png"], [".webp", "image/webp"], [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"], [".mp4", "audio/mp4"], [".ogg", "audio/ogg"]]);
+const extension = new Map<ManagedMediaMime, string>([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["audio/mpeg", "mp3"], ["audio/wav", "wav"], ["audio/mp4", "m4a"], ["audio/ogg", "ogg"]]);
+const allowedMimes = new Set<ManagedMediaMime>(extension.keys()); const locks = new Map<string, Promise<void>>();
 
-const allowed = new Map<string, ManagedMediaMime>([
-  [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".png", "image/png"], [".webp", "image/webp"],
-  [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"], [".mp4", "audio/mp4"], [".ogg", "audio/ogg"]
-]);
-const canonicalExtension = new Map<ManagedMediaMime, string>([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["audio/mpeg", "mp3"], ["audio/wav", "wav"], ["audio/mp4", "m4a"], ["audio/ogg", "ogg"]]);
-const allowedMimeValues = new Set<ManagedMediaMime>(canonicalExtension.keys());
-
-function sniffMime(bytes: Buffer): ManagedMediaMime | null {
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
-  if (bytes.subarray(0, 3).toString("ascii") === "ID3" || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return "audio/mpeg";
-  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WAVE") return "audio/wav";
-  if (bytes.subarray(4, 8).toString("ascii") === "ftyp") return "audio/mp4";
-  if (bytes.subarray(0, 4).toString("ascii") === "OggS") return "audio/ogg";
-  return null;
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const rel = relative(root, candidate);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-}
+export async function openSelectedMediaFile(path: string, workspaceId: string, ttlMs = 300_000): Promise<SelectedMediaFile> { const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)); const info = await handle.stat(); if (!info.isFile()) { await handle.close(); throw new Error("Not a file"); } return { handle, workspaceId, fileName: basename(path), extension: extname(path).toLowerCase(), size: info.size, mtimeMs: info.mtimeMs, dev: info.dev, ino: info.ino, expiresAt: Date.now() + ttlMs, consumed: false }; }
+export async function closeSelectedMediaFile(value: SelectedMediaFile): Promise<void> { value.consumed = true; await value.handle.close().catch(() => undefined); }
+const inside = (root: string, path: string): boolean => { const part = relative(root, path); return part === "" || (!part.startsWith("..") && !isAbsolute(part)); };
+const unchanged = async (value: SelectedMediaFile): Promise<boolean> => { const info = await value.handle.stat(); return info.isFile() && info.size === value.size && info.mtimeMs === value.mtimeMs && (value.dev === undefined || info.dev === value.dev) && (value.ino === undefined || info.ino === value.ino); };
+const sniff = (b: Buffer): ManagedMediaMime | null => {
+  if (b.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg"; if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png"; if (b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP") return "image/webp";
+  if (b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WAVE" && b.includes(Buffer.from("fmt ")) && b.includes(Buffer.from("data"))) return "audio/wav";
+  if ((b.subarray(0, 3).toString() === "ID3" && b.length > 10) || (b[0] === 0xff && (b[1] & 0xe6) === 0xe2)) return "audio/mpeg";
+  if (b.subarray(0, 4).toString() === "OggS" && (b.includes(Buffer.from("OpusHead")) || b.includes(Buffer.from("vorbis")))) return "audio/ogg";
+  if (b.subarray(4, 8).toString() === "ftyp" && b.includes(Buffer.from("hdlr")) && b.includes(Buffer.from("soun")) && !b.includes(Buffer.from("vide"))) return "audio/mp4"; return null;
+};
+async function digest(handle: FileHandle): Promise<{ sha256: string; size: number; header: Buffer }> { const hash = createHash("sha256"); const header = Buffer.alloc(65536); let offset = 0; for (;;) { const buffer = Buffer.alloc(65536); const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset); if (!bytesRead) break; if (offset < header.length) buffer.copy(header, offset, 0, Math.min(bytesRead, header.length - offset)); hash.update(buffer.subarray(0, bytesRead)); offset += bytesRead; } return { sha256: hash.digest("hex"), size: offset, header: header.subarray(0, Math.min(header.length, offset)) }; }
+async function exclusive<T>(key: string, action: () => Promise<T>): Promise<T> { const prior = locks.get(key) ?? Promise.resolve(); let release!: () => void; const current = new Promise<void>((done) => { release = done; }); const chained = prior.then(() => current); locks.set(key, chained); await prior; try { return await action(); } finally { release(); if (locks.get(key) === chained) locks.delete(key); } }
 
 export class ManagedMediaService {
-  private readonly workspaceRoot: string;
-  constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string, private readonly mediaRoot: string) {
-    this.workspaceRoot = resolve(mediaRoot, "..");
+  constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string, private readonly mediaRoot: string) {}
+  async importMedia(input: { selection: SelectedMediaFile }): Promise<AppResult<MediaAssetDto>> {
+    const selected = input.selection;
+    if (selected.consumed || selected.workspaceId !== this.workspaceId || selected.expiresAt < Date.now()) { await closeSelectedMediaFile(selected); return fail("PATH_DENIED", "Media selection expired"); }
+    selected.consumed = true;
+    try { if (!allowed.has(selected.extension) || !await unchanged(selected)) return fail("PATH_DENIED", "Selected media file changed"); const scanned = await digest(selected.handle); const mime = sniff(scanned.header); if (mime !== allowed.get(selected.extension)) return fail("VALIDATION", "Selected media content does not match its supported type"); if (!await unchanged(selected)) return fail("PATH_DENIED", "Selected media file changed"); return await exclusive(`${this.workspaceId}:${scanned.sha256}`, () => this.publish(selected, scanned, mime!)); }
+    catch { return fail("INTERNAL", "Unable to import media"); } finally { await selected.handle.close().catch(() => undefined); }
   }
-
-  async importMedia(input: { sourcePath: string; selectedSourcePath: string }): Promise<Result<MediaAssetDto>> {
-    let source: string; let selected: string;
-    try { [source, selected] = await Promise.all([realpath(input.sourcePath), realpath(input.selectedSourcePath)]); }
-    catch { return failure("PATH_DENIED", "Selected media file is unavailable"); }
-    if (source !== selected) return failure("PATH_DENIED", "Media source does not match the selected file");
-    const expectedMime = allowed.get(extname(source).toLocaleLowerCase());
-    if (!expectedMime) return failure("VALIDATION", "Selected media type is not supported");
-    let bytes: Buffer; let metadata: Awaited<ReturnType<typeof stat>>;
-    try {
-      metadata = await stat(source); const handle = await open(source, "r");
-      try { const buffer = Buffer.alloc(32); const read = await handle.read(buffer, 0, buffer.length, 0); bytes = buffer.subarray(0, read.bytesRead); } finally { await handle.close(); }
-    } catch { return failure("VALIDATION", "Selected media file is unavailable"); }
-    const detectedMime = sniffMime(bytes);
-    if (!metadata.isFile() || detectedMime !== expectedMime) return failure("VALIDATION", "Selected media content does not match its supported type");
-
-    const hash = createHash("sha256"); let byteSize = 0;
-    const destinationDirectory = join(resolve(this.mediaRoot), "pending");
-    const temporary = join(destinationDirectory, `.${randomUUID()}.tmp`);
-    try {
-      await mkdir(destinationDirectory, { recursive: true });
-      await pipeline(createReadStream(source), new Transform({ transform(chunk: Buffer, _encoding, callback) { hash.update(chunk); byteSize += chunk.length; callback(null, chunk); } }), createWriteStream(temporary, { flags: "wx" }));
-      const sha256 = hash.digest("hex"); const extension = canonicalExtension.get(detectedMime)!;
-      const targetDirectory = join(resolve(this.mediaRoot), sha256.slice(0, 2));
-      const destination = join(targetDirectory, `${sha256}.${extension}`);
-      if (!isWithin(resolve(this.mediaRoot), destination)) return failure("PATH_DENIED", "Managed media path was denied");
-      await mkdir(targetDirectory, { recursive: true });
-      const temporaryFile = await open(temporary, "r+");
-      try { await temporaryFile.sync(); } finally { await temporaryFile.close(); }
-      try { await rename(temporary, destination); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-      const relativePath = relative(this.workspaceRoot, destination);
-      if (!relativePath.replaceAll("\\", "/").startsWith("media/")) return failure("PATH_DENIED", "Managed media path was denied");
-      const existing = this.database.prepare("SELECT id, original_name, mime_type, byte_size, sha256 FROM media_asset WHERE workspace_id = ? AND sha256 = ? AND deleted_at IS NULL").get(this.workspaceId, sha256) as { id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string } | undefined;
-      if (existing) return { ok: true, value: this.asset(existing) };
-      const record = createUnitOfWork(this.database, this.workspaceId).run("media-import", (ctx) => {
-        const id = randomUUID(); const now = new Date().toISOString(); const after = { id, sha256, originalName: basename(source), mimeType: detectedMime, byteSize, relativePath };
-        this.database.prepare("INSERT INTO media_asset (id, workspace_id, sha256, original_name, mime_type, byte_size, relative_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          .run(id, this.workspaceId, sha256, basename(source), detectedMime, byteSize, relativePath, now, now);
-        ctx.audit.append({ entityType: "media_asset", entityId: id, action: "create", before: null, after });
-        return after;
-      });
-      return { ok: true, value: { id: record.id, fileName: record.originalName, mimeType: record.mimeType, byteSize: record.byteSize, sha256: record.sha256, url: `app-media://asset/${record.id}` } };
-    } catch { return failure("INTERNAL", "Unable to import media"); }
-    finally { await rm(temporary, { force: true }).catch(() => undefined); }
+  private async publish(selected: SelectedMediaFile, scanned: { sha256: string; size: number }, mime: ManagedMediaMime): Promise<AppResult<MediaAssetDto>> {
+    await mkdir(this.mediaRoot, { recursive: true }); const root = await realpath(this.mediaRoot); const dir = join(root, scanned.sha256.slice(0, 2)); await mkdir(dir, { recursive: true }); const targetDir = await realpath(dir); if (!inside(root, targetDir)) return fail("PATH_DENIED", "Managed media path was denied");
+    const suffix = extension.get(mime)!; const target = join(targetDir, `${scanned.sha256}.${suffix}`); const temporary = join(targetDir, `.${randomUUID()}.tmp`); let owned = false;
+    try { const output = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600); try { const copied = await digest(selected.handle); if (copied.sha256 !== scanned.sha256 || copied.size !== scanned.size || !await unchanged(selected)) return fail("PATH_DENIED", "Selected media file changed"); for (let offset = 0;;) { const buffer = Buffer.alloc(65536); const { bytesRead } = await selected.handle.read(buffer, 0, buffer.length, offset); if (!bytesRead) break; await output.write(buffer.subarray(0, bytesRead)); offset += bytesRead; } await output.sync(); } finally { await output.close(); }
+      try { await rename(temporary, target); owned = true; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+      const relativePath = join("media", scanned.sha256.slice(0, 2), `${scanned.sha256}.${suffix}`); const found = this.database.prepare("SELECT id, original_name, mime_type, byte_size, sha256, relative_path FROM media_asset WHERE workspace_id=? AND sha256=? AND deleted_at IS NULL").get(this.workspaceId, scanned.sha256) as { id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string; relative_path: string } | undefined;
+      if (found) { if (found.mime_type !== mime || found.byte_size !== scanned.size || found.relative_path.replaceAll("/", "\\") !== relativePath) return fail("CONFLICT", "Registered media does not match managed object"); const verified = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)); try { const bytes = await verified.readFile(); if (bytes.length !== scanned.size || createHash("sha256").update(bytes).digest("hex") !== scanned.sha256) return fail("CONFLICT", "Managed media object is invalid"); } finally { await verified.close(); } return { ok: true, value: this.asset(found) }; }
+      const saved = createUnitOfWork(this.database, this.workspaceId).run("media-import", (ctx) => { const id = randomUUID(); const now = new Date().toISOString(); this.database.prepare("INSERT INTO media_asset (id,workspace_id,sha256,original_name,mime_type,byte_size,relative_path,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)").run(id, this.workspaceId, scanned.sha256, selected.fileName, mime, scanned.size, relativePath, now, now); ctx.audit.append({ entityType: "media_asset", entityId: id, action: "create", before: null, after: { id, sha256: scanned.sha256, mimeType: mime, byteSize: scanned.size, relativePath } }); return { id, original_name: selected.fileName, mime_type: mime, byte_size: scanned.size, sha256: scanned.sha256 }; }); return { ok: true, value: this.asset(saved) };
+    } catch { if (owned && !this.database.prepare("SELECT 1 FROM media_asset WHERE workspace_id=? AND sha256=? AND deleted_at IS NULL").get(this.workspaceId, scanned.sha256)) await rm(target, { force: true }).catch(() => undefined); return fail("INTERNAL", "Unable to import media"); } finally { await rm(temporary, { force: true }).catch(() => undefined); }
   }
-
-  attachMedia(input: { mediaAssetId: string; personId: string; caption?: string | null }): Result<null> {
-    try {
-      createUnitOfWork(this.database, this.workspaceId).run("media-attach", (ctx) => {
-        const asset = this.database.prepare("SELECT id FROM media_asset WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL").get(input.mediaAssetId, this.workspaceId);
-        if (!asset) throw new Error("Media asset not found");
-        const id = randomUUID(); const now = new Date().toISOString();
-        this.database.prepare("INSERT INTO media_person (id, workspace_id, media_asset_id, person_id, caption, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run(id, this.workspaceId, input.mediaAssetId, input.personId, input.caption?.trim() || null, now, now);
-        ctx.audit.append({ entityType: "media_person", entityId: id, action: "create", before: null, after: { mediaAssetId: input.mediaAssetId, personId: input.personId } });
-      });
-      return { ok: true, value: null };
-    } catch (error) { return failure(/not found|FOREIGN KEY/i.test(error instanceof Error ? error.message : "") ? "NOT_FOUND" : "CONFLICT", "Unable to attach media"); }
-  }
-
-  listForPerson(personId: string): MediaPersonDto[] {
-    const rows = this.database.prepare(`SELECT asset.id, asset.original_name, asset.mime_type, asset.byte_size, asset.sha256, link.caption
-      FROM media_person AS link JOIN media_asset AS asset ON asset.id = link.media_asset_id
-      WHERE link.workspace_id = ? AND link.person_id = ? AND link.deleted_at IS NULL AND asset.deleted_at IS NULL ORDER BY link.sort_order, link.id`).all(this.workspaceId, personId) as Array<{ id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string; caption: string | null }>;
-    return rows.map((row) => ({ ...this.asset(row), caption: row.caption }));
-  }
-
-  private asset(row: { id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string }): MediaAssetDto {
-    return { id: row.id, fileName: row.original_name, mimeType: row.mime_type, byteSize: row.byte_size, sha256: row.sha256, url: `app-media://asset/${row.id}` };
-  }
+  attachMedia(input: { mediaAssetId: string; personId: string; caption?: string | null }): AppResult<null> { try { createUnitOfWork(this.database, this.workspaceId).run("media-attach", (ctx) => { if (!this.database.prepare("SELECT id FROM media_asset WHERE id=? AND workspace_id=? AND deleted_at IS NULL").get(input.mediaAssetId, this.workspaceId)) throw new Error(); const id = randomUUID(); const now = new Date().toISOString(); this.database.prepare("INSERT INTO media_person (id,workspace_id,media_asset_id,person_id,caption,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").run(id, this.workspaceId, input.mediaAssetId, input.personId, input.caption?.trim() || null, now, now); ctx.audit.append({ entityType: "media_person", entityId: id, action: "create", before: null, after: { mediaAssetId: input.mediaAssetId, personId: input.personId } }); }); return { ok: true, value: null }; } catch { return fail("CONFLICT", "Unable to attach media"); } }
+  listForPerson(personId: string): MediaPersonDto[] { return (this.database.prepare("SELECT asset.id,asset.original_name,asset.mime_type,asset.byte_size,asset.sha256,link.caption FROM media_person link JOIN media_asset asset ON asset.id=link.media_asset_id WHERE link.workspace_id=? AND link.person_id=? AND link.deleted_at IS NULL AND asset.deleted_at IS NULL").all(this.workspaceId, personId) as Array<{ id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string; caption: string | null }>).map((row) => ({ ...this.asset(row), caption: row.caption })); }
+  private asset(row: { id: string; original_name: string; mime_type: ManagedMediaMime; byte_size: number; sha256: string }): MediaAssetDto { return { id: row.id, fileName: row.original_name, mimeType: row.mime_type, byteSize: row.byte_size, sha256: row.sha256, url: `app-media://asset/${row.id}` }; }
 }
-
-export const isAllowedMediaMime = (mimeType: string): mimeType is ManagedMediaMime => allowedMimeValues.has(mimeType as ManagedMediaMime);
+export const isAllowedMediaMime = (mime: string): mime is ManagedMediaMime => allowedMimes.has(mime as ManagedMediaMime);
