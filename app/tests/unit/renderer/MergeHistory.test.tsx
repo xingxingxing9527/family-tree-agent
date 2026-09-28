@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MergeApi } from "../../../src/shared/contracts";
 import { MergeHistory } from "../../../src/renderer/src/features/people/MergeHistory";
@@ -33,5 +33,13 @@ describe("MergeHistory", () => {
     render(<MergeHistory api={mergeApi} />);
     expect(await screen.findByText(/检查失败/)).toBeVisible();
     await waitFor(() => expect(mergeApi.unmerge).not.toHaveBeenCalled());
+  });
+  it("keeps exact blocked details when the click-time recheck changes from allowed", async () => {
+    const check = vi.fn().mockResolvedValueOnce({ ok: true, value: { allowed: true, blockingEntityIds: [], reasons: [] } }).mockResolvedValueOnce({ ok: true, value: { allowed: false, blockingEntityIds: ["missing-link"], reasons: [{ entityId: "missing-link", entityType: "wiki_person", expectedVersion: 3, actualVersion: null }] } });
+    const mergeApi = api(check);
+    render(<MergeHistory api={mergeApi} />);
+    fireEvent.click(await screen.findByRole("button", { name: "撤销合并" }));
+    expect(await screen.findByText(/wiki_person:missing-link.*expected 3.*actual missing/)).toBeVisible();
+    expect(mergeApi.unmerge).not.toHaveBeenCalled();
   });
 });

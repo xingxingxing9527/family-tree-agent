@@ -147,6 +147,20 @@ describe("person merge", () => {
     expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE operation_group_id = ? AND entity_id IN (?, ?, ?)").pluck().get(merged.operationGroupId, ids.parent, ids.marriage, ids.lineageOneSecondary)).toBe(3);
   });
 
+  it("preserves active-versus-divorced and distinct divorced marriage episodes while merging IDs", () => {
+    const unit = new SqliteUnitOfWork(database, workspaceId);
+    unit.run("fixture.marriage-history", (ctx) => {
+      ctx.relations.createMarriage(ctx, { id: "primary-active", spouseAId: ids.primary, spouseBId: ids.spouse, status: "active" });
+      ctx.relations.createMarriage(ctx, { id: "primary-divorced-one", spouseAId: ids.primary, spouseBId: ids.spouse, status: "divorced", start: { calendar: "solar", year: 1990, month: 1, day: null, leapMonth: false, precision: "month" }, end: { calendar: "solar", year: 2000, month: 1, day: null, leapMonth: false, precision: "month" } });
+      ctx.relations.createMarriage(ctx, { id: "secondary-divorced-two", spouseAId: ids.secondary, spouseBId: ids.spouse, status: "divorced", start: { calendar: "solar", year: 2001, month: 1, day: null, leapMonth: false, precision: "month" }, end: { calendar: "solar", year: 2010, month: 1, day: null, leapMonth: false, precision: "month" } });
+    });
+    database.prepare("UPDATE marriage SET marriage_status = 'divorced', start_calendar = 'solar', start_year = 1980, start_month = 1, start_precision = 'month', end_calendar = 'solar', end_year = 1989, end_month = 1, end_precision = 'month' WHERE id = ?").run(ids.marriage);
+    const preview = new MergePreviewService(database, workspaceId).previewMerge(ids.primary, ids.secondary);
+    new PersonMergeService(database, workspaceId).mergePeople({ primaryPersonId: ids.primary, secondaryPersonId: ids.secondary, scalarChoices: {}, expectedVersions: preview.expectedVersions });
+    expect(database.prepare("SELECT COUNT(*) FROM marriage WHERE workspace_id = ? AND deleted_at IS NULL AND spouse_a_id = ? AND spouse_b_id = ?").pluck().get(workspaceId, ids.primary < ids.spouse ? ids.primary : ids.spouse, ids.primary < ids.spouse ? ids.spouse : ids.primary)).toBe(4);
+    expect(database.prepare("SELECT COUNT(*) FROM marriage WHERE workspace_id = ? AND deleted_at IS NULL AND marriage_status = 'divorced'").pluck().get(workspaceId)).toBe(3);
+  });
+
   it("rejects stale previews and rolls back every merge write", () => {
     const preview = new MergePreviewService(database, workspaceId).previewMerge(ids.primary, ids.secondary);
     database.prepare("UPDATE media_person SET caption = '已修改', row_version = row_version + 1 WHERE id = ?").run(ids.mediaPerson);

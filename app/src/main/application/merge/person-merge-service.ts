@@ -61,7 +61,7 @@ export class PersonMergeService {
         if (entry.spouse_a_id !== decision.secondaryPersonId && entry.spouse_b_id !== decision.secondaryPersonId) continue;
         const a = entry.spouse_a_id === decision.secondaryPersonId ? decision.primaryPersonId : String(entry.spouse_a_id);
         const b = entry.spouse_b_id === decision.secondaryPersonId ? decision.primaryPersonId : String(entry.spouse_b_id);
-        const [spouseA, spouseB] = [a, b].sort(); this.migrateRelationOrArchive("marriage", entry, { spouse_a_id: spouseA, spouse_b_id: spouseB }, ["spouse_a_id", "spouse_b_id"]); touch("marriage", String(entry.id));
+        const [spouseA, spouseB] = [a, b].sort(); this.migrateMarriage(entry, { spouse_a_id: spouseA, spouse_b_id: spouseB }); touch("marriage", String(entry.id));
       }
       for (const [table, column] of [["import_identity", "person_id"], ["media_person", "person_id"], ["wiki_person", "person_id"]] as const) {
         for (const entry of snapshot.rows[table] ?? []) { this.migrateOrArchive(table, entry, column, decision.primaryPersonId, table === "media_person" ? ["media_asset_id", "person_id"] : table === "wiki_person" ? ["wiki_entry_id", "person_id"] : []); touch(table, String(entry.id)); }
@@ -127,6 +127,15 @@ export class PersonMergeService {
     const duplicate = this.database.prepare(`SELECT id FROM ${table} WHERE workspace_id = ? AND deleted_at IS NULL AND ${where} AND id <> ?`).get(this.workspaceId, ...values, id);
     if (duplicate) { this.archive(table, id); this.update(table, id, fields); return; }
     this.update(table, id, fields);
+  }
+  private migrateMarriage(entry: Raw, fields: Raw): void {
+    const id = String(entry.id); const dates = ["start_calendar", "start_year", "start_month", "start_day", "start_leap_month", "start_precision", "end_calendar", "end_year", "end_month", "end_day", "end_leap_month", "end_precision"];
+    const exactDates = dates.map((key) => `${key} IS ?`).join(" AND ");
+    const duplicate = entry.marriage_status === "active"
+      ? this.database.prepare("SELECT id FROM marriage WHERE workspace_id = ? AND deleted_at IS NULL AND marriage_status = 'active' AND spouse_a_id = ? AND spouse_b_id = ? AND id <> ?").get(this.workspaceId, fields.spouse_a_id, fields.spouse_b_id, id)
+      : this.database.prepare(`SELECT id FROM marriage WHERE workspace_id = ? AND deleted_at IS NULL AND marriage_status = ? AND spouse_a_id = ? AND spouse_b_id = ? AND ${exactDates} AND id <> ?`).get(this.workspaceId, entry.marriage_status, fields.spouse_a_id, fields.spouse_b_id, ...dates.map((key) => entry[key]), id);
+    if (duplicate) { this.archive("marriage", id); this.update("marriage", id, fields); return; }
+    this.update("marriage", id, fields);
   }
   private migrateMembership(entry: Raw, primaryId: string): void {
     const id = String(entry.id); const sameLineage = this.database.prepare("SELECT id FROM lineage_membership WHERE workspace_id = ? AND lineage_id = ? AND person_id = ? AND deleted_at IS NULL AND id <> ?").get(this.workspaceId, entry.lineage_id, primaryId, id);
