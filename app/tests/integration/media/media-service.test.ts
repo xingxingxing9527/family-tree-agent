@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,13 @@ import { resolveMediaAssetRequest } from "../../../src/main/media/media-protocol
 
 const roots: string[] = [];
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+const box = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.writeUInt32BE(payload.length + 8); header.write(type, 4); return Buffer.concat([header, payload]); };
+const wav = (): Buffer => { const fmt = Buffer.alloc(16); fmt.writeUInt16LE(1); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(8000, 4); fmt.writeUInt32LE(8000, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(8, 14); const riffChunk = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.write(type); header.writeUInt32LE(payload.length, 4); return Buffer.concat([header, payload]); }; const chunks = Buffer.concat([riffChunk("fmt ", fmt), riffChunk("data", Buffer.from([1]))]); const head = Buffer.alloc(12); head.write("RIFF"); head.writeUInt32LE(chunks.length + 4, 4); head.write("WAVE", 8); return Buffer.concat([head, chunks]); };
+const ogg = (): Buffer => { const packet = Buffer.from("OpusHead\0\0"); const head = Buffer.alloc(27); head.write("OggS"); head[4] = 0; head[5] = 2; head[26] = 1; return Buffer.concat([head, Buffer.from([packet.length]), packet]); };
+const mp4 = (video = false): Buffer => { const hdlr = Buffer.concat([Buffer.alloc(8), Buffer.from(video ? "vide" : "soun")]); return Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", box("trak", box("mdia", box("hdlr", hdlr))))]); };
+const mp4Mixed = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", Buffer.concat([box("trak", box("mdia", box("hdlr", Buffer.concat([Buffer.alloc(8), Buffer.from("soun")])))), box("trak", box("mdia", box("hdlr", Buffer.concat([Buffer.alloc(8), Buffer.from("vide")]))))]))]);
+const mp4MoovAtEnd = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("free", Buffer.alloc(100, 1)), mp4().subarray(20)]);
+const oggPacket = (packet: Buffer): Buffer => { const head = Buffer.alloc(27); head.write("OggS"); head[4] = 0; head[5] = 2; head[26] = 1; return Buffer.concat([head, Buffer.from([packet.length]), packet]); };
 
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
@@ -72,6 +79,57 @@ describe("managed media", () => {
     database.close();
   });
 
+  it("persists every byte when the output adapter performs partial writes", async () => {
+    const { root, mediaRoot, database } = await setup();
+    const image = join(root, "partial.jpg"); const bytes = Buffer.concat([jpeg, Buffer.alloc(100_000, 7)]); await writeFile(image, bytes);
+    const service = new ManagedMediaService(database, "workspace-1", mediaRoot, { writeChunk: async (handle, chunk) => (await handle.write(chunk.subarray(0, Math.min(3, chunk.length)))).bytesWritten });
+    const imported = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") });
+    expect(imported.ok).toBe(true); if (!imported.ok) throw new Error("fixture failed");
+    expect(await readFile(join(mediaRoot, imported.value.sha256.slice(0, 2), `${imported.value.sha256}.jpg`))).toEqual(bytes);
+    database.close();
+  });
+
+  it("does not publish a target or row when the selected file mutates during the final copy", async () => {
+    const { root, mediaRoot, database } = await setup(); const image = join(root, "mutated.jpg"); await writeFile(image, Buffer.concat([jpeg, Buffer.alloc(100_000, 1)])); let mutated = false;
+    const service = new ManagedMediaService(database, "workspace-1", mediaRoot, { afterCopyChunk: async () => { if (!mutated) { mutated = true; await writeFile(image, Buffer.from("MZ changed")); } } });
+    await expect(service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(0);
+    const directories = await readdir(mediaRoot).catch(() => []); expect(await Promise.all(directories.map((directory) => readdir(join(mediaRoot, directory))))).toEqual(directories.map(() => []));
+    database.close();
+  });
+
+  it("removes only its newly published object when persistence fails", async () => {
+    const { root, mediaRoot, database } = await setup(); const image = join(root, "failed.jpg"); await writeFile(image, jpeg);
+    const service = new ManagedMediaService(database, "workspace-1", mediaRoot, { beforePersist: () => { throw new Error("injected"); } });
+    await expect(service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(0);
+    const directories = await readdir(mediaRoot).catch(() => []); expect(await Promise.all(directories.map((directory) => readdir(join(mediaRoot, directory))))).toEqual(directories.map(() => []));
+    database.close();
+  });
+
+  it("coordinates two independent database connections for one physical object and audit", async () => {
+    const { root, mediaRoot, database, service } = await setup(); const image = join(root, "two-process.jpg"); await writeFile(image, jpeg);
+    const other = openDatabase(join(root, "genealogy.sqlite")); const second = new ManagedMediaService(other, "workspace-1", mediaRoot);
+    const [first, next] = await Promise.all([service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }), second.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") })]);
+    expect(first.ok && next.ok).toBe(true); if (!first.ok || !next.ok) throw new Error("fixtures failed"); expect(first.value.id).toBe(next.value.id);
+    expect(database.prepare("SELECT COUNT(*) FROM media_asset WHERE deleted_at IS NULL").pluck().get()).toBe(1); expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type='media_asset' AND action='create'").pluck().get()).toBe(1);
+    const entries = await readdir(join(mediaRoot, first.value.sha256.slice(0, 2))); expect(entries).toEqual([`${first.value.sha256}.jpg`]); other.close(); database.close();
+  });
+
+  it("registers a verified pre-existing object without overwriting it", async () => {
+    const { root, mediaRoot, database, service } = await setup(); const image = join(root, "preexisting.jpg"); await writeFile(image, jpeg); const digest = (await import("node:crypto")).createHash("sha256").update(jpeg).digest("hex"); const dir = join(mediaRoot, digest.slice(0, 2)); await mkdir(dir, { recursive: true }); const target = join(dir, `${digest}.jpg`); await writeFile(target, jpeg);
+    const imported = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }); expect(imported.ok).toBe(true); expect(await readFile(target)).toEqual(jpeg); expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(1); database.close();
+  });
+
+  it("rejects a corrupt pre-existing object without overwriting or registering it", async () => {
+    const { root, mediaRoot, database, service } = await setup(); const image = join(root, "corrupt.jpg"); await writeFile(image, jpeg); const digest = (await import("node:crypto")).createHash("sha256").update(jpeg).digest("hex"); const dir = join(mediaRoot, digest.slice(0, 2)); await mkdir(dir, { recursive: true }); const target = join(dir, `${digest}.jpg`); const corrupt = Buffer.from("corrupt"); await writeFile(target, corrupt);
+    await expect(service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT" } }); expect(await readFile(target)).toEqual(corrupt); expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(0); expect(database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()).toBe(0); database.close();
+  });
+
+  it("keeps an existing owner and target when another import has a failing persistence hook", async () => {
+    const { root, mediaRoot, database, service } = await setup(); const image = join(root, "owned.jpg"); await writeFile(image, jpeg); const owner = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }); if (!owner.ok) throw new Error("owner failed"); const guarded = new ManagedMediaService(database, "workspace-1", mediaRoot, { beforePersist: () => { throw new Error("must not persist duplicate"); } }); const retry = await guarded.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }); expect(retry).toMatchObject({ ok: true, value: { id: owner.value.id } }); expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type='media_asset' AND action='create'").pluck().get()).toBe(1); expect(await readFile(join(mediaRoot, owner.value.sha256.slice(0, 2), `${owner.value.sha256}.jpg`))).toEqual(jpeg); database.close();
+  });
+
   it("rejects an unselected path and executable bytes renamed as an image", async () => {
     const { root, database, service } = await setup();
     const renamedExecutable = join(root, "danger.jpg");
@@ -79,6 +137,17 @@ describe("managed media", () => {
 
     await expect(service.importMedia({ selection: await openSelectedMediaFile(renamedExecutable, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
     database.close();
+  });
+
+  it.each([
+    ["photo.jpg", jpeg, "image/jpeg", "jpg"], ["photo.jpeg", jpeg, "image/jpeg", "jpg"], ["photo.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png", "png"], ["photo.webp", Buffer.from("RIFFxxxxWEBP"), "image/webp", "webp"], ["sound.mp3", Buffer.from([0xff, 0xfb, 0x90, 0x64]), "audio/mpeg", "mp3"], ["sound.wav", wav(), "audio/wav", "wav"], ["opus.ogg", ogg(), "audio/ogg", "ogg"], ["vorbis.ogg", oggPacket(Buffer.from("\x01vorbis\0")), "audio/ogg", "ogg"], ["sound.m4a", mp4(), "audio/mp4", "m4a"], ["sound.mp4", mp4(), "audio/mp4", "m4a"], ["moov-end.mp4", mp4MoovAtEnd(), "audio/mp4", "m4a"]
+  ])("imports validated %s", async (name, content, mimeType, storedExtension) => {
+    const { root, database, service } = await setup(); const source = join(root, name); await writeFile(source, content); const result = await service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") }); expect(result).toMatchObject({ ok: true, value: { mimeType } }); if (result.ok) expect(result.value.url).toContain(result.value.id); expect(database.prepare("SELECT relative_path FROM media_asset").pluck().get()).toMatch(new RegExp(`\\.${storedExtension}$`)); database.close();
+  });
+
+  it("rejects video/mixed/malformed media containers without publishing", async () => {
+    const { root, database, service } = await setup(); const fixtures: Array<[string, Buffer]> = [["video.mp4", mp4(true)], ["mixed.mp4", mp4Mixed()], ["bad-box.mp4", Buffer.from("\0\0\0\x01moov")], ["id3.mp3", Buffer.from("ID3\x04\0\0\0\0\0\0")], ["sync.mp3", Buffer.from([0xff, 0xe0, 0, 0])], ["fake.wav", Buffer.from("RIFFxxxxWAVEfmt data")], ["theora.ogg", oggPacket(Buffer.from("\x80theora"))], ["unknown.ogg", oggPacket(Buffer.from("unknown"))], ["truncated.ogg", Buffer.from("OggS\0\x02" + "\0".repeat(20) + "\x01\xff")], ["danger.jpg", Buffer.from("MZ executable")]];
+    for (const [name, content] of fixtures) { const source = join(root, name); await writeFile(source, content); await expect(service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } }); } database.close();
   });
 
   it("serves only registered active assets through the app-media resolver", async () => {

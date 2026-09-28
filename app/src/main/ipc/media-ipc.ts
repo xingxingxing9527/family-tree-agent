@@ -16,19 +16,24 @@ const fail = <T>(code: "VALIDATION" | "NOT_FOUND" | "PATH_DENIED" | "INTERNAL" |
 const nativeDialogs: MediaDialogs = { showOpenDialog: (options) => dialog.showOpenDialog(options as Parameters<typeof dialog.showOpenDialog>[0]) };
 
 export class WorkspaceMediaGateway implements MediaGateway {
-  private readonly tokens = new Map<string, SelectedMediaFile>();
-  constructor(private readonly workspaces: OpenWorkspaceContextProvider, private readonly dialogs: MediaDialogs = nativeDialogs) {}
+  private readonly tokens = new Map<string, { selection: SelectedMediaFile; timer: ReturnType<typeof setTimeout> }>();
+  private activeWorkspaceId: string | null = null;
+  constructor(private readonly workspaces: OpenWorkspaceContextProvider, private readonly dialogs: MediaDialogs = nativeDialogs, private readonly selectionTtlMs = 300_000) {}
+  pendingSelectionCount(): number { return this.tokens.size; }
   async select(): Promise<AppResult<{ fileToken: string; fileName: string }>> {
-    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return fail("NOT_FOUND", "No workspace is open");
+    const context = this.context(); if (!context) return fail("NOT_FOUND", "No workspace is open");
     const selected = await this.dialogs.showOpenDialog({ title: "选择媒体文件", properties: ["openFile"], filters: [{ name: "Media", extensions: [...allowedExtensions].map((item) => item.slice(1)) }] });
     if (selected.canceled || selected.filePaths.length !== 1) return fail("VALIDATION", "No media file was selected");
-    try { if (!allowedExtensions.has(extname(selected.filePaths[0]!).toLowerCase())) return fail("VALIDATION", "Selected media type is not supported"); const capability = await openSelectedMediaFile(selected.filePaths[0]!, context.workspaceId); const fileToken = randomUUID(); this.tokens.set(fileToken, capability); return { ok: true, value: { fileToken, fileName: basename(capability.fileName) } }; }
+    try { if (!allowedExtensions.has(extname(selected.filePaths[0]!).toLowerCase())) return fail("VALIDATION", "Selected media type is not supported"); const capability = await openSelectedMediaFile(selected.filePaths[0]!, context.workspaceId, this.selectionTtlMs); const fileToken = randomUUID(); const timer = setTimeout(() => void this.release(fileToken), Math.max(0, capability.expiresAt - Date.now())); timer.unref(); this.tokens.set(fileToken, { selection: capability, timer }); return { ok: true, value: { fileToken, fileName: basename(capability.fileName) } }; }
     catch { return fail("VALIDATION", "Selected media file is unavailable"); }
   }
-  async import(input: { fileToken: string }): Promise<AppResult<MediaAssetReadModel>> { return this.withService(async (service, context) => { const token = this.tokens.get(input.fileToken); this.tokens.delete(input.fileToken); if (!token || token.workspaceId !== context.workspaceId || token.expiresAt < Date.now()) { if (token) await closeSelectedMediaFile(token); return fail("PATH_DENIED", "Media file selection expired; select it again"); } return service.importMedia({ selection: token }); }); }
+  async import(input: { fileToken: string }): Promise<AppResult<MediaAssetReadModel>> { return this.withService(async (service, context) => { const token = this.tokens.get(input.fileToken); if (token) { this.tokens.delete(input.fileToken); clearTimeout(token.timer); } const selection = token?.selection; if (!selection || selection.workspaceId !== context.workspaceId || selection.expiresAt < Date.now()) { if (selection) await closeSelectedMediaFile(selection); return fail("PATH_DENIED", "Media file selection expired; select it again"); } return service.importMedia({ selection }); }); }
   async attach(input: { mediaAssetId: string; personId: string; caption?: string }): Promise<AppResult<null>> { return this.withService((service) => service.attachMedia(input)); }
   async listForPerson(input: { personId: string }): Promise<AppResult<MediaAssetReadModel[]>> { return this.withService((service) => ({ ok: true, value: service.listForPerson(input.personId) })); }
-  private async withService<T>(work: (service: ManagedMediaService, context: { workspaceId: string; databasePath: string; mediaPath?: string }) => Promise<AppResult<T>> | AppResult<T>): Promise<AppResult<T>> { const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return fail("NOT_FOUND", "No workspace is open"); let database; try { database = openDatabase(context.databasePath); applyMigrations(database); return await work(new ManagedMediaService(database, context.workspaceId, context.mediaPath ?? join(context.databasePath, "..", "media")), context); } catch { return fail("INTERNAL", "Unable to complete media request"); } finally { database?.close(); } }
+  dispose(): void { for (const token of this.tokens.keys()) void this.release(token); this.activeWorkspaceId = null; }
+  private context() { const context = this.workspaces.getOpenWorkspaceContext(); if (!context || (this.activeWorkspaceId && this.activeWorkspaceId !== context.workspaceId)) this.dispose(); this.activeWorkspaceId = context?.workspaceId ?? null; return context; }
+  private async release(token: string): Promise<void> { const value = this.tokens.get(token); if (!value) return; this.tokens.delete(token); clearTimeout(value.timer); await closeSelectedMediaFile(value.selection); }
+  private async withService<T>(work: (service: ManagedMediaService, context: { workspaceId: string; databasePath: string; mediaPath?: string }) => Promise<AppResult<T>> | AppResult<T>): Promise<AppResult<T>> { const context = this.context(); if (!context) return fail("NOT_FOUND", "No workspace is open"); let database; try { database = openDatabase(context.databasePath); applyMigrations(database); return await work(new ManagedMediaService(database, context.workspaceId, context.mediaPath ?? join(context.databasePath, "..", "media")), context); } catch { return fail("INTERNAL", "Unable to complete media request"); } finally { database?.close(); } }
 }
 
 type Ipc = Pick<IpcMain, "handle">;

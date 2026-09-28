@@ -72,7 +72,9 @@ app.whenReady().then(() => {
   registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager));
   registerImportIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceImportGateway(workspaceManager));
   registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager));
-  registerMediaIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMediaGateway(workspaceManager));
+  const mediaGateway = new WorkspaceMediaGateway(workspaceManager);
+  registerMediaIpc(ipcMain, () => mainWindow?.webContents.id, mediaGateway);
+  app.once("before-quit", () => mediaGateway.dispose());
   registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager));
 
   app.on("activate", () => {

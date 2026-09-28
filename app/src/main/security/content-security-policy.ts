@@ -1,1 +1,0 @@
-export const desktopContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: app: app-media:; media-src 'self' app: app-media:; connect-src 'self'";
