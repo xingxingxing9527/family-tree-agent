@@ -288,6 +288,7 @@ export interface MergePreviewDto {
   scalarConflicts: Array<{ field: string; primary: unknown; secondary: unknown }>;
   aliases: Array<Record<string, unknown>>; parents: Array<Record<string, unknown>>; children: Array<Record<string, unknown>>;
   spouses: Array<Record<string, unknown>>; lineages: Array<Record<string, unknown>>; media: Array<Record<string, unknown>>; sources: Array<Record<string, unknown>>;
+  wikiLinks: Array<Record<string, unknown>>; importIdentities: Array<Record<string, unknown>>; workspaceOrigins: Array<Record<string, unknown>>;
   expectedVersions: Record<string, number>;
 }
 export interface DuplicateCandidateDto { person: PersonReadModel; score: number; reasons: Array<{ code: string; detail: string }>; }

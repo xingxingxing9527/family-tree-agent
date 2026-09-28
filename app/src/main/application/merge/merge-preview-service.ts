@@ -16,12 +16,12 @@ export class MergePreviewService {
     const secondary = people.get(secondaryId);
     if (!primary || !secondary) throw new Error("Person not found");
     const aliases = ordered(this.database, "SELECT * FROM person_alias WHERE workspace_id = ? AND person_id = ? AND deleted_at IS NULL", this.workspaceId, secondaryId);
-    const parents = ordered(this.database, "SELECT * FROM parent_child WHERE workspace_id = ? AND child_id = ? AND deleted_at IS NULL", this.workspaceId, secondaryId);
-    const children = ordered(this.database, "SELECT * FROM parent_child WHERE workspace_id = ? AND parent_id = ? AND deleted_at IS NULL", this.workspaceId, secondaryId);
-    const spouses = ordered(this.database, "SELECT * FROM marriage WHERE workspace_id = ? AND (spouse_a_id = ? OR spouse_b_id = ?) AND deleted_at IS NULL", this.workspaceId, secondaryId, secondaryId);
+    const parents = ordered(this.database, "SELECT * FROM parent_child WHERE workspace_id = ? AND child_id IN (?, ?) AND deleted_at IS NULL", this.workspaceId, primaryId, secondaryId);
+    const children = ordered(this.database, "SELECT * FROM parent_child WHERE workspace_id = ? AND parent_id IN (?, ?) AND deleted_at IS NULL", this.workspaceId, primaryId, secondaryId);
+    const spouses = ordered(this.database, "SELECT * FROM marriage WHERE workspace_id = ? AND (spouse_a_id IN (?, ?) OR spouse_b_id IN (?, ?)) AND deleted_at IS NULL", this.workspaceId, primaryId, secondaryId, primaryId, secondaryId);
     const lineageRows = [
       ...ordered(this.database, "SELECT l.*, l.id AS lineage_id, l.row_version AS lineage_row_version, NULL AS membership_id FROM lineage l WHERE l.workspace_id = ? AND l.founder_person_id = ? AND l.deleted_at IS NULL", this.workspaceId, secondaryId),
-      ...ordered(this.database, "SELECT lm.*, lm.id AS membership_id FROM lineage_membership lm WHERE lm.workspace_id = ? AND lm.person_id = ? AND lm.deleted_at IS NULL", this.workspaceId, secondaryId)
+      ...ordered(this.database, "SELECT lm.*, lm.id AS membership_id FROM lineage_membership lm WHERE lm.workspace_id = ? AND lm.person_id IN (?, ?) AND lm.deleted_at IS NULL", this.workspaceId, primaryId, secondaryId)
     ];
     const lineages: Array<Record<string, unknown> & { membershipId?: string }> = lineageRows.map((entry) => ({ ...entry, membershipId: entry.membership_id === null ? undefined : String(entry.membership_id) }));
     const media = ordered(this.database, "SELECT mp.*, mp.id AS link_id FROM media_person mp WHERE mp.workspace_id = ? AND mp.person_id = ? AND mp.deleted_at IS NULL", this.workspaceId, secondaryId).map((entry) => ({ ...entry, linkId: String(entry.link_id) }));
@@ -35,6 +35,6 @@ export class MergePreviewService {
       ...media.map(version), ...wiki.map(version), ...imports.map(version), ...workspace.map((entry) => [String(entry.workspace_id), Number(entry.row_version)] as [string, number])
     ]);
     const scalarConflicts = (["displayName", "gender", "birth", "death", "notes"] as const).filter((field) => JSON.stringify(primary[field]) !== JSON.stringify(secondary[field])).map((field) => ({ field, primary: primary[field], secondary: secondary[field] }));
-    return { primary, secondary, scalarConflicts, aliases, parents, children, spouses, lineages, media, sources, expectedVersions };
+    return { primary, secondary, scalarConflicts, aliases, parents, children, spouses, lineages, media, sources, wikiLinks: wiki, importIdentities: imports, workspaceOrigins: workspace, expectedVersions };
   }
 }

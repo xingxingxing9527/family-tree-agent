@@ -53,6 +53,8 @@ describe("safe person unmerge", () => {
     const service = new UnmergeService(database, workspaceId);
     expect(service.canUnmerge(mergeId)).toEqual({ allowed: true, blockingEntityIds: [], reasons: [] });
 
+    const postPrimary = database.prepare("SELECT row_version, updated_at FROM person WHERE id = ?").get(ids.primary) as { row_version: number; updated_at: string };
+    const postSecondary = database.prepare("SELECT row_version, updated_at FROM person WHERE id = ?").get(ids.secondary) as { row_version: number; updated_at: string };
     const reversed = service.unmerge(mergeId);
 
     expect(reversed.status).toBe("reversed");
@@ -73,6 +75,12 @@ describe("safe person unmerge", () => {
       deleted_at: null
     });
     expect(database.prepare("SELECT person_id FROM media_person WHERE id = ?").get(ids.mediaPerson)).toEqual({ person_id: ids.secondary });
+    const restoredPrimary = database.prepare("SELECT row_version, updated_at FROM person WHERE id = ?").get(ids.primary) as { row_version: number; updated_at: string };
+    const restoredSecondary = database.prepare("SELECT row_version, updated_at FROM person WHERE id = ?").get(ids.secondary) as { row_version: number; updated_at: string };
+    expect(restoredPrimary.row_version).toBeGreaterThan(postPrimary.row_version);
+    expect(restoredSecondary.row_version).toBeGreaterThan(postSecondary.row_version);
+    expect(restoredPrimary.updated_at).not.toBe(postPrimary.updated_at);
+    expect(restoredSecondary.updated_at).not.toBe(postSecondary.updated_at);
     expect(database.prepare("SELECT COUNT(*) FROM id_redirect WHERE merge_record_id = ?").pluck().get(mergeId)).toBe(0);
     expect(new PersonMergeService(database, workspaceId).resolveRedirect(ids.secondary)).toBe(ids.secondary);
 

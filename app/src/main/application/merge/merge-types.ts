@@ -18,6 +18,9 @@ export interface MergePreview {
   lineages: Array<Record<string, unknown> & { membershipId?: string }>;
   media: Array<Record<string, unknown> & { linkId?: string }>;
   sources: Array<Record<string, unknown>>;
+  wikiLinks: Array<Record<string, unknown>>;
+  importIdentities: Array<Record<string, unknown>>;
+  workspaceOrigins: Array<Record<string, unknown>>;
   expectedVersions: Record<string, number>;
 }
 

@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import React, { useState, type JSX } from "react";
 import type { DuplicateCandidateDto, MergeApi, MergePreviewDto } from "../../../../shared/contracts";
 import { DuplicateCandidates } from "./DuplicateCandidates";
 import { MergePreview } from "./MergePreview";

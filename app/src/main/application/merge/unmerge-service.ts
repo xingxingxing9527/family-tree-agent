@@ -51,11 +51,11 @@ export class UnmergeService {
     return (table === "workspace_meta" ? this.database.prepare(query).get(this.workspaceId) : this.database.prepare(query).get(this.workspaceId, id)) as Raw | null;
   }
   private restore(table: string, id: string, snapshot: Raw): void {
-    const fields = Object.entries(snapshot).filter(([key]) => key !== "id" && key !== "workspace_id");
+    const fields = Object.entries(snapshot).filter(([key]) => !["id", "workspace_id", "created_at", "updated_at", "row_version"].includes(key));
     const sql = table === "workspace_meta"
-      ? `UPDATE workspace_meta SET ${fields.map(([key]) => `${key} = ?`).join(", ")} WHERE workspace_id = ?`
-      : `UPDATE ${tableFor(table)} SET ${fields.map(([key]) => `${key} = ?`).join(", ")} WHERE workspace_id = ? AND id = ?`;
-    this.database.prepare(sql).run(...fields.map(([, value]) => value), this.workspaceId, ...(table === "workspace_meta" ? [] : [id]));
+      ? `UPDATE workspace_meta SET ${fields.map(([key]) => `${key} = ?`).join(", ")}, updated_at = ?, row_version = row_version + 1 WHERE workspace_id = ?`
+      : `UPDATE ${tableFor(table)} SET ${fields.map(([key]) => `${key} = ?`).join(", ")}, updated_at = ?, row_version = row_version + 1 WHERE workspace_id = ? AND id = ?`;
+    this.database.prepare(sql).run(...fields.map(([, value]) => value), new Date().toISOString(), this.workspaceId, ...(table === "workspace_meta" ? [] : [id]));
   }
   private audit(ctx: TransactionContext, entityType: string, entityId: string, action: string, before: unknown, after: unknown): void { ctx.audit.append({ entityType, entityId, action, before, after }); }
 }

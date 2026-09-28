@@ -39,6 +39,9 @@ describe("person merge", () => {
     ]));
     expect(preview.media.map((entry) => entry.linkId)).toContain(ids.mediaPerson);
     expect(preview.sources.map((entry) => entry.id)).toContain(ids.source);
+    expect(preview.wikiLinks.map((entry) => entry.id)).toContain(ids.wikiPerson);
+    expect(preview.importIdentities.map((entry) => entry.id)).toContain(ids.importIdentity);
+    expect(preview.workspaceOrigins.map((entry) => entry.workspace_id)).toContain(workspaceId);
     expect(preview.expectedVersions).toMatchObject({
       [ids.primary]: 1,
       [ids.secondary]: 2,
@@ -121,6 +124,27 @@ describe("person merge", () => {
     const active = database.prepare("SELECT id FROM lineage_membership WHERE workspace_id = ? AND lineage_id = ? AND person_id = ? AND deleted_at IS NULL").pluck().all(workspaceId, ids.lineageTwo, ids.primary);
     expect(active).toHaveLength(1);
     expect(database.prepare("SELECT deleted_at FROM lineage_membership WHERE id = ?").get(ids.lineageTwoSecondary)).toMatchObject({ deleted_at: expect.any(String) });
+  });
+
+  it("canonicalizes shared parent/spouse facts and conflicting primary memberships before migration", () => {
+    const unit = new SqliteUnitOfWork(database, workspaceId);
+    unit.run("fixture.shared-facts", (ctx) => {
+      ctx.relations.createParentChild(ctx, { id: "parent-primary", parentId: ids.father, childId: ids.primary, parentRole: "father" });
+      ctx.relations.createMarriage(ctx, { id: "marriage-primary", spouseAId: ids.primary, spouseBId: ids.spouse });
+    });
+    database.prepare("UPDATE lineage_membership SET is_primary = 1 WHERE id = ?").run(ids.lineageTwoPrimary);
+    database.prepare("UPDATE lineage_membership SET is_primary = 1 WHERE id = ?").run(ids.lineageOneSecondary);
+    const preview = new MergePreviewService(database, workspaceId).previewMerge(ids.primary, ids.secondary);
+
+    const merged = new PersonMergeService(database, workspaceId).mergePeople({ primaryPersonId: ids.primary, secondaryPersonId: ids.secondary, scalarChoices: {}, expectedVersions: preview.expectedVersions });
+
+    expect(database.prepare("SELECT deleted_at FROM parent_child WHERE id = ?").get(ids.parent)).toMatchObject({ deleted_at: expect.any(String) });
+    expect(database.prepare("SELECT deleted_at FROM marriage WHERE id = ?").get(ids.marriage)).toMatchObject({ deleted_at: expect.any(String) });
+    expect(database.prepare("SELECT person_id, is_primary, deleted_at FROM lineage_membership WHERE id = ?").get(ids.lineageOneSecondary)).toEqual({ person_id: ids.primary, is_primary: 0, deleted_at: null });
+    expect(database.prepare("SELECT COUNT(*) FROM lineage_membership WHERE workspace_id = ? AND person_id = ? AND is_primary = 1 AND deleted_at IS NULL").pluck().get(workspaceId, ids.primary)).toBe(1);
+    const record = new MergeRepository(database, workspaceId).get(merged.id)!;
+    expect(record.postVersions.map((entry) => entry.entityId)).toEqual(expect.arrayContaining([ids.parent, ids.marriage, ids.lineageOneSecondary]));
+    expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE operation_group_id = ? AND entity_id IN (?, ?, ?)").pluck().get(merged.operationGroupId, ids.parent, ids.marriage, ids.lineageOneSecondary)).toBe(3);
   });
 
   it("rejects stale previews and rolls back every merge write", () => {
