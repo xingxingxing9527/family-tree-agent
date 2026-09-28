@@ -3,7 +3,7 @@ import { join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installNavigationPolicy } from "./security/navigation-policy.js";
 import { createSecureWebPreferences } from "./security/window-options.js";
-import { registerChatIpc, registerFactsIpc, registerImportIpc, registerMediaIpc, registerMergeIpc, registerModelSettingsIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { registerChatIpc, registerDataManagementIpc, registerFactsIpc, registerImportIpc, registerMediaIpc, registerMergeIpc, registerModelSettingsIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
 import { WorkspaceMergeGateway } from "./ipc/merge-ipc.js";
 import { WorkspaceImportGateway } from "./ipc/import-ipc.js";
 import { WorkspaceFactsGateway } from "./application/facts/facts-gateway.js";
@@ -15,6 +15,7 @@ import { resolveMediaAssetRequest } from "./media/media-protocol.js";
 import { CredentialVault } from "./security/credential-vault.js";
 import { WorkspaceChatGateway } from "./ipc/chat-ipc.js";
 import { OpenAIResponsesAdapter } from "./llm/openai-responses-adapter.js";
+import { WorkspaceDataManagementGateway } from "./ipc/data-management-ipc.js";
 
 const rendererRoot = resolve(__dirname, "../renderer");
 
@@ -83,7 +84,11 @@ app.whenReady().then(() => {
     model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini"
   }));
   registerChatIpc(ipcMain, () => mainWindow?.webContents.id, chatGateway);
-  app.once("before-quit", () => { mediaGateway.dispose(); chatGateway.dispose(); });
+  const dataManagementGateway = new WorkspaceDataManagementGateway(workspaceManager, undefined, {
+    disposeWorkspaceServices: () => { mediaGateway.dispose(); chatGateway.dispose(); }
+  });
+  registerDataManagementIpc(ipcMain, () => mainWindow?.webContents.id, dataManagementGateway);
+  app.once("before-quit", () => { mediaGateway.dispose(); chatGateway.dispose(); void dataManagementGateway.dispose(); });
   registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager));
   registerModelSettingsIpc(ipcMain, () => mainWindow?.webContents.id, credentialVault);
 

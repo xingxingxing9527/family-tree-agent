@@ -338,6 +338,54 @@ export interface MergeApi {
   unmerge(input: { mergeId: string }): Promise<AppResult<{ id: string; status: "reversed" }>>;
 }
 
+export interface BackupCountsDto {
+  people: number;
+  parentChild: number;
+  marriages: number;
+  wikiEntries: number;
+  auditRows: number;
+  mediaAssets: number;
+}
+
+export interface BackupSummaryDto {
+  formatVersion: 1;
+  workspaceId: string;
+  workspaceName: string;
+  schemaVersion: number;
+  createdAt: string;
+  counts: BackupCountsDto;
+}
+
+export interface BackupInspectionDto {
+  restoreToken: string;
+  targetWorkspaceId: string;
+  verified: true;
+  expiresAt: string;
+  manifest: BackupSummaryDto;
+}
+
+export interface AuditOperationGroupDto {
+  id: string;
+  kind: string;
+  createdAt: string;
+  status: "available" | "undone" | "blocked";
+  affectedEntities: Array<{ entityType: string; entityId: string }>;
+  undoable: boolean;
+  reason: string | null;
+  undoneAt: string | null;
+}
+
+export interface DataManagementApi {
+  listAudit(): Promise<AppResult<AuditOperationGroupDto[]>>;
+  undoOperationGroup(input: { operationGroupId: string }): Promise<AppResult<{ operationGroupId: string; undoneAt: string; restoredEntities: number }>>;
+  createBackup(): Promise<AppResult<{ saved: boolean; verified?: true; createdAt?: string; schemaVersion?: number; counts?: BackupCountsDto }>>;
+  listRestoreTargets(): Promise<AppResult<WorkspaceSummary[]>>;
+  selectRestoreFile(): Promise<AppResult<{ selected: boolean; fileToken?: string; fileName?: string }>>;
+  inspectBackup(input: { fileToken: string; targetWorkspaceId: string }): Promise<AppResult<BackupInspectionDto>>;
+  restoreBackup(input: { restoreToken: string; targetWorkspaceId: string; confirmReplace: true }): Promise<AppResult<{ restored: true; automaticSnapshotVerified: true }>>;
+  exportWorkspace(): Promise<AppResult<{ saved: boolean; files?: number; mediaAssets?: number }>>;
+}
+
 export interface DesktopApi {
   app: { getVersion(): Promise<string> };
   workspaces: {
@@ -374,4 +422,5 @@ export interface DesktopApi {
     saveKey(input: { key: string }): Promise<AppResult<null>>;
     clearKey(): Promise<AppResult<null>>;
   };
+  dataManagement: DataManagementApi;
 }

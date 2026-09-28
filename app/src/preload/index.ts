@@ -67,6 +67,16 @@ const desktopApi: DesktopApi = {
     status: () => ipcRenderer.invoke("model-settings:status"),
     saveKey: (input) => ipcRenderer.invoke("model-settings:save-key", input),
     clearKey: () => ipcRenderer.invoke("model-settings:clear-key")
+  },
+  dataManagement: {
+    listAudit: () => ipcRenderer.invoke("data-management:audit-list", {}),
+    undoOperationGroup: (input) => ipcRenderer.invoke("data-management:audit-undo", input),
+    createBackup: () => ipcRenderer.invoke("data-management:backup-create", {}),
+    listRestoreTargets: () => ipcRenderer.invoke("data-management:restore-targets", {}),
+    selectRestoreFile: () => ipcRenderer.invoke("data-management:restore-select", {}),
+    inspectBackup: (input) => ipcRenderer.invoke("data-management:restore-inspect", input),
+    restoreBackup: (input) => ipcRenderer.invoke("data-management:restore-activate", input),
+    exportWorkspace: () => ipcRenderer.invoke("data-management:export-create", {})
   }
 };
 

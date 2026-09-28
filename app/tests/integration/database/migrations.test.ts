@@ -12,16 +12,17 @@ describe("database migrations", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  it("migrates an empty database to version 3 exactly once", async () => {
+  it("migrates an empty database to version 4 exactly once", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
     roots.push(root);
     const database = openDatabase(join(root, "genealogy.sqlite"));
 
     try {
-      expect(applyMigrations(database)).toBe(3);
-      expect(applyMigrations(database)).toBe(3);
-      expect(database.pragma("user_version", { simple: true })).toBe(3);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(3);
+      expect(applyMigrations(database)).toBe(4);
+      expect(applyMigrations(database)).toBe(4);
+      expect(database.pragma("user_version", { simple: true })).toBe(4);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(4);
+      expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
       expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.pragma("journal_mode", { simple: true })).toBe("wal");
       expect(database.pragma("busy_timeout", { simple: true })).toBe(5000);
