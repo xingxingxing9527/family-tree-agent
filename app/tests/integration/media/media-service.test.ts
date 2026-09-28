@@ -1,21 +1,70 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { ManagedMediaService, openSelectedMediaFile } from "../../../src/main/media/media-service";
+import { acquireHashLease } from "../../../src/main/media/media-lease.mjs";
 import { resolveMediaAssetRequest } from "../../../src/main/media/media-protocol";
 
 const roots: string[] = [];
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 const box = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.writeUInt32BE(payload.length + 8); header.write(type, 4); return Buffer.concat([header, payload]); };
-const wav = (): Buffer => { const fmt = Buffer.alloc(16); fmt.writeUInt16LE(1); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(8000, 4); fmt.writeUInt32LE(8000, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(8, 14); const riffChunk = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.write(type); header.writeUInt32LE(payload.length, 4); return Buffer.concat([header, payload]); }; const chunks = Buffer.concat([riffChunk("fmt ", fmt), riffChunk("data", Buffer.from([1]))]); const head = Buffer.alloc(12); head.write("RIFF"); head.writeUInt32LE(chunks.length + 4, 4); head.write("WAVE", 8); return Buffer.concat([head, chunks]); };
-const ogg = (): Buffer => { const packet = Buffer.from("OpusHead\0\0"); const head = Buffer.alloc(27); head.write("OggS"); head[4] = 0; head[5] = 2; head[26] = 1; return Buffer.concat([head, Buffer.from([packet.length]), packet]); };
-const mp4 = (video = false): Buffer => { const hdlr = Buffer.concat([Buffer.alloc(8), Buffer.from(video ? "vide" : "soun")]); return Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", box("trak", box("mdia", box("hdlr", hdlr))))]); };
-const mp4Mixed = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", Buffer.concat([box("trak", box("mdia", box("hdlr", Buffer.concat([Buffer.alloc(8), Buffer.from("soun")])))), box("trak", box("mdia", box("hdlr", Buffer.concat([Buffer.alloc(8), Buffer.from("vide")]))))]))]);
+const box64 = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(16); header.writeUInt32BE(1); header.write(type, 4); header.writeBigUInt64BE(BigInt(payload.length + 16), 8); return Buffer.concat([header, payload]); };
+const boxToEof = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.writeUInt32BE(0); header.write(type, 4); return Buffer.concat([header, payload]); };
+const wav = (): Buffer => { const fmt = Buffer.alloc(16); fmt.writeUInt16LE(1); fmt.writeUInt16LE(1, 2); fmt.writeUInt32LE(8000, 4); fmt.writeUInt32LE(8000, 8); fmt.writeUInt16LE(1, 12); fmt.writeUInt16LE(8, 14); const riffChunk = (type: string, payload: Buffer): Buffer => { const header = Buffer.alloc(8); header.write(type); header.writeUInt32LE(payload.length, 4); return Buffer.concat([header, payload, payload.length & 1 ? Buffer.alloc(1) : Buffer.alloc(0)]); }; const chunks = Buffer.concat([riffChunk("fmt ", fmt), riffChunk("data", Buffer.from([1]))]); const head = Buffer.alloc(12); head.write("RIFF"); head.writeUInt32LE(chunks.length + 4, 4); head.write("WAVE", 8); return Buffer.concat([head, chunks]); };
+const mp3Frame = (header = Buffer.from([0xff, 0xfb, 0x90, 0x64])): Buffer => Buffer.concat([header, Buffer.alloc(417 - header.length, 0x55)]);
+const mp3 = (withId3 = false): Buffer => { const frames = Buffer.concat([mp3Frame(), mp3Frame()]); if (!withId3) return frames; const tag = Buffer.from("abcde"); const header = Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, tag.length]); return Buffer.concat([header, tag, frames]); };
+const oggPage = (input: { headerType: number; serial?: number; sequence: number; segments: number[]; body: Buffer }): Buffer => { const head = Buffer.alloc(27); head.write("OggS"); head[4] = 0; head[5] = input.headerType; head.writeUInt32LE(input.serial ?? 1, 14); head.writeUInt32LE(input.sequence, 18); head[26] = input.segments.length; return Buffer.concat([head, Buffer.from(input.segments), input.body]); };
+const oggPacket = (packet: Buffer, serial = 1): Buffer => oggPage({ headerType: 2, serial, sequence: 0, segments: [packet.length], body: packet });
+const ogg = (): Buffer => oggPacket(Buffer.from("OpusHead\0\0"));
+const continuedOgg = (codec: "opus" | "vorbis"): Buffer => { const prefix = codec === "opus" ? Buffer.from("OpusHead") : Buffer.from("\x01vorbis"); const packet = Buffer.concat([prefix, Buffer.alloc(260 - prefix.length, 7)]); return Buffer.concat([oggPage({ headerType: 2, sequence: 0, segments: [255], body: packet.subarray(0, 255) }), oggPage({ headerType: 1, sequence: 1, segments: [5], body: packet.subarray(255) }), oggPage({ headerType: 0, sequence: 2, segments: [3], body: Buffer.from("abc") })]); };
+const hdlr = (kind: "soun" | "vide"): Buffer => box("hdlr", Buffer.concat([Buffer.alloc(8), Buffer.from(kind)]));
+const track = (kind: "soun" | "vide"): Buffer => box("trak", box("mdia", hdlr(kind)));
+const mp4 = (video = false): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", track(video ? "vide" : "soun"))]);
+const mp4Mixed = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", Buffer.concat([track("soun"), track("vide")]))]);
 const mp4MoovAtEnd = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("free", Buffer.alloc(100, 1)), mp4().subarray(20)]);
-const oggPacket = (packet: Buffer): Buffer => { const head = Buffer.alloc(27); head.write("OggS"); head[4] = 0; head[5] = 2; head[26] = 1; return Buffer.concat([head, Buffer.from([packet.length]), packet]); };
+const mp4With64BitBoxes = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box64("moov", box64("trak", box64("mdia", hdlr("soun"))))]);
+const mp4WithEofMoov = (): Buffer => Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), boxToEof("moov", track("soun"))]);
+const invalidMediaFixtures = (): Array<[string, Buffer]> => {
+  const pendingOpus = Buffer.concat([Buffer.from("OpusHead"), Buffer.alloc(247)]);
+  const malformedHandler = Buffer.concat([box("hdlr", Buffer.alloc(8)), Buffer.from("soun")]);
+  const noHandlerMoov = box("moov", box("trak", box("mdia", box("free", Buffer.alloc(4)))));
+  const mixedOgg = Buffer.concat([ogg(), oggPacket(Buffer.from("\x80theora"), 2)]);
+  const tooManyOggStreams = Buffer.concat(Array.from({ length: 17 }, (_, serial) => oggPacket(Buffer.from("OpusHead\0\0"), serial + 1)));
+  const oversizedBox = Buffer.alloc(16); oversizedBox.writeUInt32BE(1); oversizedBox.write("moov", 4); oversizedBox.writeBigUInt64BE(BigInt(Number.MAX_SAFE_INTEGER) + 1n, 8);
+  const unpaddedWav = Buffer.from(wav().subarray(0, -1)); unpaddedWav.writeUInt32LE(unpaddedWav.length - 8, 4);
+  return [
+    ["video.mp4", mp4(true)],
+    ["mixed.mp4", mp4Mixed()],
+    ["top-level-handler.mp4", Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), hdlr("soun"), noHandlerMoov])],
+    ["wrong-handler-ancestry.mp4", Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("moov", box("trak", hdlr("soun")))])],
+    ["out-of-box-handler.mp4", Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), hdlr("soun"), box("moov", box("trak", box("mdia", malformedHandler)))])],
+    ["trailing-garbage.mp4", Buffer.concat([mp4(), Buffer.from([1, 2, 3, 4])])],
+    ["oversized-box.mp4", Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), oversizedBox])],
+    ["bad-box.mp4", Buffer.from("\0\0\0\x01moov")],
+    ["id3.mp3", Buffer.from("ID3\x04\0\0\0\0\0\0")],
+    ["invalid-id3-size.mp3", Buffer.from([0x49, 0x44, 0x33, 4, 0, 0, 0x80, 0, 0, 0])],
+    ["truncated-frame.mp3", mp3Frame().subarray(0, 200)],
+    ["one-frame.mp3", mp3Frame()],
+    ["incompatible-second-frame.mp3", Buffer.concat([mp3Frame(), mp3Frame(Buffer.from([0xff, 0xf3, 0x80, 0x64]))])],
+    ["sync.mp3", Buffer.concat([Buffer.from([0xff, 0xfb, 0x90, 0x64]), Buffer.alloc(900, 3)])],
+    ["fake.wav", Buffer.from("RIFFxxxxWAVEfmt data")],
+    ["unpadded.wav", unpaddedWav],
+    ["theora.ogg", oggPacket(Buffer.from("\x80theora"))],
+    ["mixed-video.ogg", mixedOgg],
+    ["unknown.ogg", oggPacket(Buffer.from("unknown"))],
+    ["too-many-streams.ogg", tooManyOggStreams],
+    ["broken-continuation.ogg", Buffer.concat([oggPage({ headerType: 2, sequence: 0, segments: [255], body: pendingOpus }), oggPage({ headerType: 0, sequence: 1, segments: [1], body: Buffer.from([0]) })])],
+    ["broken-sequence.ogg", Buffer.concat([ogg(), oggPage({ headerType: 0, sequence: 2, segments: [1], body: Buffer.from([0]) })])],
+    ["broken-serial.ogg", Buffer.concat([ogg(), oggPage({ headerType: 0, serial: 2, sequence: 1, segments: [1], body: Buffer.from([0]) })])],
+    ["truncated.ogg", Buffer.from("OggS\0\x02" + "\0".repeat(20) + "\x01\xff")],
+    ["danger.jpg", Buffer.from("MZ executable")]
+  ];
+};
 
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
@@ -89,6 +138,22 @@ describe("managed media", () => {
     database.close();
   });
 
+  it("parses audio when the selected FileHandle performs partial positional reads", async () => {
+    const { root, database, service } = await setup();
+    const source = join(root, "partial-read.mp3");
+    await writeFile(source, mp3());
+    const selection = await openSelectedMediaFile(source, "workspace-1");
+    const handle = selection.handle;
+    selection.handle = {
+      read: (buffer: Buffer, offset: number, length: number, position: number) => handle.read(buffer, offset, Math.min(length, 3), position),
+      stat: () => handle.stat(),
+      close: () => handle.close()
+    } as FileHandle;
+    try {
+      await expect(service.importMedia({ selection })).resolves.toMatchObject({ ok: true, value: { mimeType: "audio/mpeg" } });
+    } finally { database.close(); }
+  });
+
   it("does not publish a target or row when the selected file mutates during the final copy", async () => {
     const { root, mediaRoot, database } = await setup(); const image = join(root, "mutated.jpg"); await writeFile(image, Buffer.concat([jpeg, Buffer.alloc(100_000, 1)])); let mutated = false;
     const service = new ManagedMediaService(database, "workspace-1", mediaRoot, { afterCopyChunk: async () => { if (!mutated) { mutated = true; await writeFile(image, Buffer.from("MZ changed")); } } });
@@ -116,6 +181,43 @@ describe("managed media", () => {
     const entries = await readdir(join(mediaRoot, first.value.sha256.slice(0, 2))); expect(entries).toEqual([`${first.value.sha256}.jpg`]); other.close(); database.close();
   });
 
+  it("aborts without publishing or registering when its hash lease ownership is lost", async () => {
+    const { root, mediaRoot, database } = await setup();
+    const bytes = Buffer.concat([jpeg, Buffer.alloc(100_000, 9)]);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const image = join(root, "lost-lease.jpg");
+    await writeFile(image, bytes);
+    let copyStarted!: () => void;
+    let resumeCopy!: () => void;
+    const started = new Promise<void>((resolve) => { copyStarted = resolve; });
+    const resume = new Promise<void>((resolve) => { resumeCopy = resolve; });
+    let paused = false;
+    const service = new ManagedMediaService(database, "workspace-1", mediaRoot, {
+      leaseOptions: { maxWaitMs: 1_000, staleMs: 80, heartbeatMs: 10_000, retryMinMs: 5, retryMaxMs: 20 },
+      afterCopyChunk: async () => {
+        if (paused) return;
+        paused = true;
+        copyStarted();
+        await resume;
+      }
+    });
+    const importing = service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") });
+    await started;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const replacement = await acquireHashLease(join(mediaRoot, digest.slice(0, 2)), digest, { maxWaitMs: 1_000, staleMs: 80, heartbeatMs: 20, retryMinMs: 5, retryMaxMs: 20 });
+    resumeCopy();
+
+    try {
+      await expect(importing).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+      expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type='media_asset'").pluck().get()).toBe(0);
+      await expect(readFile(join(mediaRoot, digest.slice(0, 2), `${digest}.jpg`))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      expect(await replacement.release()).toBe(true);
+      database.close();
+    }
+  });
+
   it("registers a verified pre-existing object without overwriting it", async () => {
     const { root, mediaRoot, database, service } = await setup(); const image = join(root, "preexisting.jpg"); await writeFile(image, jpeg); const digest = (await import("node:crypto")).createHash("sha256").update(jpeg).digest("hex"); const dir = join(mediaRoot, digest.slice(0, 2)); await mkdir(dir, { recursive: true }); const target = join(dir, `${digest}.jpg`); await writeFile(target, jpeg);
     const imported = await service.importMedia({ selection: await openSelectedMediaFile(image, "workspace-1") }); expect(imported.ok).toBe(true); expect(await readFile(target)).toEqual(jpeg); expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(1); database.close();
@@ -140,14 +242,26 @@ describe("managed media", () => {
   });
 
   it.each([
-    ["photo.jpg", jpeg, "image/jpeg", "jpg"], ["photo.jpeg", jpeg, "image/jpeg", "jpg"], ["photo.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png", "png"], ["photo.webp", Buffer.from("RIFFxxxxWEBP"), "image/webp", "webp"], ["sound.mp3", Buffer.from([0xff, 0xfb, 0x90, 0x64]), "audio/mpeg", "mp3"], ["sound.wav", wav(), "audio/wav", "wav"], ["opus.ogg", ogg(), "audio/ogg", "ogg"], ["vorbis.ogg", oggPacket(Buffer.from("\x01vorbis\0")), "audio/ogg", "ogg"], ["sound.m4a", mp4(), "audio/mp4", "m4a"], ["sound.mp4", mp4(), "audio/mp4", "m4a"], ["moov-end.mp4", mp4MoovAtEnd(), "audio/mp4", "m4a"]
+    ["photo.jpg", jpeg, "image/jpeg", "jpg"], ["photo.jpeg", jpeg, "image/jpeg", "jpg"], ["photo.png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png", "png"], ["photo.webp", Buffer.from("RIFFxxxxWEBP"), "image/webp", "webp"], ["sound.mp3", mp3(), "audio/mpeg", "mp3"], ["tagged.mp3", mp3(true), "audio/mpeg", "mp3"], ["sound.wav", wav(), "audio/wav", "wav"], ["opus.ogg", ogg(), "audio/ogg", "ogg"], ["vorbis.ogg", oggPacket(Buffer.from("\x01vorbis\0")), "audio/ogg", "ogg"], ["continued-opus.ogg", continuedOgg("opus"), "audio/ogg", "ogg"], ["continued-vorbis.ogg", continuedOgg("vorbis"), "audio/ogg", "ogg"], ["sound.m4a", mp4(), "audio/mp4", "m4a"], ["sound.mp4", mp4(), "audio/mp4", "m4a"], ["moov-end.mp4", mp4MoovAtEnd(), "audio/mp4", "m4a"], ["large-box.mp4", mp4With64BitBoxes(), "audio/mp4", "m4a"], ["eof-moov.mp4", mp4WithEofMoov(), "audio/mp4", "m4a"]
   ])("imports validated %s", async (name, content, mimeType, storedExtension) => {
-    const { root, database, service } = await setup(); const source = join(root, name); await writeFile(source, content); const result = await service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") }); expect(result).toMatchObject({ ok: true, value: { mimeType } }); if (result.ok) expect(result.value.url).toContain(result.value.id); expect(database.prepare("SELECT relative_path FROM media_asset").pluck().get()).toMatch(new RegExp(`\\.${storedExtension}$`)); database.close();
+    const { root, database, service } = await setup();
+    try { const source = join(root, name); await writeFile(source, content); const result = await service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") }); expect(result).toMatchObject({ ok: true, value: { mimeType } }); if (result.ok) expect(result.value.url).toContain(result.value.id); expect(database.prepare("SELECT relative_path FROM media_asset").pluck().get()).toMatch(new RegExp(`\\.${storedExtension}$`)); }
+    finally { database.close(); }
   });
 
-  it("rejects video/mixed/malformed media containers without publishing", async () => {
-    const { root, database, service } = await setup(); const fixtures: Array<[string, Buffer]> = [["video.mp4", mp4(true)], ["mixed.mp4", mp4Mixed()], ["bad-box.mp4", Buffer.from("\0\0\0\x01moov")], ["id3.mp3", Buffer.from("ID3\x04\0\0\0\0\0\0")], ["sync.mp3", Buffer.from([0xff, 0xe0, 0, 0])], ["fake.wav", Buffer.from("RIFFxxxxWAVEfmt data")], ["theora.ogg", oggPacket(Buffer.from("\x80theora"))], ["unknown.ogg", oggPacket(Buffer.from("unknown"))], ["truncated.ogg", Buffer.from("OggS\0\x02" + "\0".repeat(20) + "\x01\xff")], ["danger.jpg", Buffer.from("MZ executable")]];
-    for (const [name, content] of fixtures) { const source = join(root, name); await writeFile(source, content); await expect(service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } }); } database.close();
+  it.each(invalidMediaFixtures())("rejects malformed %s without an asset, audit, or final object", async (name, content) => {
+    const { root, mediaRoot, database, service } = await setup();
+    const storedExtension = (name: string): string => name.endsWith(".mp4") || name.endsWith(".m4a") ? "m4a" : name.slice(name.lastIndexOf(".") + 1);
+    try {
+      const source = join(root, name);
+      await writeFile(source, content);
+      const result = await service.importMedia({ selection: await openSelectedMediaFile(source, "workspace-1") });
+      expect(result, name).toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+      expect(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type='media_asset'").pluck().get()).toBe(0);
+      const digest = createHash("sha256").update(content).digest("hex");
+      await expect(readFile(join(mediaRoot, digest.slice(0, 2), `${digest}.${storedExtension(name)}`))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { database.close(); }
   });
 
   it("serves only registered active assets through the app-media resolver", async () => {
