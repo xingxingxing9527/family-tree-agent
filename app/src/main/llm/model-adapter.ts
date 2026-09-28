@@ -1,5 +1,5 @@
 import type { PersonCandidate } from "../../shared/contracts.js";
-import type { ConversationMutationDraft, ModelTurn, ToolResult } from "../../shared/chat.js";
+import type { ConversationMutationDraft, ModelContinuation, ModelTurn, ToolResult } from "../../shared/chat.js";
 
 export interface ModelAdapter {
   extractDraft(input: { text: string; candidatePeople: PersonCandidate[] }): Promise<ConversationMutationDraft>;
@@ -8,6 +8,7 @@ export interface ModelAdapter {
     viewpointId: string;
     selectedPersonId: string | null;
     toolResults: ToolResult[];
+    continuation?: ModelContinuation;
   }): Promise<ModelTurn>;
 }
 

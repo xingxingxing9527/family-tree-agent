@@ -13,6 +13,7 @@ import { DraftService } from "../application/chat/draft-service.js";
 import { ConversationService } from "../application/chat/conversation-service.js";
 import type { ModelAdapter } from "../llm/model-adapter.js";
 import type { OpenWorkspaceContext, OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
+import { selectRelevantCandidates } from "../application/chat/context-minimizer.js";
 
 type Operation = "extract" | "ask";
 interface Binding { workspaceId: string; sessionId: string; operation: Operation; payload: unknown; }
@@ -72,8 +73,8 @@ export class ControlledChatGateway {
     catch { return failure("MODEL_UNAVAILABLE", "The online model is unavailable"); }
   }
 
-  async confirm(input: { draftId: string; selectedChangeIds: string[]; expectedVersions: Record<string, number> }): Promise<AppResult<ConversationConfirmationReceipt>> {
-    try { return { ok: true, value: this.drafts.confirm(input.draftId, input.selectedChangeIds, input.expectedVersions) }; }
+  async confirm(input: { draftId: string; draftVersion: number; selectedChangeIds: string[]; expectedVersions: Record<string, number>; acknowledgedWarningCodes: string[] }): Promise<AppResult<ConversationConfirmationReceipt>> {
+    try { return { ok: true, value: this.drafts.confirm(input.draftId, input.draftVersion, input.selectedChangeIds, input.expectedVersions, input.acknowledgedWarningCodes) }; }
     catch (error) { return failure("VALIDATION", error instanceof Error ? error.message.slice(0, 500) : "Draft confirmation failed"); }
   }
 
@@ -105,7 +106,7 @@ export class WorkspaceChatGateway implements ChatGateway {
     try {
       const key = await this.vault.readKey();
       if (!key) return failure("MODEL_UNAVAILABLE", "The online model is unavailable");
-      const modelDraft = await this.modelFactory(key).extractDraft(input.payload);
+      const modelDraft = await this.modelFactory(key).extractDraft({ text: input.payload.text, candidatePeople: selectRelevantCandidates(input.payload.text, input.payload.candidatePeople) });
       return { ok: true, value: this.getRuntime(workspace).drafts.stage(modelDraft) };
     } catch { return failure("MODEL_UNAVAILABLE", "The online model is unavailable"); }
   }
@@ -125,7 +126,7 @@ export class WorkspaceChatGateway implements ChatGateway {
   async confirm(input: Parameters<ChatGateway["confirm"]>[0]): ReturnType<ChatGateway["confirm"]> {
     const workspace = this.workspaces.getOpenWorkspaceContext();
     if (!workspace) return failure("NOT_FOUND", "No workspace is open");
-    try { return { ok: true, value: this.getRuntime(workspace).drafts.confirm(input.draftId, input.selectedChangeIds, input.expectedVersions) }; }
+    try { return { ok: true, value: this.getRuntime(workspace).drafts.confirm(input.draftId, input.draftVersion, input.selectedChangeIds, input.expectedVersions, input.acknowledgedWarningCodes) }; }
     catch (error) { return failure("VALIDATION", error instanceof Error ? error.message.slice(0, 500) : "Draft confirmation failed"); }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { minimizeConversationContext } from "../../../src/main/application/chat/context-minimizer";
+import { minimizeConversationContext, selectRelevantCandidates } from "../../../src/main/application/chat/context-minimizer";
 
 describe("minimizeConversationContext", () => {
   it("keeps only the current question, identifiers, needed candidates, and bounded tool results", () => {
@@ -48,7 +48,16 @@ describe("minimizeConversationContext", () => {
     })).toThrow(/question/i);
     expect(() => minimizeConversationContext({
       question: "q", viewpointId: "v", selectedPersonId: null, neededCandidateIds: [], candidatePeople: [],
-      toolResults: [{ callId: "c", name: "search_wiki", arguments: { query: "q", limit: 5 }, output: "x".repeat(32_001) }]
+      toolResults: [{ callId: "c", name: "search_wiki", arguments: { query: "q", limit: 5 }, output: [{ wikiEntryId: "w", title: "t", excerpt: "x".repeat(32_001), sourceIds: [] }] }]
     })).toThrow(/tool result/i);
+  });
+
+  it("selects only candidates named by current text or identifiers", () => {
+    const candidates = [
+      { id: "p1", displayName: "张国强", aliases: ["国强"], gender: "male", birth: null, parentHints: [] },
+      { id: "p2", displayName: "无关人物", aliases: [], gender: "unknown", birth: null, parentHints: [] }
+    ] as never;
+    expect(selectRelevantCandidates("请更新国强", candidates, ["p1"])).toEqual([candidates[0]]);
+    expect(selectRelevantCandidates("请更新张国强", candidates, [])).toEqual([candidates[0]]);
   });
 });

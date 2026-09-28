@@ -9,6 +9,7 @@ import { FactQueries } from "../facts/fact-queries.js";
 import type { ModelAdapter } from "../../llm/model-adapter.js";
 import { validateMarriageFact, validateParentChildFact } from "../../domain/validation/fact-validator.js";
 import { validatePartialDate, type DomainIssue } from "../../domain/validation/partial-date-validator.js";
+import { selectRelevantCandidates } from "./context-minimizer.js";
 
 type DraftStatus = "active" | "superseded" | "confirmed" | "invalidated";
 interface InternalChange {
@@ -48,10 +49,12 @@ export class DraftService {
 
   async stageFromText(text: string, candidatePeople: PersonCandidate[]): Promise<ConversationDraftPreview> {
     if (!this.model) throw new DraftValidationError("MODEL_UNAVAILABLE", "No model adapter is configured");
-    return this.stage(await this.model.extractDraft({ text, candidatePeople }));
+    return this.stage(await this.model.extractDraft({ text, candidatePeople: selectRelevantCandidates(text, candidatePeople) }));
   }
 
   stage(draft: ConversationMutationDraft, version = 1): ConversationDraftPreview {
+    this.evictTerminalDrafts();
+    this.ensureUniqueReferences(draft);
     const queries = new FactQueries(this.database, this.workspaceId);
     const existing = queries.listPeople();
     const id = randomUUID();
@@ -59,13 +62,15 @@ export class DraftService {
     const warnings: Array<{ code: string; message: string }> = [];
     const conflicts: Array<{ code: string; message: string }> = [];
     const unresolved = draft.unresolvedReferences.map((entry) => ({ ...entry, candidatePersonIds: [...entry.candidatePersonIds] }));
-    const resolved = new Map<string, { entityId: string; dependencyId?: string }>();
+    const resolved = new Map<string, { entityId: string; dependencyId?: string; birth: ConversationMutationDraft["candidatePeople"][number]["birth"] }>();
     const addIssues = (issues: DomainIssue[], target: Array<{ code: string; message: string }>): void => {
       for (const entry of issues) if (!target.some((known) => known.code === entry.code && known.message === entry.message)) target.push({ code: entry.code, message: entry.message });
     };
 
     for (const candidate of draft.candidatePeople) {
-      for (const date of [candidate.birth, candidate.death]) if (date) addIssues(validatePartialDate(date).errors, conflicts);
+      const stated = new Set(candidate.statedFields);
+      if (stated.size !== candidate.statedFields.length) throw new DraftValidationError("DUPLICATE_FIELD_INTENT", "Person field intents must be unique");
+      for (const [field, date] of [["birth", candidate.birth], ["death", candidate.death]] as const) if (stated.has(field) && date) addIssues(validatePartialDate(date).errors, conflicts);
       let match = candidate.matchedPersonId ? existing.find((person) => person.id === candidate.matchedPersonId) : undefined;
       if (candidate.matchedPersonId && !match) {
         unresolved.push({ reference: candidate.referenceId, candidatePersonIds: [], reason: "The selected person no longer exists" });
@@ -81,9 +86,10 @@ export class DraftService {
         match = matches[0];
       }
       if (!match) {
+        if (!stated.has("displayName") || !stated.has("gender")) throw new DraftValidationError("MISSING_IDENTITY", "A new person requires explicit display name and gender fields");
         const entityId = randomUUID();
         const changeId = randomUUID();
-        resolved.set(candidate.referenceId, { entityId, dependencyId: changeId });
+        resolved.set(candidate.referenceId, { entityId, dependencyId: changeId, birth: candidate.birth });
         internal.push({
           public: {
             id: changeId, kind: "create", entityType: "person", entityId, summary: `创建人物 ${candidate.displayName}`, dependsOnChangeIds: [],
@@ -101,23 +107,31 @@ export class DraftService {
         });
         continue;
       }
-      resolved.set(candidate.referenceId, { entityId: match.id });
       const aliases = queries.listAliases(match.id).map((alias) => alias.name).sort();
-      const changed = match.displayName !== candidate.displayName || match.gender !== candidate.gender
-        || !equalJson(match.birth, candidate.birth) || !equalJson(match.death, candidate.death)
-        || match.notes !== candidate.notes || !equalJson(aliases, [...candidate.aliases].sort());
+      const merged = {
+        displayName: stated.has("displayName") ? candidate.displayName : match.displayName,
+        aliases: stated.has("aliases") ? [...candidate.aliases] : aliases,
+        gender: stated.has("gender") ? candidate.gender : match.gender,
+        birth: stated.has("birth") ? candidate.birth : match.birth,
+        death: stated.has("death") ? candidate.death : match.death,
+        notes: stated.has("notes") ? candidate.notes : match.notes
+      };
+      resolved.set(candidate.referenceId, { entityId: match.id, birth: merged.birth });
+      const changed = match.displayName !== merged.displayName || match.gender !== merged.gender
+        || !equalJson(match.birth, merged.birth) || !equalJson(match.death, merged.death)
+        || match.notes !== merged.notes || !equalJson(aliases, [...merged.aliases].sort());
       if (changed) {
         const changeId = randomUUID();
         const fieldChanges = [
-          ["displayName", match.displayName, candidate.displayName], ["aliases", aliases, candidate.aliases], ["gender", match.gender, candidate.gender],
-          ["birth", match.birth, candidate.birth], ["death", match.death, candidate.death], ["notes", match.notes, candidate.notes]
-        ].filter(([, before, after]) => !equalJson(before, after)).map(([field, before, after]) => ({ field: field as string, before, after }));
+          ["displayName", match.displayName, merged.displayName], ["aliases", aliases, merged.aliases], ["gender", match.gender, merged.gender],
+          ["birth", match.birth, merged.birth], ["death", match.death, merged.death], ["notes", match.notes, merged.notes]
+        ].filter(([field, before, after]) => stated.has(field as never) && !equalJson(before, after)).map(([field, before, after]) => ({ field: field as string, before, after }));
         internal.push({
           public: { id: changeId, kind: "update", entityType: "person", entityId: match.id, summary: `更新人物 ${candidate.displayName}`, dependsOnChangeIds: [], fieldChanges },
           expectedVersion: match.rowVersion,
           command: (versions) => ({
             type: "person.update", personId: match!.id, expectedVersion: versions[match!.id]!,
-            patch: { displayName: candidate.displayName, aliases: candidate.aliases, gender: candidate.gender, birth: candidate.birth, death: candidate.death, notes: candidate.notes },
+            patch: Object.fromEntries(fieldChanges.map((change) => [change.field, change.after])),
             source: this.source(id, changeId, draft, "对话修订")
           })
         });
@@ -128,7 +142,7 @@ export class DraftService {
     const existingEdges = queries.listParentChild().map((edge) => ({ parentId: edge.parentId, childId: edge.childId }));
     const prospectiveFact = (reference: string) => {
       const candidate = candidateByRef.get(reference); const resolution = resolved.get(reference);
-      return candidate && resolution ? { id: resolution.entityId, workspaceId: this.workspaceId, birth: candidate.birth } : null;
+      return candidate && resolution ? { id: resolution.entityId, workspaceId: this.workspaceId, birth: resolution.birth } : null;
     };
     const plannedEdges = [...existingEdges];
     for (const relation of draft.parentChildFacts) {
@@ -190,16 +204,24 @@ export class DraftService {
   revise(draftId: string, replacement: ConversationMutationDraft): ConversationDraftPreview {
     const current = this.requireDraft(draftId);
     this.ensureActive(current);
+    if (Date.parse(current.preview.expiresAt) < this.now()) throw new DraftValidationError("EXPIRED", "Draft has expired");
+    const revised = this.stage(replacement, current.preview.version + 1);
     current.status = "superseded";
-    return this.stage(replacement, current.preview.version + 1);
+    return revised;
   }
 
-  confirm(draftId: string, selectedChangeIds: string[], expectedVersions: Readonly<Record<string, number>>): ConversationConfirmationReceipt {
+  confirm(draftId: string, draftVersion: number, selectedChangeIds: string[], expectedVersions: Readonly<Record<string, number>>, acknowledgedWarningCodes: string[]): ConversationConfirmationReceipt {
     const stored = this.requireDraft(draftId);
     this.ensureActive(stored);
     if (Date.parse(stored.preview.expiresAt) < this.now()) throw new DraftValidationError("EXPIRED", "Draft has expired");
+    if (stored.preview.version !== draftVersion) throw new DraftValidationError("VERSION_CONFLICT", "Draft version does not match the confirmation");
     if (stored.preview.unresolvedReferences.length > 0) throw new DraftValidationError("UNRESOLVED_REFERENCES", "Draft contains unresolved references");
     if (stored.preview.conflicts.length > 0) throw new DraftValidationError("CONFLICT", "Draft contains conflicts");
+    const requiredWarnings = [...new Set(stored.preview.warnings.map((warning) => warning.code))].sort();
+    const acknowledged = [...new Set(acknowledgedWarningCodes)].sort();
+    if (acknowledged.length !== acknowledgedWarningCodes.length || !equalJson(requiredWarnings, acknowledged)) {
+      throw new DraftValidationError("WARNING_ACK_REQUIRED", "Every draft warning must be explicitly acknowledged");
+    }
     const selected = new Set(selectedChangeIds);
     if (selected.size === 0) throw new DraftValidationError("INVALID_SELECTION", "Select at least one change to confirm");
     if (selected.size !== selectedChangeIds.length || [...selected].some((id) => !stored.changes.has(id))) throw new DraftValidationError("INVALID_SELECTION", "Unknown or duplicate change selection");
@@ -218,7 +240,7 @@ export class DraftService {
       const changedEntityIds: string[] = [];
       for (const change of stored.changes.values()) {
         if (!selected.has(change.public.id)) continue;
-        changedEntityIds.push(...service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: true }).changedEntityIds);
+        changedEntityIds.push(...service.executeInTransaction(ctx, change.command(expectedVersions), { confirmWarnings: requiredWarnings.length > 0 }).changedEntityIds);
       }
       return { operationGroupId: ctx.operationGroupId, changedEntityIds };
     });
@@ -242,5 +264,15 @@ export class DraftService {
   private source(draftId: string, changeId: string, draft: ConversationMutationDraft, fallback: string, sourceRef?: string | null) {
     const source = sourceRef ? draft.sources.find((entry) => entry.referenceId === sourceRef) : undefined;
     return { sourceKey: `conversation:${draftId}:${changeId}`, title: source?.title ?? fallback, kind: source?.kind ?? "conversation", citation: source?.citation ?? undefined };
+  }
+
+  private ensureUniqueReferences(draft: ConversationMutationDraft): void {
+    for (const [kind, values] of [["candidate", draft.candidatePeople.map((entry) => entry.referenceId)], ["source", draft.sources.map((entry) => entry.referenceId)]] as const) {
+      if (new Set(values).size !== values.length) throw new DraftValidationError("DUPLICATE_REFERENCE", `Duplicate ${kind} reference IDs are not allowed`);
+    }
+  }
+
+  private evictTerminalDrafts(): void {
+    for (const [id, draft] of this.drafts) if (draft.status !== "active" || Date.parse(draft.preview.expiresAt) < this.now()) this.drafts.delete(id);
   }
 }

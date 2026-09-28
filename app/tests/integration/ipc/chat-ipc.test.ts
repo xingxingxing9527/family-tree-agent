@@ -26,6 +26,18 @@ describe("chat IPC", () => {
     })).resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
     expect(revise).not.toHaveBeenCalled();
   });
+
+  it("requires draft-bound warning acknowledgement on confirmation IPC", async () => {
+    const confirm = vi.fn().mockResolvedValue({ ok: true, value: {} });
+    const gateway = { authorize: vi.fn(), stageMutation: vi.fn(), ask: vi.fn(), confirm, revise: vi.fn() } as unknown as ChatGateway;
+    const handlers = new Map<string, (event: { sender: { id: number } }, input: unknown) => Promise<unknown>>();
+    registerChatIpc({ handle: (channel, handler) => handlers.set(channel, handler as never) }, () => 7, gateway);
+    await expect(handlers.get(CHAT_CHANNELS.confirm)!({ sender: { id: 7 } }, { draftId: "d", selectedChangeIds: ["c"], expectedVersions: {} }))
+      .resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    const input = { draftId: "d", draftVersion: 2, selectedChangeIds: ["c"], expectedVersions: {}, acknowledgedWarningCodes: ["W"] };
+    await handlers.get(CHAT_CHANNELS.confirm)!({ sender: { id: 7 } }, input);
+    expect(confirm).toHaveBeenCalledWith(input);
+  });
 });
 
 describe("model settings IPC", () => {

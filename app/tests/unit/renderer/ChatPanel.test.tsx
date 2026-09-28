@@ -51,6 +51,25 @@ describe("controlled chat UI", () => {
     expect(screen.getByRole("button", { name: "确认写入" })).toBeEnabled();
   });
 
+  it("renders warnings and conflicts and requires explicit warning acknowledgement", () => {
+    const onConfirm = vi.fn();
+    const base: ConversationDraftPreview = {
+      id: "draft-warning", workspaceId: "workspace", version: 3, expiresAt: "2099-01-01T00:00:00.000Z",
+      changes: [{ id: "change", kind: "create", entityType: "person", entityId: "person", summary: "创建人物", dependsOnChangeIds: [], fieldChanges: [] }],
+      creates: 1, updates: 0, warnings: [{ code: "PARENT_AGE_OUTLIER", message: "年龄差异常" }], conflicts: [], unresolvedReferences: []
+    };
+    const { rerender } = render(<MutationDraftPreview preview={base} onConfirm={onConfirm} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("年龄差异常");
+    expect(screen.getByRole("button", { name: "确认写入" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /已阅读并确认/ }));
+    fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
+    expect(onConfirm).toHaveBeenCalledWith(["change"], { draftVersion: 3, acknowledgedWarningCodes: ["PARENT_AGE_OUTLIER"] });
+
+    rerender(<MutationDraftPreview preview={{ ...base, id: "conflict", conflicts: [{ code: "SELF_RELATION", message: "不能和自己结婚" }] }} onConfirm={onConfirm} />);
+    expect(screen.getByText(/不能和自己结婚/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "确认写入" })).not.toBeInTheDocument();
+  });
+
   it("resets selected changes when editing produces a new immutable draft version", () => {
     const onConfirm = vi.fn();
     const preview: ConversationDraftPreview = {
@@ -61,7 +80,7 @@ describe("controlled chat UI", () => {
     const { rerender } = render(<MutationDraftPreview preview={preview} onConfirm={onConfirm} />);
     rerender(<MutationDraftPreview preview={{ ...preview, id: "draft-2", version: 2, changes: [{ ...preview.changes[0]!, id: "change-2", entityId: "person-2", summary: "创建人物 二" }] }} onConfirm={onConfirm} />);
     fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
-    expect(onConfirm).toHaveBeenCalledWith(["change-2"]);
+    expect(onConfirm).toHaveBeenCalledWith(["change-2"], { draftVersion: 2, acknowledgedWarningCodes: [] });
   });
 
   it("saves a key without ever rendering its stored value", async () => {

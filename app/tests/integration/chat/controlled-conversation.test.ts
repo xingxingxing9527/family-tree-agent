@@ -108,4 +108,35 @@ describe("controlled conversational model boundary", () => {
     });
     expect(model.continueWithTools.mock.calls[1]![0].toolResults[0]).toMatchObject({ callId: "call-1", name: "search_people", output: [] });
   });
+
+  it("rejects terminal answers without deterministic tool evidence", async () => {
+    const model = { extractDraft: vi.fn(), continueWithTools: vi.fn().mockResolvedValue({ answer: "编造答案", toolCalls: [] }) };
+    await expect(new ConversationService(model, new QueryToolRegistry(database, workspaceId)).ask({ question: "q", viewpointId: "v", selectedPersonId: null }))
+      .rejects.toThrow(/evidence|tool/i);
+  });
+
+  it("bounds calls per response, duplicate call IDs, and cumulative calls", async () => {
+    const many = Array.from({ length: 5 }, (_, index) => ({ callId: `call-${index}`, name: "search_people", arguments: { query: "张", limit: 1 } }));
+    const duplicate = [
+      { callId: "same", name: "search_people", arguments: { query: "张", limit: 1 } },
+      { callId: "same", name: "search_people", arguments: { query: "李", limit: 1 } }
+    ];
+    for (const toolCalls of [many, duplicate]) {
+      const model = { extractDraft: vi.fn(), continueWithTools: vi.fn().mockResolvedValue({ answer: null, toolCalls }) };
+      await expect(new ConversationService(model as never, new QueryToolRegistry(database, workspaceId)).ask({ question: "q", viewpointId: "v", selectedPersonId: null }))
+        .rejects.toThrow(/call|duplicate|limit/i);
+    }
+    const four = (offset: number) => Array.from({ length: 4 }, (_, index) => ({ callId: `call-${offset + index}`, name: "search_people", arguments: { query: "张", limit: 1 } }));
+    const cumulative = { extractDraft: vi.fn(), continueWithTools: vi.fn()
+      .mockResolvedValueOnce({ answer: null, toolCalls: four(0) })
+      .mockResolvedValueOnce({ answer: null, toolCalls: four(4) })
+      .mockResolvedValueOnce({ answer: null, toolCalls: [{ callId: "call-8", name: "search_people", arguments: { query: "张", limit: 1 } }] }) };
+    await expect(new ConversationService(cumulative as never, new QueryToolRegistry(database, workspaceId), { maxTurns: 4 }).ask({ question: "q", viewpointId: "v", selectedPersonId: null }))
+      .rejects.toThrow(/limit/i);
+
+    const contextModel = { extractDraft: vi.fn(), continueWithTools: vi.fn().mockResolvedValue({ answer: null, toolCalls: four(20) }) };
+    const largeRegistry = { tools: { search_people: () => [{ id: "p", displayName: "x".repeat(20_000), aliases: [], gender: "unknown", birth: null, parentHints: [] }] } };
+    await expect(new ConversationService(contextModel as never, largeRegistry as never).ask({ question: "q", viewpointId: "v", selectedPersonId: null }))
+      .rejects.toThrow(/context|size/i);
+  });
 });

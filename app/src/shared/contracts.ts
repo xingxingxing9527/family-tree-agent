@@ -366,7 +366,7 @@ export interface DesktopApi {
     authorize(input: { sessionId: string; operation: "extract"; payload: { text: string; candidatePeople: PersonCandidate[] } } | { sessionId: string; operation: "ask"; payload: { question: string; viewpointId: string; selectedPersonId: string | null } }): Promise<AppResult<{ authorizationToken: string; expiresAt: string }>>;
     stageMutation(input: { sessionId: string; authorizationToken: string; payload: { text: string; candidatePeople: PersonCandidate[] } }): Promise<AppResult<ConversationDraftPreview>>;
     ask(input: { sessionId: string; authorizationToken: string; payload: { question: string; viewpointId: string; selectedPersonId: string | null } }): Promise<AppResult<ConversationAnswer>>;
-    confirm(input: { draftId: string; selectedChangeIds: string[]; expectedVersions: Record<string, number> }): Promise<AppResult<ConversationConfirmationReceipt>>;
+    confirm(input: { draftId: string; draftVersion: number; selectedChangeIds: string[]; expectedVersions: Record<string, number>; acknowledgedWarningCodes: string[] }): Promise<AppResult<ConversationConfirmationReceipt>>;
     revise(input: { draftId: string; replacement: ConversationMutationDraft }): Promise<AppResult<ConversationDraftPreview>>;
   };
   modelSettings: {

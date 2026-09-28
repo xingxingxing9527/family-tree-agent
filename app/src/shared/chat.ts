@@ -3,6 +3,7 @@ import type { PersonCandidate, RelationshipResultDto } from "./contracts.js";
 
 const boundedId = z.string().trim().min(1).max(200);
 const boundedText = z.string().max(4_000);
+export const conversationPersonFieldSchema = z.enum(["displayName", "aliases", "gender", "birth", "death", "notes"]);
 const partialDateSchema = z.object({
   calendar: z.enum(["solar", "lunar"]), year: z.number().int().min(1), month: z.number().int().min(1).max(12),
   day: z.number().int().min(1).max(31).nullable(), leapMonth: z.boolean(), precision: z.enum(["month", "day"])
@@ -10,6 +11,7 @@ const partialDateSchema = z.object({
 
 export const conversationPersonSchema = z.object({
   referenceId: boundedId,
+  statedFields: z.array(conversationPersonFieldSchema).max(6),
   displayName: z.string().trim().min(1).max(200),
   aliases: z.array(z.string().trim().min(1).max(200)).max(50),
   gender: z.enum(["male", "female", "unknown"]),
@@ -45,11 +47,12 @@ export const conversationMutationDraftSchema = z.object({
 
 export type ConversationMutationDraft = z.infer<typeof conversationMutationDraftSchema>;
 
-export const modelAnswerSchema = z.object({ answer: boundedText }).strict();
+export const modelAnswerSchema = z.object({ answer: boundedText.trim().min(1) }).strict();
 export type QueryToolName = "search_people" | "get_person" | "list_relatives" | "calculate_relationship" | "summarize_lineage" | "search_wiki";
 export interface ToolResult { callId: string; name: QueryToolName; arguments: unknown; output: unknown; }
 export interface ModelToolCall { callId: string; name: QueryToolName; arguments: unknown; }
-export interface ModelTurn { answer: string | null; toolCalls: ModelToolCall[]; }
+export interface ModelContinuation { provider: "openai-responses"; items: unknown[]; }
+export interface ModelTurn { answer: string | null; toolCalls: ModelToolCall[]; continuation?: ModelContinuation; }
 
 export interface MinimizedConversationContext {
   question: string;
@@ -110,6 +113,10 @@ export const disclosureRequestSchema = z.discriminatedUnion("operation", [
 export const stageMutationRequestSchema = z.object({ sessionId: boundedId, authorizationToken: boundedId, payload: extractPayloadSchema }).strict();
 export const askRequestSchema = z.object({ sessionId: boundedId, authorizationToken: boundedId, payload: askPayloadSchema }).strict();
 export const confirmDraftRequestSchema = z.object({
-  draftId: boundedId, selectedChangeIds: z.array(boundedId).max(500), expectedVersions: z.record(boundedId, z.number().int().min(1))
+  draftId: boundedId,
+  draftVersion: z.number().int().min(1),
+  selectedChangeIds: z.array(boundedId).max(500),
+  expectedVersions: z.record(boundedId, z.number().int().min(1)),
+  acknowledgedWarningCodes: z.array(z.string().trim().min(1).max(200)).max(100)
 }).strict();
 export const reviseDraftRequestSchema = z.object({ draftId: boundedId, replacement: conversationMutationDraftSchema }).strict();
