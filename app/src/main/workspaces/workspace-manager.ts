@@ -11,7 +11,7 @@ const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "PATH_DENIED
 
 export class WorkspaceManager {
   private readonly index: WorkspaceIndex;
-  private openWorkspaceContext: { workspaceId: string; databasePath: string } | null = null;
+  private openWorkspaceContext: { workspaceId: string; databasePath: string; mediaPath: string } | null = null;
   constructor(private readonly root: string) { this.index = new WorkspaceIndex(root); }
   async list(): Promise<AppResult<WorkspaceSummary[]>> { try { return { ok: true, value: await this.index.read() }; } catch { return failure("INTERNAL", "Unable to list workspaces"); } }
   async create(input: { name: string }): Promise<AppResult<WorkspaceSummary>> {
@@ -52,11 +52,11 @@ export class WorkspaceManager {
         database.close();
       }
       const updated = { ...workspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() }; await this.index.write(workspaces.map((entry) => entry.id === updated.id ? updated : entry));
-      this.openWorkspaceContext = { workspaceId: updated.id, databasePath: paths.database }; return { ok: true, value: updated };
+      this.openWorkspaceContext = { workspaceId: updated.id, databasePath: paths.database, mediaPath: paths.media }; return { ok: true, value: updated };
     } catch { return failure("INTERNAL", "Unable to open workspace", { id: input.id }); }
   }
   async close(): Promise<AppResult<null>> { this.openWorkspaceContext = null; return { ok: true, value: null }; }
-  getOpenWorkspaceContext(): { workspaceId: string; databasePath: string } | null {
+  getOpenWorkspaceContext(): { workspaceId: string; databasePath: string; mediaPath: string } | null {
     return this.openWorkspaceContext ? { ...this.openWorkspaceContext } : null;
   }
   private async createFiles(paths: WorkspacePaths, summary: WorkspaceSummary): Promise<void> {

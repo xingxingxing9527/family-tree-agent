@@ -36,6 +36,18 @@ const desktopApi: DesktopApi = {
     canUnmerge: (input) => ipcRenderer.invoke("merges:can-unmerge", input),
     unmerge: (input) => ipcRenderer.invoke("merges:unmerge", input)
   },
+  media: {
+    select: () => ipcRenderer.invoke("media:select", {}),
+    import: (input) => ipcRenderer.invoke("media:import", input),
+    attach: (input) => ipcRenderer.invoke("media:attach", input),
+    listForPerson: (input) => ipcRenderer.invoke("media:list-for-person", input)
+  },
+  wiki: {
+    create: (input) => ipcRenderer.invoke("wiki:create", input),
+    update: (input) => ipcRenderer.invoke("wiki:update", input),
+    remove: (input) => ipcRenderer.invoke("wiki:remove", input),
+    get: (input) => ipcRenderer.invoke("wiki:get", input)
+  },
   query: {
     searchPeople: (input) => ipcRenderer.invoke("query:search-people", input),
     getPerson: (input) => ipcRenderer.invoke("query:get-person", input),

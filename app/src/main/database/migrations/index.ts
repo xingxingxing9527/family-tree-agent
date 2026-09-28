@@ -1,6 +1,7 @@
 import type { WorkspaceDatabase } from "../open-database.js";
 import { initialSchemaMigration } from "./001-initial-schema.js";
 import { mergeHistoryMigration } from "./002-merge-history.js";
+import { wikiFtsMigration } from "./003-wiki-fts.js";
 
 interface Migration {
   version: number;
@@ -8,7 +9,7 @@ interface Migration {
   sql: string;
 }
 
-const migrations: readonly Migration[] = [initialSchemaMigration, mergeHistoryMigration];
+const migrations: readonly Migration[] = [initialSchemaMigration, mergeHistoryMigration, wikiFtsMigration];
 
 export function applyMigrations(database: WorkspaceDatabase): number {
   database.exec("BEGIN IMMEDIATE");

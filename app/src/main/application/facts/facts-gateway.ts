@@ -25,6 +25,7 @@ import type { FactsGateway } from "../../ipc/facts-ipc.js";
 export interface OpenWorkspaceContext {
   workspaceId: string;
   databasePath: string;
+  mediaPath?: string;
 }
 
 export interface OpenWorkspaceContextProvider {

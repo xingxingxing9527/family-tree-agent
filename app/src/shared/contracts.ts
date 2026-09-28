@@ -174,6 +174,40 @@ export interface WikiSearchHit {
   sourceIds: string[];
 }
 
+export interface MediaAssetReadModel {
+  id: string;
+  fileName: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "audio/mpeg" | "audio/wav" | "audio/mp4" | "audio/ogg";
+  byteSize: number;
+  sha256: string;
+  url: string;
+  caption?: string | null;
+}
+
+export interface WikiEntryReadModel {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  personIds: string[];
+  sourceIds: string[];
+  rowVersion: number;
+}
+
+export interface MediaApi {
+  select(): Promise<AppResult<{ fileToken: string; fileName: string }>>;
+  import(input: { fileToken: string }): Promise<AppResult<MediaAssetReadModel>>;
+  attach(input: { mediaAssetId: string; personId: string; caption?: string }): Promise<AppResult<null>>;
+  listForPerson(input: { personId: string }): Promise<AppResult<MediaAssetReadModel[]>>;
+}
+
+export interface WikiApi {
+  create(input: { title: string; body: string; personIds: string[]; sourceIds: string[] }): Promise<AppResult<WikiEntryReadModel>>;
+  update(input: { wikiEntryId: string; title: string; body: string; personIds: string[]; sourceIds: string[]; expectedVersion: number }): Promise<AppResult<WikiEntryReadModel>>;
+  remove(input: { wikiEntryId: string; expectedVersion: number }): Promise<AppResult<null>>;
+  get(input: { wikiEntryId: string }): Promise<AppResult<WikiEntryReadModel>>;
+}
+
 export interface QueryApi {
   searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
@@ -324,5 +358,7 @@ export interface DesktopApi {
   };
   imports: ImportApi;
   merges: MergeApi;
+  media: MediaApi;
+  wiki: WikiApi;
   query: QueryApi;
 }

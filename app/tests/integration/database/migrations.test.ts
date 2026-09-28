@@ -12,16 +12,16 @@ describe("database migrations", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  it("migrates an empty database to version 2 exactly once", async () => {
+  it("migrates an empty database to version 3 exactly once", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
     roots.push(root);
     const database = openDatabase(join(root, "genealogy.sqlite"));
 
     try {
-      expect(applyMigrations(database)).toBe(2);
-      expect(applyMigrations(database)).toBe(2);
-      expect(database.pragma("user_version", { simple: true })).toBe(2);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(2);
+      expect(applyMigrations(database)).toBe(3);
+      expect(applyMigrations(database)).toBe(3);
+      expect(database.pragma("user_version", { simple: true })).toBe(3);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(3);
       expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.pragma("journal_mode", { simple: true })).toBe("wal");
       expect(database.pragma("busy_timeout", { simple: true })).toBe(5000);
@@ -55,7 +55,7 @@ describe("database migrations", () => {
       "audit_log", "id_redirect", "import_identity", "lineage", "lineage_membership",
       "marriage", "media_asset", "media_person", "merge_record", "operation_group",
       "parent_child", "person", "person_alias", "schema_migrations", "source",
-      "wiki_entry", "wiki_person", "workspace_meta"
+      "wiki_entry", "wiki_fts", "wiki_fts_config", "wiki_fts_content", "wiki_fts_data", "wiki_fts_docsize", "wiki_fts_idx", "wiki_person", "wiki_source", "workspace_meta"
     ]);
 
     const now = new Date().toISOString();
