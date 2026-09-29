@@ -288,10 +288,11 @@ describe("WorkspaceManager", () => {
     await expect(index.read()).resolves.toEqual([valid]);
   });
 
-  it("uses operation-unique index publications under concurrent writes", async () => {
+  it("serializes cross-instance index publications in invocation order", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-workspaces-"));
     roots.push(root);
-    const index = new WorkspaceIndex(root);
+    const firstPublisher = new WorkspaceIndex(root);
+    const secondPublisher = new WorkspaceIndex(root);
     const summary = (ordinal: number) => ({
       id: `${ordinal}1111111-1111-4111-8111-111111111111`,
       name: `Family ${ordinal}`,
@@ -302,8 +303,8 @@ describe("WorkspaceManager", () => {
     });
     const first = summary(1);
     const second = summary(2);
-    await expect(Promise.all([index.write([first]), index.write([second])])).resolves.toEqual([undefined, undefined]);
-    expect([[first], [second]]).toContainEqual(await index.read());
+    await expect(Promise.all([firstPublisher.write([first]), secondPublisher.write([second])])).resolves.toEqual([undefined, undefined]);
+    expect(await firstPublisher.read()).toEqual([second]);
     expect((await readdir(root)).filter((entry) => entry.includes(".tmp"))).toEqual([]);
   });
 

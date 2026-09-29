@@ -73,6 +73,15 @@ export class WikiService {
 
   get(wikiEntryId: string): WikiEntryDto { return this.read(wikiEntryId); }
 
+  list(input: { limit: number; offset: number }): WikiEntryDto[] {
+    const ids = this.database.prepare(`
+      SELECT id FROM wiki_entry
+      WHERE workspace_id = ? AND deleted_at IS NULL
+      ORDER BY title, id LIMIT ? OFFSET ?
+    `).pluck().all(this.workspaceId, input.limit, input.offset) as string[];
+    return ids.map((id) => this.read(id));
+  }
+
   private read(id: string): WikiEntryDto {
     const row = this.database.prepare("SELECT id, slug, title, content, row_version FROM wiki_entry WHERE id = ? AND workspace_id = ? AND deleted_at IS NULL").get(id, this.workspaceId) as WikiRow | undefined;
     if (!row) throw new Error("Wiki entry not found");

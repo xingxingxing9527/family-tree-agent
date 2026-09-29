@@ -1,4 +1,4 @@
-import React, { useMemo, useState, type JSX } from "react";
+import React, { useMemo, useRef, useState, type JSX } from "react";
 import type { DesktopApi, DomainWarningDto, MarriageDraft, ParentChildDraft, PersonListItem } from "../../../../shared/contracts";
 import type { PartialDate } from "../../../../shared/domain";
 import { PartialDateField } from "../people/PartialDateField";
@@ -28,6 +28,8 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
   const [pending, setPending] = useState<PendingMutation | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const searchId = useRef(0);
 
   const updateDraftField = <T,>(setter: (value: T) => void, value: T): void => {
     setPending(null);
@@ -43,8 +45,12 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
 
   const search = async (value: string): Promise<void> => {
     setQuery(value);
-    const result = await peopleApi.list({ query: value || undefined, limit: 100, offset: 0 });
-    if (result.ok) setSearchResults(result.value);
+    const activeRequest = ++searchId.current;
+    try {
+      const result = await peopleApi.list({ query: value || undefined, limit: 100, offset: 0 });
+      if (activeRequest !== searchId.current) return;
+      if (result.ok) setSearchResults(result.value); else setError(result.error.message);
+    } catch { if (activeRequest === searchId.current) setError("无法搜索关系人物"); }
   };
 
   const personOptions = (excludeId = ""): JSX.Element[] => options
@@ -52,22 +58,27 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
     .map((person) => <option key={person.id} value={person.id}>{person.displayName}</option>);
 
   const complete = async (kind: PendingMutation["kind"], draft: ParentChildDraft | MarriageDraft, confirmWarnings: boolean): Promise<void> => {
+    if (busy) return;
     setError(null);
     setMessage(null);
-    const result = kind === "parentChild"
-      ? await relationsApi.addParentChild({ draft: draft as ParentChildDraft, confirmWarnings })
-      : await relationsApi.addMarriage({ draft: draft as MarriageDraft, confirmWarnings });
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    if (!result.value.saved) {
-      setPending({ kind, draft: draft as never, warnings: result.value.warnings } as PendingMutation);
-      return;
-    }
-    setPending(null);
-    setMessage(kind === "parentChild" ? "亲子关系已保存" : "婚姻已保存");
-    await onSaved();
+    setBusy(true);
+    try {
+      const result = kind === "parentChild"
+        ? await relationsApi.addParentChild({ draft: draft as ParentChildDraft, confirmWarnings })
+        : await relationsApi.addMarriage({ draft: draft as MarriageDraft, confirmWarnings });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      if (!result.value.saved) {
+        setPending({ kind, draft: draft as never, warnings: result.value.warnings } as PendingMutation);
+        return;
+      }
+      setPending(null);
+      setMessage(kind === "parentChild" ? "亲子关系已保存" : "婚姻已保存");
+      await onSaved();
+    } catch { setError("无法保存关系，请稍后重试。"); }
+    finally { setBusy(false); }
   };
 
   const parentDraft: ParentChildDraft = { parentId, childId, parentRole, sourceDescription: parentSource };
@@ -88,7 +99,7 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
           <ul>{pending.warnings.map((warning) => <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>)}</ul>
           <div className="button-row">
             <button className="button secondary-button" type="button" onClick={() => setPending(null)}>返回修改</button>
-            <button className="button primary-button" type="button" onClick={() => void complete(pending.kind, pending.draft, true)}>确认保存</button>
+            <button className="button primary-button" type="button" disabled={busy} onClick={() => void complete(pending.kind, pending.draft, true)}>确认保存</button>
           </div>
         </div>
       )}
@@ -99,7 +110,7 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
           <label><span>子女人物</span><select className="field-control" aria-label="子女人物" required value={childId} onChange={(event) => updateDraftField(setChildId, event.target.value)}><option value="">请选择</option>{personOptions(parentId)}</select></label>
           <label><span>父母角色</span><select className="field-control" aria-label="父母角色" value={parentRole} onChange={(event) => updateDraftField(setParentRole, event.target.value as "father" | "mother")}><option value="father">父亲</option><option value="mother">母亲</option></select></label>
           <label><span>来源说明</span><input className="field-control" aria-label="亲子关系来源" required value={parentSource} onChange={(event) => updateDraftField(setParentSource, event.target.value)} /></label>
-          <button className="button primary-button" type="submit">保存亲子关系</button>
+          <button className="button primary-button" type="submit" disabled={busy}>保存亲子关系</button>
         </form>
         <form onSubmit={(event) => { event.preventDefault(); void complete("marriage", marriageDraft, false); }}>
           <h3>婚姻</h3>
@@ -107,7 +118,7 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, onSaved }:
           <label><span>配偶二</span><select className="field-control" aria-label="配偶二" required value={spouseBId} onChange={(event) => updateDraftField(setSpouseBId, event.target.value)}><option value="">请选择</option>{personOptions(spouseAId)}</select></label>
           <PartialDateField label="结婚日期" value={marriageStart} onChange={(value) => updateDraftField(setMarriageStart, value)} />
           <label><span>来源说明</span><input className="field-control" aria-label="婚姻来源" required value={marriageSource} onChange={(event) => updateDraftField(setMarriageSource, event.target.value)} /></label>
-          <button className="button primary-button" type="submit">保存婚姻</button>
+          <button className="button primary-button" type="submit" disabled={busy}>保存婚姻</button>
         </form>
       </div>
     </section>

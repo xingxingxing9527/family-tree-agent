@@ -23,6 +23,39 @@ const solar = (year: number) => ({
 });
 
 describe("query IPC boundary", () => {
+  it("validates and sender-checks the bounded workspace snapshot and tree projection channels", async () => {
+    const workspaceSnapshot = vi.fn().mockResolvedValue({ ok: true, value: { workspaceId, people: [], sources: [], lineages: [] } });
+    const projectTree = vi.fn().mockResolvedValue({ ok: true, value: { topology: { key: "full:4", nodes: [], edges: [] }, viewpointId: null, labels: {} } });
+    const gateway = {
+      workspaceSnapshot,
+      projectTree,
+      searchPeople: vi.fn(),
+      getPerson: vi.fn(),
+      listRelatives: vi.fn(),
+      calculateRelationship: vi.fn(),
+      summarizeLineage: vi.fn(),
+      searchWiki: vi.fn()
+    } as unknown as QueryGateway;
+    const handlers = new Map<string, (event: { sender: { id: number } }, input: unknown) => Promise<unknown>>();
+    registerQueryIpc({ handle: (channel, handler) => handlers.set(channel, handler as never) }, () => 7, gateway);
+
+    await expect(handlers.get(QUERY_CHANNELS.workspaceSnapshot)!({ sender: { id: 7 } }, { databasePath: "C:\\private\\family.sqlite" }))
+      .resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    await expect(handlers.get(QUERY_CHANNELS.projectTree)!({ sender: { id: 7 } }, { view: "descendants" }))
+      .resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    await expect(handlers.get(QUERY_CHANNELS.projectTree)!({ sender: { id: 7 } }, { view: "full", collapseDepth: 21 }))
+      .resolves.toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    await expect(handlers.get(QUERY_CHANNELS.workspaceSnapshot)!({ sender: { id: 9 } }, {}))
+      .resolves.toEqual({ ok: false, error: { code: "PATH_DENIED", message: "IPC sender was denied" } });
+    expect(workspaceSnapshot).not.toHaveBeenCalled();
+    expect(projectTree).not.toHaveBeenCalled();
+
+    await expect(handlers.get(QUERY_CHANNELS.workspaceSnapshot)!({ sender: { id: 7 } }, {})).resolves.toMatchObject({ ok: true });
+    await expect(handlers.get(QUERY_CHANNELS.projectTree)!({ sender: { id: 7 } }, { view: "ancestors", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 }))
+      .resolves.toMatchObject({ ok: true });
+    expect(projectTree).toHaveBeenCalledWith({ view: "ancestors", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 });
+  });
+
   it("rejects escape-hatch fields and sanitizes unexpected gateway details", async () => {
     const searchPeople = vi.fn().mockResolvedValue({ ok: true, value: [] });
     const getPerson = vi.fn().mockResolvedValue({

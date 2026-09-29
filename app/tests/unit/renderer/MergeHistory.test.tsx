@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MergeApi } from "../../../src/shared/contracts";
 import { MergeHistory } from "../../../src/renderer/src/features/people/MergeHistory";
+import { MergePanel } from "../../../src/renderer/src/features/people/MergePanel";
 
 afterEach(cleanup);
 const active = { id: "merge-1", primaryPersonId: "primary", secondaryPersonId: "secondary", status: "active" as const, createdAt: "2026-09-16T00:00:00.000Z" };
@@ -41,5 +42,22 @@ describe("MergeHistory", () => {
     fireEvent.click(await screen.findByRole("button", { name: "撤销合并" }));
     expect(await screen.findByText(/wiki_person:missing-link.*expected 3.*actual missing/)).toBeVisible();
     expect(mergeApi.unmerge).not.toHaveBeenCalled();
+  });
+
+  it("actually requests duplicate candidates from the merge panel", async () => {
+    const mergeApi = api(vi.fn());
+    vi.mocked(mergeApi.findDuplicateCandidates).mockResolvedValue({ ok: true, value: [] });
+    render(<MergePanel personId="primary" api={mergeApi} onMerged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "查找疑似重复" }));
+    await waitFor(() => expect(mergeApi.findDuplicateCandidates).toHaveBeenCalledWith({ personId: "primary" }));
+    expect(screen.getByText("没有足够证据的候选项。")).toBeVisible();
+  });
+
+  it("renders a sanitized failure when merge history IPC rejects", async () => {
+    const mergeApi = api(vi.fn());
+    vi.mocked(mergeApi.history).mockRejectedValue(new Error("C:\\private\\family.sqlite"));
+    render(<MergeHistory api={mergeApi} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法读取合并历史");
+    expect(screen.queryByText(/private|family\.sqlite/u)).not.toBeInTheDocument();
   });
 });

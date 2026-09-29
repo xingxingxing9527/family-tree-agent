@@ -122,4 +122,14 @@ describe("PersonEditor", () => {
     expect(screen.getByText("日期一旦填写，历法、年份和月份均为必填项。", { exact: false })).toHaveClass("text-secondary");
     expect(screen.getByLabelText("姓名")).toHaveClass("field-control");
   });
+
+  it("recovers from a rejected save without exposing its exception", async () => {
+    const api = createPeopleApi();
+    vi.mocked(api.update).mockRejectedValue(new Error("C:\\private\\family.sqlite 张敏"));
+    render(<PersonEditor api={api} personId="person-1" expectedVersion={1} initialValue={existingDraft} />);
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法保存人物");
+    expect(screen.queryByText(/private|family\.sqlite/u)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存人物" })).toBeEnabled();
+  });
 });

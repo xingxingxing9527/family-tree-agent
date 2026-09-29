@@ -74,7 +74,7 @@ const personDraftSchema = z.object({
 const personPatchSchema = personDraftSchema.partial().refine((patch) => Object.keys(patch).length > 0, { message: "Patch cannot be empty" });
 
 const schemas = {
-  list: z.object({ query: z.string().trim().max(200).optional(), limit: z.number().int().min(1).max(100), offset: z.number().int().min(0) }).strict(),
+  list: z.object({ query: z.string().trim().max(200).optional(), limit: z.number().int().min(1).max(1_000), offset: z.number().int().min(0).max(100_000) }).strict(),
   get: z.object({ personId: idSchema }).strict(),
   save: z.object({ draft: personDraftSchema, confirmWarnings: z.boolean() }).strict(),
   update: z.object({ personId: idSchema, patch: personPatchSchema, expectedVersion: z.number().int().min(1), confirmWarnings: z.boolean() }).strict(),

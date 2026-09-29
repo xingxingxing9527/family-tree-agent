@@ -4,9 +4,9 @@ import { FieldMappingStep } from "./FieldMappingStep";
 import { ImportPreview } from "./ImportPreview";
 import "./import.css";
 
-interface ImportPageProps { api: ImportApi; }
+interface ImportPageProps { api: ImportApi; onCommitted?(): void; }
 
-export function ImportPage({ api }: ImportPageProps): JSX.Element {
+export function ImportPage({ api, onCommitted = () => undefined }: ImportPageProps): JSX.Element {
   const [fileToken, setFileToken] = useState("");
   const [fileName, setFileName] = useState("");
   const [sourceKey, setSourceKey] = useState("");
@@ -17,6 +17,7 @@ export function ImportPage({ api }: ImportPageProps): JSX.Element {
   const [confirmed, setConfirmed] = useState(false);
   const [report, setReport] = useState<ImportCommitReportDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const isCsv = /\.csv$/i.test(fileName);
   const selectedActionIds = useMemo(() => plan?.actions
     .filter((action) => (action.kind === "create" || action.kind === "update") && !excluded.has(action.id) && action.dependsOnActionIds.every((dependency) => !excluded.has(dependency)))
@@ -24,30 +25,50 @@ export function ImportPage({ api }: ImportPageProps): JSX.Element {
 
   const preview = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (busy) return;
     setError(null);
     setReport(null);
-    const result = await api.parse({ fileToken, sourceKey, ...(isCsv ? { csvEntityType, fieldMapping: mapping } : {}) });
-    if (!result.ok) { setError(result.error.message); return; }
-    setPlan(result.value);
-    setExcluded(new Set());
-    setConfirmed(false);
+    setBusy(true);
+    try {
+      const result = await api.parse({ fileToken, sourceKey, ...(isCsv ? { csvEntityType, fieldMapping: mapping } : {}) });
+      if (!result.ok) { setError(result.error.message); return; }
+      setPlan(result.value);
+      setExcluded(new Set());
+      setConfirmed(false);
+    } catch { setError("无法解析导入文件"); }
+    finally { setBusy(false); }
   };
 
   const commit = async (): Promise<void> => {
-    if (!plan || !confirmed) return;
-    const result = await api.commit({ planId: plan.id, selectedActionIds });
-    if (!result.ok) { setError(result.error.message); return; }
-    setReport(result.value);
+    if (!plan || !confirmed || busy) return;
+    setBusy(true);
+    try {
+      const result = await api.commit({ planId: plan.id, selectedActionIds });
+      if (!result.ok) { setError(result.error.message); return; }
+      setReport(result.value);
+      onCommitted();
+    } catch { setError("无法提交导入结果"); }
+    finally { setBusy(false); }
   };
 
   const selectFile = async (): Promise<void> => {
-    setError(null); const result = await api.selectFile();
-    if (!result.ok) { setError(result.error.message); return; }
-    setFileToken(result.value.fileToken); setFileName(result.value.fileName); setPlan(null); setReport(null);
+    if (busy) return;
+    setError(null); setBusy(true);
+    try {
+      const result = await api.selectFile();
+      if (!result.ok) { setError(result.error.message); return; }
+      setFileToken(result.value.fileToken); setFileName(result.value.fileName); setPlan(null); setReport(null);
+    } catch { setError("无法选择导入文件"); }
+    finally { setBusy(false); }
   };
   const exportTemplate = async (): Promise<void> => {
-    const result = await api.exportTemplate();
-    if (!result.ok) setError(result.error.message);
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const result = await api.exportTemplate();
+      if (!result.ok) setError(result.error.message);
+    } catch { setError("无法导出模板"); }
+    finally { setBusy(false); }
   };
 
   const toggle = (id: string): void => setExcluded((current) => {
@@ -57,25 +78,25 @@ export function ImportPage({ api }: ImportPageProps): JSX.Element {
   });
 
   return (
-    <main className="import-shell">
-      <header><h1>表格导入</h1><p className="text-secondary">先预览、逐行核对，再一次性写入当前谱册。</p></header>
+    <section className="import-shell" aria-labelledby="spreadsheet-import-title">
+      <header><h2 id="spreadsheet-import-title">表格导入</h2><p className="text-secondary">先预览、逐行核对，再一次性写入当前谱册。</p></header>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <form className="import-card" onSubmit={(event) => void preview(event)}>
         <label><span>导入文件</span><output className="field-control" aria-label="已选导入文件">{fileName || "未选择"}</output></label>
-        <button className="button secondary-button" type="button" onClick={() => void selectFile()}>选择导入文件</button>
+        <button className="button secondary-button" type="button" disabled={busy} onClick={() => void selectFile()}>选择导入文件</button>
         <label><span>来源键</span><input className="field-control" aria-label="来源键" required value={sourceKey} onChange={(event) => setSourceKey(event.target.value)} /></label>
         {isCsv && <FieldMappingStep entityType={csvEntityType} mapping={mapping} onEntityTypeChange={setCsvEntityType} onMappingChange={setMapping} />}
-        <button className="button primary-button" type="submit" disabled={!fileToken}>解析并预览</button>
+        <button className="button primary-button" type="submit" disabled={busy || !fileToken}>解析并预览</button>
       </form>
       <section className="import-card template-export">
         <h2>固定模板</h2>
         <p className="text-secondary">选择保存位置后将创建固定 XLSX 模板。</p>
-        <button className="button secondary-button" type="button" onClick={() => void exportTemplate()}>导出模板</button>
+        <button className="button secondary-button" type="button" disabled={busy} onClick={() => void exportTemplate()}>导出模板</button>
       </section>
       {plan && <>
         <ImportPreview plan={plan} excludedActionIds={excluded} onToggleAction={toggle} />
         <label className="confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />我已核对变更和问题，并确认写入所选行</label>
-        <button className="button primary-button" type="button" disabled={!confirmed} onClick={() => void commit()}>确认导入 {selectedActionIds.length} 行</button>
+        <button className="button primary-button" type="button" disabled={busy || !confirmed} onClick={() => void commit()}>确认导入 {selectedActionIds.length} 行</button>
       </>}
       {report && <section className="import-card" aria-label="导入报告">
         <h2>导入报告</h2>
@@ -86,6 +107,6 @@ export function ImportPage({ api }: ImportPageProps): JSX.Element {
           </li>)}
         </ul>
       </section>}
-    </main>
+    </section>
   );
 }

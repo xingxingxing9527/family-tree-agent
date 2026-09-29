@@ -195,6 +195,69 @@ export interface WikiEntryReadModel {
   rowVersion: number;
 }
 
+export interface WorkspaceLineageReadModel {
+  id: string;
+  name: string;
+  founderPersonId: string;
+  description: string | null;
+  memberCount: number;
+  rowVersion: number;
+}
+
+export interface WorkspaceSnapshotDto {
+  workspaceId: string;
+  people: PersonListItem[];
+  sources: SourceReadModel[];
+  lineages: WorkspaceLineageReadModel[];
+}
+
+export interface TreeGenerationDisplayDto {
+  declared: number | null;
+  computed: number | null;
+  displayed: number | null;
+  source: "declared" | "computed" | "none";
+  conflict: boolean;
+}
+
+export interface TreePersonNodeDto {
+  id: string;
+  kind: "person";
+  personId: string;
+  display: {
+    displayName: string;
+    birthYear: number | null;
+    deathYear: number | null;
+    generation: TreeGenerationDisplayDto | null;
+  };
+}
+
+export interface TreeUnionNodeDto {
+  id: string;
+  kind: "union";
+  unionId: string;
+  display: {
+    kind: "marriage" | "coParents" | "singleParent" | "unassigned";
+    marriageStatus: "active" | "divorced" | null;
+    warnings: string[];
+  };
+}
+
+export type TreeProjectionNodeDto = TreePersonNodeDto | TreeUnionNodeDto;
+export interface TreeProjectionEdgeDto {
+  id: string;
+  source: string;
+  target: string;
+  kind: "parentUnion" | "unionChild";
+  marriageStatus: "active" | "divorced" | null;
+}
+export interface TreeProjectionTopologyDto { key: string; nodes: TreeProjectionNodeDto[]; edges: TreeProjectionEdgeDto[]; }
+export interface TreeProjectionDto {
+  topology: TreeProjectionTopologyDto;
+  viewpointId: string | null;
+  labels: Readonly<Record<string, string | null>>;
+}
+export type TreeViewDto = "full" | "branch" | "ancestors" | "descendants";
+
 export interface MediaApi {
   select(): Promise<AppResult<{ fileToken: string; fileName: string }>>;
   import(input: { fileToken: string }): Promise<AppResult<MediaAssetReadModel>>;
@@ -203,6 +266,7 @@ export interface MediaApi {
 }
 
 export interface WikiApi {
+  list(input: { limit: number; offset: number }): Promise<AppResult<WikiEntryReadModel[]>>;
   create(input: { title: string; body: string; personIds: string[]; sourceIds: string[] }): Promise<AppResult<WikiEntryReadModel>>;
   update(input: { wikiEntryId: string; title: string; body: string; personIds: string[]; sourceIds: string[]; expectedVersion: number }): Promise<AppResult<WikiEntryReadModel>>;
   remove(input: { wikiEntryId: string; expectedVersion: number }): Promise<AppResult<null>>;
@@ -210,6 +274,8 @@ export interface WikiApi {
 }
 
 export interface QueryApi {
+  workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
+  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>>;
   searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;

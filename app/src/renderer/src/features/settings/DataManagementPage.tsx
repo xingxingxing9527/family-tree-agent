@@ -17,43 +17,54 @@ export function DataManagementPage({ api }: DataManagementPageProps): JSX.Elemen
   const selectedTarget = useMemo(() => targets.find((target) => target.id === targetId) ?? null, [targetId, targets]);
 
   useEffect(() => {
+    let current = true;
     void api.listRestoreTargets().then((result) => {
+      if (!current) return;
       if (!result.ok) { setError(result.error.message); return; }
       setTargets(result.value);
       setTargetId((current) => current || result.value[0]?.id || "");
-    });
+    }).catch(() => { if (current) setError("无法读取恢复目标"); });
+    return () => { current = false; };
   }, [api]);
 
   const run = async (operation: () => Promise<{ ok: boolean; error?: { message: string } }>, success: string): Promise<void> => {
     setError(null); setMessage(null);
-    const result = await operation();
-    if (!result.ok) setError(result.error?.message ?? "操作失败");
-    else setMessage(success);
+    try {
+      const result = await operation();
+      if (!result.ok) setError(result.error?.message ?? "操作失败");
+      else setMessage(success);
+    } catch { setError("操作失败，请稍后重试"); }
   };
   const selectRestore = async (): Promise<void> => {
     setError(null); setInspection(null); setConfirmed(false);
-    const result = await api.selectRestoreFile();
-    if (!result.ok) { setError(result.error.message); return; }
-    if (!result.value.selected || !result.value.fileToken || !result.value.fileName) { setFileToken(""); setFileName(""); return; }
-    setFileToken(result.value.fileToken); setFileName(result.value.fileName);
+    try {
+      const result = await api.selectRestoreFile();
+      if (!result.ok) { setError(result.error.message); return; }
+      if (!result.value.selected || !result.value.fileToken || !result.value.fileName) { setFileToken(""); setFileName(""); return; }
+      setFileToken(result.value.fileToken); setFileName(result.value.fileName);
+    } catch { setError("无法选择备份文件"); }
   };
   const inspect = async (): Promise<void> => {
     if (!fileToken || !targetId) return;
     setError(null); setInspection(null); setConfirmed(false);
-    const result = await api.inspectBackup({ fileToken, targetWorkspaceId: targetId });
-    if (!result.ok) { setError(result.error.message); return; }
-    setInspection(result.value);
+    try {
+      const result = await api.inspectBackup({ fileToken, targetWorkspaceId: targetId });
+      if (!result.ok) { setError(result.error.message); return; }
+      setInspection(result.value);
+    } catch { setError("无法验证备份文件"); }
   };
   const restore = async (): Promise<void> => {
     if (!inspection || !confirmed) return;
     setError(null); setMessage(null);
-    const result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
-    if (!result.ok) { setError(result.error.message); return; }
-    setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
+    try {
+      const result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
+      if (!result.ok) { setError(result.error.message); return; }
+      setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
+    } catch { setError("无法恢复备份"); }
   };
 
-  return <main>
-    <header><h1>数据管理</h1></header>
+  return <section className="settings-section" aria-labelledby="data-management-title">
+    <header><h2 id="data-management-title">数据管理</h2></header>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     <section aria-labelledby="backup-export-title">
@@ -84,5 +95,5 @@ export function DataManagementPage({ api }: DataManagementPageProps): JSX.Elemen
       </div>}
     </section>
     <AuditHistory api={api} />
-  </main>;
+  </section>;
 }

@@ -1,18 +1,18 @@
-import ELK from "elkjs";
+import ELK from "elkjs/lib/elk.bundled.js";
 import type { Edge, Node } from "@xyflow/react";
 import type {
-  TreeProjectionEdge,
-  TreeProjectionNode,
-  TreeProjectionTopology
-} from "../../../../main/domain/projection/tree-projection-service";
+  TreeProjectionEdgeDto,
+  TreeProjectionNodeDto,
+  TreeProjectionTopologyDto
+} from "../../../../shared/contracts";
 
 export interface TreeFlowNodeData extends Record<string, unknown> {
-  node: TreeProjectionNode;
+  node: TreeProjectionNodeDto;
   relationshipLabel: string | null;
 }
 
 export interface TreeFlowEdgeData extends Record<string, unknown> {
-  edge: TreeProjectionEdge;
+  edge: TreeProjectionEdgeDto;
 }
 
 export type TreeFlowNode = Node<TreeFlowNodeData, "person" | "familyUnion">;
@@ -25,7 +25,7 @@ export interface LaidOutTree {
 
 const elk = new ELK();
 
-export async function layoutWithElk(topology: TreeProjectionTopology): Promise<LaidOutTree> {
+export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promise<LaidOutTree> {
   const graph = await elk.layout({
     id: `tree:${topology.key}`,
     layoutOptions: {

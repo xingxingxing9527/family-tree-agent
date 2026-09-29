@@ -38,28 +38,31 @@ export function PersonEditor({ api, personId, expectedVersion, initialValue = em
   });
 
   const persist = async (confirmWarnings: boolean): Promise<void> => {
+    if (saving) return;
     setSaving(true);
     setError(null);
     const value = buildDraft();
-    const result = personId
-      ? await api.update({ personId, patch: value, expectedVersion: expectedVersion!, confirmWarnings })
-      : await api.save({ draft: value, confirmWarnings });
-    setSaving(false);
-
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    if (!result.value.saved) {
-      setWarnings(result.value.warnings);
-      return;
-    }
-    setWarnings([]);
-    const savedId = result.value.entityId;
-    if (!savedId) return;
-    const refreshed = await api.get({ personId: savedId });
-    if (refreshed.ok) onSaved?.(refreshed.value);
-    else setError(refreshed.error.message);
+    try {
+      const result = personId
+        ? await api.update({ personId, patch: value, expectedVersion: expectedVersion!, confirmWarnings })
+        : await api.save({ draft: value, confirmWarnings });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      if (!result.value.saved) {
+        setWarnings(result.value.warnings);
+        return;
+      }
+      setWarnings([]);
+      const savedId = result.value.entityId;
+      if (!savedId) return;
+      const refreshed = await api.get({ personId: savedId });
+      if (refreshed.ok) onSaved?.(refreshed.value);
+      else setError(refreshed.error.message);
+    } catch {
+      setError("无法保存人物，请稍后重试。");
+    } finally { setSaving(false); }
   };
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
@@ -78,7 +81,7 @@ export function PersonEditor({ api, personId, expectedVersion, initialValue = em
           <ul>{warnings.map((warning) => <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>)}</ul>
           <div className="button-row">
             <button className="button secondary-button" type="button" onClick={() => setWarnings([])}>返回修改</button>
-            <button className="button primary-button" type="button" onClick={() => void persist(true)}>确认保存</button>
+            <button className="button primary-button" type="button" disabled={saving} onClick={() => void persist(true)}>确认保存</button>
           </div>
         </div>
       )}

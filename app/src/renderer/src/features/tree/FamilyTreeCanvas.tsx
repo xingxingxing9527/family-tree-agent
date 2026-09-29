@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, type JSX } from "react";
 import { Background, Controls, ReactFlow, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { TreeProjection } from "../../../../main/domain/projection/tree-projection-service";
+import type { TreeProjectionDto } from "../../../../shared/contracts";
 import { FamilyUnionNode } from "./FamilyUnionNode";
 import { PersonNode } from "./PersonNode";
 import { layoutWithElk, type LaidOutTree } from "./layout-with-elk";
@@ -10,7 +10,7 @@ import "./tree.css";
 const nodeTypes = { person: PersonNode, familyUnion: FamilyUnionNode } satisfies NodeTypes;
 
 export interface FamilyTreeCanvasProps {
-  projection: TreeProjection;
+  projection: TreeProjectionDto;
   layout?: typeof layoutWithElk;
 }
 

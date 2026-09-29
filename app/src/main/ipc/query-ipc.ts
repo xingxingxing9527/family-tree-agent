@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, z, type ZodType } from "zod";
 import type {
   AppResult,
   LineageSummary,
@@ -9,6 +9,9 @@ import type {
   RelativeKind,
   RelativeReadModel,
   RelationshipResultDto,
+  TreeProjectionDto,
+  TreeViewDto,
+  WorkspaceSnapshotDto,
   WikiSearchHit
 } from "../../shared/contracts.js";
 import { openQueryDatabase } from "../database/open-query-database.js";
@@ -16,8 +19,11 @@ import type { WorkspaceDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 import { QUERY_TOOL_SCHEMAS, QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
+import { projectWorkspaceTree, readWorkspaceSnapshot } from "../application/query/workspace-projection.js";
 
 export const QUERY_CHANNELS = {
+  workspaceSnapshot: "query:workspace-snapshot",
+  projectTree: "query:project-tree",
   searchPeople: "query:search-people",
   getPerson: "query:get-person",
   listRelatives: "query:list-relatives",
@@ -27,6 +33,8 @@ export const QUERY_CHANNELS = {
 } as const;
 
 export interface QueryGateway {
+  workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
+  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>>;
   searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
@@ -42,6 +50,14 @@ const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "PATH_DENIED" | "INTERNAL
 
 export class WorkspaceQueryGateway implements QueryGateway {
   constructor(private readonly workspaces: OpenWorkspaceContextProvider) {}
+
+  async workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>> {
+    return this.readDatabase((database, workspaceId) => readWorkspaceSnapshot(database, workspaceId));
+  }
+
+  async projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>> {
+    return this.readDatabase((database, workspaceId) => projectWorkspaceTree(database, workspaceId, input));
+  }
 
   async searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>> {
     return this.read((tools) => tools.search_people(input));
@@ -68,13 +84,17 @@ export class WorkspaceQueryGateway implements QueryGateway {
   }
 
   private read<T>(operation: (tools: QueryToolRegistry["tools"]) => T): AppResult<T> {
+    return this.readDatabase((database, workspaceId) => operation(new QueryToolRegistry(database, workspaceId).tools));
+  }
+
+  private readDatabase<T>(operation: (database: WorkspaceDatabase, workspaceId: string) => T): AppResult<T> {
     const context = this.workspaces.getOpenWorkspaceContext();
     if (!context) return failure("NOT_FOUND", "No workspace is open");
     if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete query request");
     let database: WorkspaceDatabase | null = null;
     try {
       database = openQueryDatabase(context.databasePath);
-      return { ok: true, value: operation(new QueryToolRegistry(database, context.workspaceId).tools) };
+      return { ok: true, value: operation(database, context.workspaceId) };
     } catch (error) {
       if (error instanceof QueryNotFoundError) return failure("NOT_FOUND", "Requested record was not found");
       if (error instanceof ZodError) return failure("VALIDATION", "Invalid request");
@@ -84,6 +104,17 @@ export class WorkspaceQueryGateway implements QueryGateway {
     }
   }
 }
+
+const emptySchema = z.object({}).strict();
+const boundedId = z.string().trim().min(1).max(200);
+const projectTreeSchema = z.object({
+  view: z.enum(["full", "branch", "ancestors", "descendants"]),
+  subjectId: boundedId.optional(),
+  viewpointId: boundedId.optional(),
+  collapseDepth: z.number().int().min(0).max(20).optional()
+}).strict().superRefine((input, context) => {
+  if (input.view !== "full" && !input.subjectId) context.addIssue({ code: "custom", path: ["subjectId"], message: "A subject is required for this tree view" });
+});
 
 type IpcMainLike = Pick<IpcMain, "handle">;
 type Operation = (input: never) => Promise<AppResult<unknown>>;
@@ -121,6 +152,8 @@ const parsedHandler = (
 export function registerQueryIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, query: QueryGateway, operations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
   const run = <T>(operation: () => Promise<T>): Promise<T> => operations ? operations.runOperation(operation) : operation();
+  ipc.handle(QUERY_CHANNELS.workspaceSnapshot, parsedHandler(trusted, emptySchema, () => run(() => query.workspaceSnapshot())));
+  ipc.handle(QUERY_CHANNELS.projectTree, parsedHandler(trusted, projectTreeSchema, (input) => run(() => query.projectTree(input))));
   ipc.handle(QUERY_CHANNELS.searchPeople, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_people, (input) => run(() => query.searchPeople(input))));
   ipc.handle(QUERY_CHANNELS.getPerson, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.get_person, (input) => run(() => query.getPerson(input))));
   ipc.handle(QUERY_CHANNELS.listRelatives, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.list_relatives, (input) => run(() => query.listRelatives(input))));

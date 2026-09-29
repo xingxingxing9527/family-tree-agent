@@ -8,6 +8,7 @@ import { layoutWithElk } from "../../../src/renderer/src/features/tree/layout-wi
 import { FamilyTreeCanvas } from "../../../src/renderer/src/features/tree/FamilyTreeCanvas";
 import { FamilyTreePage } from "../../../src/renderer/src/features/tree/FamilyTreePage";
 import { TreeProjectionService } from "../../../src/main/domain/projection/tree-projection-service";
+import { ViewpointProvider } from "../../../src/renderer/src/app/ViewpointContext";
 
 vi.mock("@xyflow/react", async () => {
   const ReactModule = await import("react");
@@ -142,24 +143,34 @@ describe("FamilyTreePage", () => {
         warnings: []
       }]
     }, (viewpointId, targetId) => viewpointId === targetId ? "本人" : "亲属");
-    render(<FamilyTreePage
-      service={service}
-      people={[{ id: "a", displayName: "甲" }, { id: "child", displayName: "孩子" }, { id: "isolated", displayName: "旁支" }]}
-      initialViewpointId="a"
-    />);
+    const people = [
+      { id: "a", displayName: "甲", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 },
+      { id: "child", displayName: "孩子", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 },
+      { id: "isolated", displayName: "旁支", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 }
+    ];
+    const api = { projectTree: vi.fn(async (input: { view: "full" | "branch" | "ancestors" | "descendants"; subjectId?: string; viewpointId?: string; collapseDepth?: number }) => {
+      const unlabelled = input.view === "full" ? service.full(input.viewpointId ?? "", input.collapseDepth ?? 20)
+        : input.view === "branch" ? service.branch(input.subjectId!)
+          : input.view === "ancestors" ? service.ancestors(input.subjectId!) : service.descendants(input.subjectId!);
+      return { ok: true as const, value: input.viewpointId ? service.withViewpoint(unlabelled, input.viewpointId) : unlabelled };
+    }) };
+    window.localStorage.clear();
+    render(<ViewpointProvider workspaceId="workspace" visiblePersonIds={[]} validPersonIds={people.map((person) => person.id)} fallbackViewpointId="a" query={{ calculateRelationship: vi.fn() }}>
+      <FamilyTreePage api={api} people={people} />
+    </ViewpointProvider>);
 
     expect(screen.getByRole("button", { name: "全谱" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByRole("group", { name: "人物：旁支" })).toBeVisible();
-    fireEvent.change(screen.getByLabelText("查看人物"), { target: { value: "child" } });
+    fireEvent.change(screen.getByLabelText("视图中心"), { target: { value: "child" } });
     fireEvent.click(screen.getByRole("button", { name: "祖先" }));
 
     await waitFor(() => expect(screen.queryByRole("group", { name: "人物：旁支" })).not.toBeInTheDocument());
-    expect(screen.getByRole("group", { name: "人物：甲" })).toBeVisible();
+    expect(await screen.findByRole("group", { name: "人物：甲" })).toBeVisible();
     expect(screen.getByRole("button", { name: "祖先" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("当前视角"), { target: { value: "child" } });
     expect(await screen.findByText("本人")).toBeVisible();
 
-    for (const view of ["分支", "后代", "全谱"]) {
+    for (const view of ["支系", "后代", "全谱"]) {
       fireEvent.click(screen.getByRole("button", { name: view }));
       expect(screen.getByRole("button", { name: view })).toHaveAttribute("aria-pressed", "true");
     }

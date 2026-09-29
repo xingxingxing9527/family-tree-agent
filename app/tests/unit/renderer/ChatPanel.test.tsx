@@ -39,6 +39,24 @@ describe("controlled chat UI", () => {
     expect(screen.getByText("father → child")).toBeVisible();
   });
 
+  it("allows only one confirmed request at a time so an older completion cannot clear a newer question", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const onSend = vi.fn().mockReturnValue(pending);
+    render(<ChatPanel onSend={onSend} />);
+
+    fireEvent.change(screen.getByLabelText("对话问题"), { target: { value: "第一个问题" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    fireEvent.click(screen.getByRole("button", { name: "同意并发送" }));
+
+    expect(screen.getByLabelText("对话问题")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("button", { name: "发送" }).closest("form")!);
+    expect(onSend).toHaveBeenCalledTimes(1);
+    release();
+    await waitFor(() => expect(screen.getByLabelText("对话问题")).toBeEnabled());
+  });
+
   it("offers confirmation only when a draft is fully resolved", () => {
     const preview: ConversationDraftPreview = {
       id: "draft", workspaceId: "workspace", version: 1, expiresAt: "2099-01-01T00:00:00.000Z",
@@ -113,5 +131,17 @@ describe("controlled chat UI", () => {
     fireEvent.click(screen.getByRole("button", { name: "安全保存" }));
     await waitFor(() => expect(settings.saveKey).toHaveBeenCalledWith({ key: "sk-render-secret" }));
     expect(screen.queryByDisplayValue("sk-render-secret")).not.toBeInTheDocument();
+  });
+
+  it("sanitizes a rejected model-key save and restores the form", async () => {
+    const settings = { status: vi.fn().mockResolvedValue({ ok: true, value: { configured: false } }), saveKey: vi.fn().mockRejectedValue(new Error("sk-secret-value")), clearKey: vi.fn() };
+    render(<ModelSettings api={settings as never} />);
+    await screen.findByText("尚未配置在线模型密钥");
+    fireEvent.change(screen.getByLabelText("OpenAI API 密钥"), { target: { value: "sk-secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "安全保存" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法保存在线模型密钥");
+    expect(screen.queryByText("sk-secret-value")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("OpenAI API 密钥")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "安全保存" })).toBeDisabled();
   });
 });

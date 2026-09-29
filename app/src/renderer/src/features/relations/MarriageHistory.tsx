@@ -14,17 +14,22 @@ export function MarriageHistory({ marriages, api, onChanged }: MarriageHistoryPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<PartialDate | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const divorce = async (marriage: MarriageReadModel): Promise<void> => {
-    setError(null);
-    const result = await api.divorce({ marriageId: marriage.id, endDate, expectedVersion: marriage.rowVersion });
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    setEditingId(null);
-    setEndDate(null);
-    await onChanged();
+    if (busy) return;
+    setError(null); setBusy(true);
+    try {
+      const result = await api.divorce({ marriageId: marriage.id, endDate, expectedVersion: marriage.rowVersion });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setEditingId(null);
+      setEndDate(null);
+      await onChanged();
+    } catch { setError("无法登记离婚，请稍后重试。"); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -50,7 +55,7 @@ export function MarriageHistory({ marriages, api, onChanged }: MarriageHistoryPr
               <PartialDateField label="离婚日期" value={endDate} onChange={setEndDate} />
               <div className="button-row">
                 <button className="button secondary-button" type="button" onClick={() => setEditingId(null)}>取消</button>
-                <button className="button primary-button" type="button" onClick={() => void divorce(marriage)}>确认离婚</button>
+                <button className="button primary-button" type="button" disabled={busy} onClick={() => void divorce(marriage)}>{busy ? "保存中…" : "确认离婚"}</button>
               </div>
             </div>
           )}

@@ -43,12 +43,15 @@ const desktopApi: DesktopApi = {
     listForPerson: (input) => ipcRenderer.invoke("media:list-for-person", input)
   },
   wiki: {
+    list: (input) => ipcRenderer.invoke("wiki:list", input),
     create: (input) => ipcRenderer.invoke("wiki:create", input),
     update: (input) => ipcRenderer.invoke("wiki:update", input),
     remove: (input) => ipcRenderer.invoke("wiki:remove", input),
     get: (input) => ipcRenderer.invoke("wiki:get", input)
   },
   query: {
+    workspaceSnapshot: () => ipcRenderer.invoke("query:workspace-snapshot", {}),
+    projectTree: (input) => ipcRenderer.invoke("query:project-tree", input),
     searchPeople: (input) => ipcRenderer.invoke("query:search-people", input),
     getPerson: (input) => ipcRenderer.invoke("query:get-person", input),
     listRelatives: (input) => ipcRenderer.invoke("query:list-relatives", input),

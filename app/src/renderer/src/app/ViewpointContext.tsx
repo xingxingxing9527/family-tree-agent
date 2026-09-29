@@ -20,6 +20,8 @@ interface ViewpointStorage {
 interface ViewpointProviderProps {
   workspaceId: string;
   visiblePersonIds: readonly string[];
+  validPersonIds?: readonly string[];
+  fallbackViewpointId?: string | null;
   query: ViewpointQuery;
   children: ReactNode;
   storage?: ViewpointStorage;
@@ -31,10 +33,19 @@ const storageKey = (workspaceId: string): string => `family-agent:viewpoint:${wo
 export function ViewpointProvider({
   workspaceId,
   visiblePersonIds,
+  validPersonIds,
+  fallbackViewpointId = null,
   query,
   children,
   storage = window.localStorage
 }: ViewpointProviderProps): JSX.Element {
+  const validKey = validPersonIds ? [...new Set(validPersonIds)].sort().join("\u0000") : null;
+  const valid = useMemo(() => validKey === null ? null : new Set(validKey ? validKey.split("\u0000") : []), [validKey]);
+  const selectValid = useCallback((candidate: string | null): string | null => {
+    if (valid === null || (candidate && valid.has(candidate))) return candidate;
+    if (fallbackViewpointId && valid.has(fallbackViewpointId)) return fallbackViewpointId;
+    return valid.values().next().value ?? null;
+  }, [fallbackViewpointId, valid]);
   const [viewpointId, setViewpointState] = useState<string | null>(() => storage.getItem(storageKey(workspaceId)));
   const [relationshipLabels, setRelationshipLabels] = useState<Readonly<Record<string, string | null>>>({});
   const [labelsKey, setLabelsKey] = useState<string | null>(null);
@@ -44,17 +55,21 @@ export function ViewpointProvider({
   const requestKey = `${workspaceId}\u0001${viewpointId ?? ""}\u0001${visibleKey}`;
 
   useEffect(() => {
-    setViewpointState(storage.getItem(storageKey(workspaceId)));
-    setLabelsKey(null);
-  }, [storage, workspaceId]);
-
-  const setViewpointId = useCallback((next: string | null): void => {
-    requestToken.current += 1;
+    const next = selectValid(storage.getItem(storageKey(workspaceId)));
     if (next) storage.setItem(storageKey(workspaceId), next);
     else storage.removeItem(storageKey(workspaceId));
     setViewpointState(next);
     setLabelsKey(null);
-  }, [storage, workspaceId]);
+  }, [selectValid, storage, validKey, workspaceId]);
+
+  const setViewpointId = useCallback((next: string | null): void => {
+    const validated = selectValid(next);
+    requestToken.current += 1;
+    if (validated) storage.setItem(storageKey(workspaceId), validated);
+    else storage.removeItem(storageKey(workspaceId));
+    setViewpointState(validated);
+    setLabelsKey(null);
+  }, [selectValid, storage, workspaceId]);
 
   useEffect(() => {
     const token = ++requestToken.current;

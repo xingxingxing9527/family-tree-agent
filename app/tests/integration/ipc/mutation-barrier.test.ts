@@ -35,6 +35,7 @@ describe("workspace operation IPC barrier", () => {
       canUnmerge: mark("merge-read"), unmerge: mark("unmerge")
     } as never, gate);
     registerQueryIpc(ipc as never, () => 7, {
+      workspaceSnapshot: mark("query-snapshot"), projectTree: mark("query-tree"),
       searchPeople: mark("query-search"), getPerson: mark("query-person"), listRelatives: mark("query-relatives"),
       calculateRelationship: mark("query-relationship"), summarizeLineage: mark("query-lineage"), searchWiki: mark("query-wiki")
     } as never, gate as never);
@@ -42,7 +43,7 @@ describe("workspace operation IPC barrier", () => {
       select: mark("media-select"), import: mark("media-import"), attach: mark("media-attach"), listForPerson: mark("media-read")
     } as never, gate);
     registerWikiIpc(ipc as never, () => 7, {
-      create: mark("wiki-create"), update: mark("wiki-update"), remove: mark("wiki-remove"), get: mark("wiki-read")
+      list: mark("wiki-list"), create: mark("wiki-create"), update: mark("wiki-update"), remove: mark("wiki-remove"), get: mark("wiki-read")
     } as never, gate);
     registerChatIpc(ipc as never, () => 7, {
       authorize: mark("chat-read"), stageMutation: mark("chat-stage"), ask: mark("chat-read"), confirm: mark("chat-confirm"), revise: mark("chat-revise")
@@ -61,6 +62,8 @@ describe("workspace operation IPC barrier", () => {
       invoke(FACT_CHANNELS.peopleSave, { draft: { displayName: "A", aliases: [], gender: "unknown", birth: null, death: null, notes: null, sourceDescription: "test" }, confirmWarnings: true }),
       invoke(FACT_CHANNELS.peopleList, { limit: 20, offset: 0 }),
       invoke(FACT_CHANNELS.peopleGet, { personId: uuidA }),
+      invoke(QUERY_CHANNELS.workspaceSnapshot),
+      invoke(QUERY_CHANNELS.projectTree, { view: "full", collapseDepth: 4 }),
       invoke(QUERY_CHANNELS.searchPeople, { query: "A", limit: 20 }),
       invoke(QUERY_CHANNELS.getPerson, { personId: uuidA }),
       invoke(QUERY_CHANNELS.listRelatives, { personId: uuidA, kinds: ["parent"] }),
@@ -78,6 +81,7 @@ describe("workspace operation IPC barrier", () => {
       invoke(MEDIA_CHANNELS.import, { fileToken: uuidA }),
       invoke(MEDIA_CHANNELS.attach, { mediaAssetId: uuidA, personId: uuidB }),
       invoke(MEDIA_CHANNELS.listForPerson, { personId: uuidA }),
+      invoke(WIKI_CHANNELS.list, { limit: 100, offset: 0 }),
       invoke(WIKI_CHANNELS.create, { title: "Entry", body: "", personIds: [], sourceIds: [] }),
       invoke(WIKI_CHANNELS.update, { wikiEntryId: uuidA, title: "Entry", body: "", personIds: [], sourceIds: [], expectedVersion: 1 }),
       invoke(WIKI_CHANNELS.remove, { wikiEntryId: uuidA, expectedVersion: 1 }),
@@ -102,8 +106,8 @@ describe("workspace operation IPC barrier", () => {
     expect(calls.sort()).toEqual([
       "audit-read", "backup", "chat-confirm", "chat-read", "chat-stage", "export", "facts-read", "facts-read", "facts-save",
       "import-commit", "import-parse", "media-attach", "media-import", "media-read", "merge", "merge-read", "merge-read", "merge-read", "merge-read",
-      "query-lineage", "query-person", "query-relationship", "query-relatives", "query-search", "query-wiki", "undo", "unmerge",
-      "wiki-create", "wiki-read", "wiki-remove", "wiki-update", "workspace-close", "workspace-create", "workspace-open", "workspace-read"
+      "query-lineage", "query-person", "query-relationship", "query-relatives", "query-search", "query-snapshot", "query-tree", "query-wiki", "undo", "unmerge",
+      "wiki-create", "wiki-list", "wiki-read", "wiki-remove", "wiki-update", "workspace-close", "workspace-create", "workspace-open", "workspace-read"
     ].sort());
   });
 });

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DesktopApi, PersonListItem } from "../../../src/shared/contracts";
 import { RelationshipEditor } from "../../../src/renderer/src/features/relations/RelationshipEditor";
+import { MarriageHistory } from "../../../src/renderer/src/features/relations/MarriageHistory";
 
 afterEach(cleanup);
 
@@ -61,5 +62,23 @@ describe("RelationshipEditor", () => {
       draft: expect.objectContaining({ childId: "child-1" }),
       confirmWarnings: true
     }));
+  });
+
+  it("recovers from rejected relationship and divorce operations", async () => {
+    const { peopleApi, relationsApi } = createApis();
+    vi.mocked(relationsApi.addParentChild).mockReset().mockRejectedValue(new Error("private family fact"));
+    const { unmount } = render(<RelationshipEditor people={people} peopleApi={peopleApi} relationsApi={relationsApi} onSaved={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("父母人物"), { target: { value: "parent-1" } });
+    fireEvent.change(screen.getByLabelText("子女人物"), { target: { value: "child-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存亲子关系" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法保存关系");
+    expect(screen.queryByText("private family fact")).not.toBeInTheDocument();
+    unmount();
+
+    vi.mocked(relationsApi.divorce).mockRejectedValue(new Error("private family fact"));
+    render(<MarriageHistory marriages={[{ id: "marriage-1", spouse: people[1]!, status: "active", start: null, end: null, rowVersion: 1 }]} api={relationsApi} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "登记离婚" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认离婚" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法登记离婚");
   });
 });

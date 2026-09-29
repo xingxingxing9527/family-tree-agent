@@ -2,15 +2,17 @@ import React, { type JSX } from "react";
 import type { DesktopApi, PersonDetailReadModel } from "../../../../shared/contracts";
 import { MarriageHistory } from "../relations/MarriageHistory";
 import { formatPartialDate } from "./format-partial-date";
+import { MediaGallery } from "./MediaGallery";
 
 interface PersonDetailProps {
   detail: PersonDetailReadModel;
   relationsApi: DesktopApi["relations"];
+  mediaApi: DesktopApi["media"];
   onEdit(): void;
   onChanged(): Promise<void>;
 }
 
-export function PersonDetail({ detail, relationsApi, onEdit, onChanged }: PersonDetailProps): JSX.Element {
+export function PersonDetail({ detail, relationsApi, mediaApi, onEdit, onChanged }: PersonDetailProps): JSX.Element {
   const gender = detail.person.gender === "male" ? "男" : detail.person.gender === "female" ? "女" : "未知";
   return (
     <section className="detail-card" aria-labelledby="person-detail-title">
@@ -47,6 +49,7 @@ export function PersonDetail({ detail, relationsApi, onEdit, onChanged }: Person
         </section>
       </div>
       <MarriageHistory marriages={detail.marriages} api={relationsApi} onChanged={onChanged} />
+      <MediaGallery personId={detail.person.id} media={mediaApi} />
     </section>
   );
 }

@@ -66,6 +66,15 @@ describe("data-management settings", () => {
     expect(value.exportWorkspace).toHaveBeenCalledWith();
   });
 
+  it("turns rejected data-management operations into a sanitized visible failure", async () => {
+    const value = api();
+    vi.mocked(value.createBackup).mockRejectedValue(new Error("C:\\private\\family.sqlite"));
+    render(<DataManagementPage api={value} />);
+    fireEvent.click(screen.getByRole("button", { name: "创建备份" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("操作失败，请稍后重试");
+    expect(screen.queryByText(/private|family\.sqlite/u)).not.toBeInTheDocument();
+  });
+
   it("distinguishes a committed restore whose old-directory cleanup is still pending", async () => {
     const value = api();
     vi.mocked(value.restoreBackup).mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: true } });
@@ -91,7 +100,19 @@ describe("data-management settings", () => {
     expect(await screen.findByText("Merge groups require the dedicated unmerge workflow")).toBeVisible();
     expect(screen.queryByRole("button", { name: `撤销 ${workspaceId}` })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `撤销 ${groupId}` }));
+    expect(value.undoOperationGroup).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "确认撤销操作" })).toHaveTextContent("person:person-one");
+    fireEvent.click(screen.getByLabelText("我确认撤销以上 1 个受影响实体"));
+    fireEvent.click(screen.getByRole("button", { name: "确认撤销" }));
     await waitFor(() => expect(value.undoOperationGroup).toHaveBeenCalledWith({ operationGroupId: groupId }));
     expect(value.listAudit).toHaveBeenCalledTimes(2);
+  });
+
+  it("sanitizes a rejected audit-history request", async () => {
+    const value = api();
+    vi.mocked(value.listAudit).mockRejectedValue(new Error("C:\\private\\audit.sqlite 张敏"));
+    render(<AuditHistory api={value} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法读取操作历史");
+    expect(screen.queryByText(/private|audit\.sqlite/u)).not.toBeInTheDocument();
   });
 });

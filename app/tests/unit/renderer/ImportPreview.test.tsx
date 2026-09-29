@@ -91,4 +91,12 @@ describe("ImportPreview", () => {
     expect(screen.getAllByText(/People 第 2 行/).find((node) => node.closest("section") === report)).toHaveTextContent(/committed.*person-a.*WARN.*group-1/);
     expect(screen.getByText(/ParentChild 第 3 行/)).toHaveTextContent(/excluded.*MISSING_REFERENCE/);
   });
+
+  it("shows a sanitized error when file selection rejects", async () => {
+    const api = { selectFile: vi.fn().mockRejectedValue(new Error("C:\\private\\family.xlsx")), parse: vi.fn(), commit: vi.fn(), exportTemplate: vi.fn() } as never;
+    render(<ImportPage api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择导入文件" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("无法选择导入文件");
+    expect(screen.queryByText(/private|family\.xlsx/u)).not.toBeInTheDocument();
+  });
 });

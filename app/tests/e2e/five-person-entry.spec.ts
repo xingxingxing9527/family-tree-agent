@@ -28,7 +28,7 @@ async function addParentChild(window: Page, parent: string, child: string, role:
   await window.getByLabel("父母角色").selectOption({ label: role });
   await window.getByLabel("亲子关系来源").fill("五人家庭测试录入");
   await window.getByRole("button", { name: "保存亲子关系" }).click();
-  await expect(window.getByRole("status")).toContainText("亲子关系已保存");
+  await expect(window.getByText("亲子关系已保存", { exact: true })).toBeVisible();
 }
 
 async function expectCardAndFieldTextReadable(window: Page): Promise<void> {
@@ -116,7 +116,7 @@ test("persists a five-person household, correction, and divorce", async () => {
     await window.getByLabel("结婚月份").fill("8");
     await window.getByLabel("婚姻来源").fill("结婚证");
     await window.getByRole("button", { name: "保存婚姻" }).click();
-    await expect(window.getByRole("status")).toContainText("婚姻已保存");
+    await expect(window.getByText("婚姻已保存", { exact: true })).toBeVisible();
 
     for (const child of ["张敏", "张伟", "张宁"]) {
       await addParentChild(window, "张国强", child, "父亲");

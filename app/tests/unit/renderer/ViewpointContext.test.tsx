@@ -56,6 +56,19 @@ function ViewpointHarness(): React.JSX.Element {
 }
 
 describe("ViewpointProvider", () => {
+  it("rejects a persisted viewpoint that does not exist in the active workspace", async () => {
+    window.localStorage.setItem("family-agent:viewpoint:workspace-a", "person-from-other-workspace");
+    const query = { calculateRelationship: vi.fn() };
+    render(
+      <ViewpointProvider workspaceId="workspace-a" visiblePersonIds={[]} validPersonIds={["origin"]} fallbackViewpointId="origin" query={query}>
+        <ViewpointHarness />
+      </ViewpointProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("viewpoint")).toHaveTextContent("origin"));
+    expect(window.localStorage.getItem("family-agent:viewpoint:workspace-a")).toBe("origin");
+    expect(query.calculateRelationship).not.toHaveBeenCalled();
+  });
+
   it("restores and persists a viewpoint per workspace and only calls read-only relationship queries", async () => {
     window.localStorage.setItem("family-agent:viewpoint:workspace-a", "parent");
     window.localStorage.setItem("family-agent:viewpoint:workspace-b", "other-workspace-person");
@@ -268,6 +281,7 @@ describe("ChatPanel", () => {
     }
     fireEvent.click(screen.getByRole("button", { name: "关系查询" }));
     expect(onQuickAction).toHaveBeenCalledWith("relationship");
+    expect(screen.getByLabelText("对话问题")).toHaveValue("当前视角人物和选中人物是什么关系？");
     expect(screen.getByText("张敏有两个孩子。")).toBeVisible();
     expect(screen.getAllByText("张敏")).toHaveLength(2);
     expect(screen.getByText("族谱手录")).toBeVisible();
