@@ -254,6 +254,32 @@ describe("verified backup and staged restore", () => {
     expect((await readdir(parent)).filter((name) => name.startsWith(".family-restore-stage-"))).toEqual([]);
   });
 
+  it("rejects an unexpected trigger introduced after inspection before activation or snapshot", async () => {
+    const value = await createBackupFixture(roots);
+    await new BackupService(value.workspace).createBackup(value.archivePath);
+    let snapshotCalls = 0;
+    const restore = new RestoreService({
+      resolveTarget: async () => value.target,
+      acquireExclusive: async () => ({ release: () => undefined }),
+      createVerifiedSnapshot: async () => { snapshotCalls += 1; },
+      deactivate: async () => undefined,
+      commitActivation: async () => undefined,
+      rollbackActivation: async () => undefined
+    });
+    const inspection = await restore.inspectBackup({ archivePath: value.archivePath, targetWorkspaceId: workspaceId });
+    const parent = dirname(value.target.rootPath);
+    const stageName = (await readdir(parent)).find((name) => name.startsWith(".family-restore-stage-"));
+    if (!stageName) throw new Error("restore stage was not created");
+    const staged = openDatabase(join(parent, stageName, "genealogy.sqlite"));
+    staged.exec("CREATE TRIGGER unexpected_person_rewrite AFTER INSERT ON person BEGIN UPDATE person SET display_name='rewritten' WHERE id=NEW.id; END");
+    staged.close();
+
+    await expect(restore.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: workspaceId, confirmReplace: true }))
+      .rejects.toThrowError(expect.objectContaining<Partial<BackupValidationError>>({ code: "STAGING_INVALID" }));
+    expect(snapshotCalls).toBe(0);
+    expect((await readdir(parent)).filter((name) => name.startsWith(".family-restore-stage-"))).toEqual([]);
+  });
+
   it("keeps the restored workspace active when old-directory cleanup fails after commit", async () => {
     const value = await createBackupFixture(roots);
     await new BackupService(value.workspace).createBackup(value.archivePath);

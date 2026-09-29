@@ -109,7 +109,12 @@ describe("backup archive security preflight", () => {
 
   it.each([
     ["a missing person.notes column", "ALTER TABLE person DROP COLUMN notes"],
-    ["a missing wiki FTS trigger", "DROP TRIGGER wiki_fts_after_update"]
+    ["a missing wiki FTS trigger", "DROP TRIGGER wiki_fts_after_update"],
+    ["an extra data-rewriting trigger", "CREATE TRIGGER unexpected_person_rewrite AFTER INSERT ON person BEGIN UPDATE person SET display_name='rewritten' WHERE id=NEW.id; END"],
+    ["an extra table", "CREATE TABLE unexpected_table (value TEXT)"],
+    ["an extra view", "CREATE VIEW unexpected_view AS SELECT id FROM person"],
+    ["an extra index", "CREATE INDEX unexpected_index ON person(display_name)"],
+    ["an extra virtual table", "CREATE VIRTUAL TABLE unexpected_fts USING fts5(payload)"]
   ])("rejects a hash-correct archive with %s", async (_case, mutation) => {
     const value = await createBackupFixture(cleanup);
     await new BackupService(value.workspace).createBackup(value.archivePath);

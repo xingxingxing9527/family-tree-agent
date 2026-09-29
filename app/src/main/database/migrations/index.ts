@@ -55,7 +55,6 @@ function schemaObjects(database: Database.Database): SchemaObjectRow[] {
   return (database.prepare(`
     SELECT type, name, tbl_name, sql
     FROM sqlite_master
-    WHERE name NOT LIKE 'sqlite_%'
     ORDER BY type, name
   `).all() as SchemaObjectRow[]).map((row) => ({ ...row, sql: normalizedSql(row.sql) }));
 }
@@ -114,7 +113,11 @@ export function validateMigrationLedger(database: WorkspaceDatabase, expectedVer
 
 export function validateCurrentSchema(database: WorkspaceDatabase): void {
   validateMigrationLedger(database, LATEST_SCHEMA_VERSION);
-  const actualObjects = new Map(schemaObjects(database).map((object) => [object.name, object]));
+  const actualSchemaObjects = schemaObjects(database);
+  if (actualSchemaObjects.length !== currentSchemaContract.objects.length) {
+    failSchema("application schema contains missing or unexpected objects");
+  }
+  const actualObjects = new Map(actualSchemaObjects.map((object) => [object.name, object]));
   for (const expected of currentSchemaContract.objects) {
     const actual = actualObjects.get(expected.name);
     if (!actual || actual.type !== expected.type || actual.tbl_name !== expected.tbl_name || actual.sql !== expected.sql) {

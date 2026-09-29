@@ -87,12 +87,20 @@ app.whenReady().then(() => {
     model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini"
   }));
   registerChatIpc(ipcMain, () => mainWindow?.webContents.id, chatGateway, workspaceMutations);
+  const disposeWorkspaceRuntime = async (): Promise<void> => {
+    const results = await Promise.allSettled([
+      mediaGateway.dispose(),
+      Promise.resolve().then(() => chatGateway.dispose())
+    ]);
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failures.length > 0) throw new AggregateError(failures.map((failure) => failure.reason), "Unable to dispose workspace services");
+  };
   const dataManagementGateway = new WorkspaceDataManagementGateway(workspaceManager, undefined, {
-    disposeWorkspaceServices: () => { mediaGateway.dispose(); chatGateway.dispose(); },
+    disposeWorkspaceServices: disposeWorkspaceRuntime,
     mutationGate: workspaceMutations
   });
   registerDataManagementIpc(ipcMain, () => mainWindow?.webContents.id, dataManagementGateway, workspaceMutations);
-  app.once("before-quit", () => { mediaGateway.dispose(); chatGateway.dispose(); void dataManagementGateway.dispose(); });
+  app.once("before-quit", () => { void disposeWorkspaceRuntime().catch(() => undefined); void dataManagementGateway.dispose(); });
   registerWikiIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceWikiGateway(workspaceManager), workspaceMutations);
   registerModelSettingsIpc(ipcMain, () => mainWindow?.webContents.id, credentialVault);
 

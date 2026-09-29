@@ -134,6 +134,23 @@ describe("database migrations", () => {
     } finally { fts.close(); }
   });
 
+  it.each([
+    ["table", "CREATE TABLE unexpected_table (value TEXT)"],
+    ["index", "CREATE INDEX unexpected_index ON person(display_name)"],
+    ["trigger", "CREATE TRIGGER unexpected_trigger AFTER INSERT ON person BEGIN UPDATE workspace_meta SET name='rewritten'; END"],
+    ["view", "CREATE VIEW unexpected_view AS SELECT id FROM person"],
+    ["virtual table", "CREATE VIRTUAL TABLE unexpected_fts USING fts5(payload)"]
+  ])("rejects an unexpected application-schema %s", async (_case, mutation) => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    try {
+      applyMigrations(database);
+      database.exec(mutation);
+      expect(() => validateCurrentSchema(database)).toThrow(/migration|schema/i);
+    } finally { database.close(); }
+  });
+
   it("accepts a genuine contiguous version-1 database and migrates it exactly to the latest version", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
     roots.push(root);

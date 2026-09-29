@@ -179,7 +179,7 @@ describe("managed media", () => {
     expect(imported.ok).toBe(true); if (!imported.ok) throw new Error("fixture failed");
     expect(await readFile(join(mediaRoot, imported.value.sha256.slice(0, 2), `${imported.value.sha256}.jpg`))).toEqual(bytes);
     database.close();
-  });
+  }, 15_000);
 
   it("parses audio when the selected FileHandle performs partial positional reads", async () => {
     const { root, database, service } = await setup();

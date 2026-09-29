@@ -58,6 +58,12 @@ async function publishManifestAtomically(path: string, summary: WorkspaceSummary
 
 class WorkspaceIdentityError extends Error {}
 
+function sameWorkspaceExceptOrigin(left: WorkspaceSummary, right: WorkspaceSummary): boolean {
+  const { originPersonId: _leftOrigin, ...leftStable } = left;
+  const { originPersonId: _rightOrigin, ...rightStable } = right;
+  return JSON.stringify(leftStable) === JSON.stringify(rightStable);
+}
+
 export interface OpenWorkspaceContext {
   workspaceId: string;
   databasePath: string;
@@ -142,18 +148,28 @@ export class WorkspaceManager {
         if (!paths) return failure("PATH_DENIED", "Workspace directory was denied", { id: input.id });
         if (!await this.hasRequiredFiles(paths)) return failure("NOT_FOUND", "Workspace files were not found", { id: input.id });
         const persisted = await this.readManifest(paths.manifest);
-        if (!persisted || JSON.stringify(persisted) !== JSON.stringify(workspace)) {
+        if (!persisted || !sameWorkspaceExceptOrigin(persisted, workspace)) {
           return failure("PATH_DENIED", "Workspace manifest did not match its index entry", { id: input.id });
         }
         const database = openDatabase(paths.database);
         let migratedVersion: number;
+        let originPersonId: string | null;
         try {
           migratedVersion = applyMigrations(database);
-          this.validateOrInitializeDatabaseIdentity(database, workspace);
+          originPersonId = this.validateOrInitializeDatabaseIdentity(database, workspace, persisted);
         } finally { database.close(); }
-        const updated = workspaceSummarySchema.parse({ ...workspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() });
-        const next = workspaces.map((entry) => entry.id === updated.id ? updated : entry);
-        await this.publishExistingPair(paths.manifest, workspace, workspaces, updated, next);
+        let publishedWorkspace = workspace;
+        let publishedWorkspaces = workspaces;
+        if (workspace.originPersonId !== originPersonId || persisted.originPersonId !== originPersonId) {
+          publishedWorkspace = workspaceSummarySchema.parse({ ...workspace, originPersonId });
+          publishedWorkspaces = workspaces.map((entry) => entry.id === publishedWorkspace.id ? publishedWorkspace : entry);
+          if (!await this.publishAuthoritativeOriginPair(paths.manifest, publishedWorkspace, publishedWorkspaces)) {
+            throw new Error("Workspace origin metadata publication is pending");
+          }
+        }
+        const updated = workspaceSummarySchema.parse({ ...publishedWorkspace, schemaVersion: migratedVersion, lastOpenedAt: new Date().toISOString() });
+        const next = publishedWorkspaces.map((entry) => entry.id === updated.id ? updated : entry);
+        await this.publishExistingPair(paths.manifest, publishedWorkspace, publishedWorkspaces, updated, next);
         this.openWorkspaceContext = this.context(updated, paths);
         return { ok: true, value: updated };
       } catch (error) {
@@ -182,26 +198,31 @@ export class WorkspaceManager {
     await this.lifecycle.run(async () => {
       const context = this.openWorkspaceContext;
       if (!context) return;
-      const workspaces = await this.index.read();
-      const workspace = workspaces.find((entry) => entry.id === context.workspaceId);
-      if (!workspace) throw new WorkspaceIdentityError("Open workspace is missing from the index");
-      const paths = resolveWorkspacePaths(this.root, workspace.directory);
-      if (!paths) throw new WorkspaceIdentityError("Open workspace path is invalid");
-      const persisted = await this.readManifest(paths.manifest);
-      if (!persisted || JSON.stringify(persisted) !== JSON.stringify(workspace)) throw new WorkspaceIdentityError("Workspace metadata is inconsistent");
-      const database = openDatabase(paths.database);
+      const database = openDatabase(context.databasePath);
       let originPersonId: string | null;
       try {
-        const identity = this.readDatabaseIdentity(database, workspace.id);
-        if (!identity || identity.name !== workspace.name) throw new WorkspaceIdentityError("Workspace database identity is inconsistent");
+        const identity = this.readDatabaseIdentity(database, context.workspaceId);
+        if (!identity || identity.name !== context.workspaceName) throw new WorkspaceIdentityError("Workspace database identity is inconsistent");
         originPersonId = identity.originPersonId;
-        this.validateOrigin(database, workspace.id, originPersonId);
+        this.validateOrigin(database, context.workspaceId, originPersonId);
       } finally { database.close(); }
-      if (workspace.originPersonId === originPersonId) return;
-      const updated = workspaceSummarySchema.parse({ ...workspace, originPersonId });
-      const next = workspaces.map((entry) => entry.id === updated.id ? updated : entry);
-      await this.publishExistingPair(paths.manifest, workspace, workspaces, updated, next);
-      this.openWorkspaceContext = this.context(updated, paths);
+      this.openWorkspaceContext = { ...context, originPersonId };
+      try {
+        const workspaces = await this.index.read();
+        const workspace = workspaces.find((entry) => entry.id === context.workspaceId);
+        if (!workspace) throw new WorkspaceIdentityError("Open workspace is missing from the index");
+        const paths = resolveWorkspacePaths(this.root, workspace.directory);
+        if (!paths) throw new WorkspaceIdentityError("Open workspace path is invalid");
+        const persisted = await this.readManifest(paths.manifest);
+        if (!persisted || !sameWorkspaceExceptOrigin(persisted, workspace)) throw new WorkspaceIdentityError("Workspace metadata is inconsistent");
+        if (workspace.originPersonId === originPersonId && persisted.originPersonId === originPersonId) return;
+        const updated = workspaceSummarySchema.parse({ ...workspace, originPersonId });
+        const next = workspaces.map((entry) => entry.id === updated.id ? updated : entry);
+        await this.publishAuthoritativeOriginPair(paths.manifest, updated, next);
+      } catch (error) {
+        if (error instanceof WorkspaceIdentityError || error instanceof ZodError) throw error;
+        // The committed database value is the durable recovery intent. A later sync/open retries publication.
+      }
     });
   }
 
@@ -308,6 +329,11 @@ export class WorkspaceManager {
     }
   }
 
+  private async publishAuthoritativeOriginPair(manifestPath: string, manifest: WorkspaceSummary, workspaces: WorkspaceSummary[]): Promise<boolean> {
+    if (await this.recoverPair(manifestPath, manifest, workspaces)) return true;
+    return this.recoverPair(manifestPath, manifest, workspaces);
+  }
+
   private async recoverPair(manifestPath: string, manifest: WorkspaceSummary, workspaces: WorkspaceSummary[]): Promise<boolean> {
     if (!await this.manifestMatches(manifestPath, manifest)) await this.publishManifest(manifestPath, manifest).catch(() => undefined);
     if (!await this.indexMatches(workspaces)) await this.index.write(workspaces).catch(() => undefined);
@@ -339,19 +365,19 @@ export class WorkspaceManager {
     return parsed.success ? parsed.data : null;
   }
 
-  private validateOrInitializeDatabaseIdentity(database: WorkspaceDatabase, workspace: WorkspaceSummary): void {
+  private validateOrInitializeDatabaseIdentity(database: WorkspaceDatabase, workspace: WorkspaceSummary, manifest: WorkspaceSummary): string | null {
     const identity = this.readDatabaseIdentity(database, workspace.id);
     if (!identity) {
+      if (manifest.originPersonId !== workspace.originPersonId) throw new WorkspaceIdentityError("Workspace origin metadata has no database authority");
       this.validateOrigin(database, workspace.id, workspace.originPersonId);
       const now = new Date().toISOString();
       database.prepare("INSERT INTO workspace_meta (workspace_id, name, origin_person_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
         .run(workspace.id, workspace.name, workspace.originPersonId, now, now);
-      return;
+      return workspace.originPersonId;
     }
-    if (identity.name !== workspace.name || identity.originPersonId !== workspace.originPersonId) {
-      throw new WorkspaceIdentityError("Workspace database identity does not match its metadata");
-    }
-    this.validateOrigin(database, workspace.id, workspace.originPersonId);
+    if (identity.name !== workspace.name) throw new WorkspaceIdentityError("Workspace database identity does not match its metadata");
+    this.validateOrigin(database, workspace.id, identity.originPersonId);
+    return identity.originPersonId;
   }
 
   private readDatabaseIdentity(database: WorkspaceDatabase, workspaceId: string): { name: string; originPersonId: string | null } | null {

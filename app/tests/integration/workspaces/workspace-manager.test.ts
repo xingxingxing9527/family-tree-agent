@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
+import { WorkspaceFactsGateway } from "../../../src/main/application/facts/facts-gateway";
 import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
 import { WorkspaceIndex } from "../../../src/main/workspaces/workspace-index";
 
@@ -198,7 +199,7 @@ describe("WorkspaceManager", () => {
     expect(index.workspaces.find((workspace) => workspace.id === created.value.id)?.lastOpenedAt).toBeNull();
   });
 
-  it("rejects stale metadata without overwriting a conflicting database origin", async () => {
+  it("recovers stale origin metadata from the authoritative database on a fresh open", async () => {
     const { root, manager } = await createManager();
     const created = await manager.create({ name: "Origin family" });
     if (!created.ok) throw new Error("workspace fixture failed");
@@ -212,10 +213,61 @@ describe("WorkspaceManager", () => {
     database.close();
     await manager.close();
 
-    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: true, value: { originPersonId: personId } });
     const verified = new Database(databasePath, { readonly: true });
     expect(verified.prepare("SELECT origin_person_id FROM workspace_meta WHERE workspace_id=?").pluck().get(created.value.id)).toBe(personId);
     verified.close();
+    const index = await new WorkspaceIndex(root).read();
+    expect(index.find((entry) => entry.id === created.value.id)?.originPersonId).toBe(personId);
+    expect(JSON.parse(await readFile(join(root, created.value.directory, "workspace.json"), "utf8")).originPersonId).toBe(personId);
+  });
+
+  it.each([
+    ["one-shot index", "index", 1],
+    ["persistent index", "index", Number.POSITIVE_INFINITY],
+    ["one-shot manifest", "manifest", 1],
+    ["persistent manifest", "manifest", Number.POSITIVE_INFINITY]
+  ] as const)("keeps a committed first-person save successful through %s origin publication failure and recovers on open", async (_case, destination, failures) => {
+    const { root } = await createManager();
+    const realIndex = new WorkspaceIndex(root);
+    let remainingFailures = failures;
+    const manager = managerWithStorage(root, destination === "index" ? {
+      index: {
+        read: () => realIndex.read(),
+        write: async (workspaces) => {
+          if (remainingFailures > 0) {
+            remainingFailures -= 1;
+            throw new Error("injected origin index publication failure");
+          }
+          await realIndex.write(workspaces);
+        }
+      }
+    } : {
+      publishManifest: async (path, summary) => {
+        if (remainingFailures > 0) {
+          remainingFailures -= 1;
+          throw new Error("injected origin manifest publication failure");
+        }
+        await writeFile(path, JSON.stringify(summary, null, 2));
+      }
+    });
+    remainingFailures = 0;
+    const created = await manager.create({ name: "Recoverable origin" });
+    if (!created.ok) throw new Error("workspace fixture failed");
+    await manager.open({ id: created.value.id });
+    remainingFailures = failures;
+    const saved = await new WorkspaceFactsGateway(manager).savePerson({
+      draft: { displayName: "Committed origin", aliases: [], gender: "unknown", birth: null, death: null, notes: null, sourceDescription: "test" },
+      confirmWarnings: true
+    });
+    expect(saved).toMatchObject({ ok: true, value: { saved: true, entityId: expect.any(String) } });
+    if (!saved.ok || !saved.value.entityId) throw new Error("person save failed");
+    const database = new Database(join(root, created.value.directory, "genealogy.sqlite"), { readonly: true });
+    expect(database.prepare("SELECT origin_person_id FROM workspace_meta WHERE workspace_id=?").pluck().get(created.value.id)).toBe(saved.value.entityId);
+    database.close();
+
+    const reopened = await new WorkspaceManager(root).open({ id: created.value.id });
+    expect(reopened).toMatchObject({ ok: true, value: { originPersonId: saved.value.entityId } });
   });
 
   it("validates the complete workspace index before atomically publishing it", async () => {

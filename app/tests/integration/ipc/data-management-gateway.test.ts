@@ -1,10 +1,12 @@
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BackupService } from "../../../src/main/application/backup/backup-service";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { WorkspaceDataManagementGateway } from "../../../src/main/ipc/data-management-ipc";
+import { WorkspaceMediaGateway } from "../../../src/main/ipc/media-ipc";
+import { openSelectedMediaFile } from "../../../src/main/media/media-service";
 import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
 
 const roots: string[] = [];
@@ -50,7 +52,20 @@ describe("data-management native capabilities", () => {
     changed.close();
 
     const showOpenDialog = vi.fn().mockResolvedValue({ canceled: false, filePaths: [archivePath] });
-    const disposed = vi.fn();
+    const retainedPath = join(context.backupsPath, "retained.jpg");
+    await writeFile(retainedPath, Buffer.from([0xff, 0xd8, 0xff, 0x00]));
+    const retained = await openSelectedMediaFile(retainedPath, context.workspaceId);
+    const closeHandle = retained.handle.close.bind(retained.handle);
+    let closeStarted!: () => void;
+    let allowClose!: () => void;
+    const closing = new Promise<void>((resolve) => { closeStarted = resolve; });
+    const closeGate = new Promise<void>((resolve) => { allowClose = resolve; });
+    retained.handle.close = async () => { closeStarted(); await closeGate; await closeHandle(); };
+    const media = new WorkspaceMediaGateway(manager, {
+      showOpenDialog: async () => ({ canceled: false, filePaths: [retainedPath] })
+    }, 300_000, { open: async () => retained, close: async (selection) => selection.handle.close() });
+    expect((await media.select()).ok).toBe(true);
+    const disposed = vi.fn(async () => media.dispose());
     const gateway = new WorkspaceDataManagementGateway(manager, {
       showOpenDialog,
       showSaveDialog: vi.fn()
@@ -78,7 +93,11 @@ describe("data-management native capabilities", () => {
     await expect(gateway.inspectBackup(request)).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
     if (!inspected.ok) throw new Error("inspection failed");
 
-    await expect(gateway.restoreBackup({ restoreToken: inspected.value.restoreToken, targetWorkspaceId: context.workspaceId, confirmReplace: true })).resolves.toEqual({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: false } });
+    const restore = gateway.restoreBackup({ restoreToken: inspected.value.restoreToken, targetWorkspaceId: context.workspaceId, confirmReplace: true });
+    await closing;
+    await expect(stat(manager.getAutomaticSnapshotRoot())).rejects.toMatchObject({ code: "ENOENT" });
+    allowClose();
+    await expect(restore).resolves.toEqual({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: false } });
     expect(disposed).toHaveBeenCalledTimes(1);
     expect(manager.getOpenWorkspaceContext()?.workspaceId).toBe(context.workspaceId);
     const restored = openDatabase(context.databasePath);
