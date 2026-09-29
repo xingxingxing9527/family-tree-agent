@@ -1,5 +1,6 @@
 import React, { type JSX } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { formatPartialDate } from "../people/format-partial-date";
 import type { TreeFlowNodeData } from "./layout-with-elk";
 
 type UnionFlowNode = Node<TreeFlowNodeData, "familyUnion">;
@@ -25,6 +26,12 @@ export function FamilyUnionNode({ data }: NodeProps<UnionFlowNode>): JSX.Element
     >
       <Handle type="target" position={Position.Top} isConnectable={false} />
       <span>{label}</span>
+      {data.node.display.marriageStart
+        ? <span className="family-union-date">开始：{formatPartialDate(data.node.display.marriageStart)}</span>
+        : null}
+      {data.node.display.marriageEnd
+        ? <span className="family-union-date">结束：{formatPartialDate(data.node.display.marriageEnd)}</span>
+        : null}
       {data.node.display.warnings.map((warning) => <span className="sr-only" key={warning}>{warning}</span>)}
       <Handle type="source" position={Position.Bottom} isConnectable={false} />
     </article>

@@ -49,7 +49,13 @@ const topology: TreeProjectionTopology = {
       id: "marriage:one",
       kind: "union",
       unionId: "marriage:one",
-      display: { kind: "marriage", marriageStatus: "divorced", warnings: [] }
+      display: {
+        kind: "marriage",
+        marriageStatus: "divorced",
+        marriageStart: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" },
+        marriageEnd: { calendar: "lunar", year: 1990, month: 2, day: 3, leapMonth: true, precision: "day" },
+        warnings: []
+      }
     },
     {
       id: "person:child",
@@ -106,6 +112,8 @@ describe("FamilyTreeCanvas", () => {
     expect(screen.getByText("第 1 代（系统推导）")).toBeVisible();
     expect(screen.getByRole("group", { name: "家庭联合：已结束婚姻" })).toHaveClass("family-union-node", "ended");
     expect(screen.getByText("已结束婚姻")).toBeVisible();
+    expect(screen.getByText("开始：公历 1980年1月")).toBeVisible();
+    expect(screen.getByText("结束：农历 1990年闰2月3日")).toBeVisible();
   });
 
   it("updates viewpoint-only labels without running ELK again for the same topology", async () => {
@@ -139,6 +147,8 @@ describe("FamilyTreePage", () => {
         parentIds: ["a", "b"],
         marriageId: null,
         marriageStatus: null,
+        marriageStart: null,
+        marriageEnd: null,
         childIds: ["child"],
         warnings: []
       }]

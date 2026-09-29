@@ -153,6 +153,9 @@ export function projectWorkspaceTree(
       if (display) generationByPerson.set(membership.person_id, display);
     }
   }
+  const primaryTerms = input.viewpointId
+    ? calculator.calculatePrimaryTerms(input.viewpointId, people.map((person) => person.id))
+    : null;
   const service = new TreeProjectionService({
     people: people.map((person) => ({
       id: person.id,
@@ -162,7 +165,9 @@ export function projectWorkspaceTree(
       generation: generationByPerson.get(person.id) ?? null
     })),
     unions
-  }, (viewpointId, targetPersonId) => calculator.calculateRelationship(viewpointId, targetPersonId).primaryTerm);
+  }, (viewpointId, targetPersonId) => primaryTerms && viewpointId === input.viewpointId
+    ? primaryTerms.get(targetPersonId) ?? null
+    : calculator.calculateRelationship(viewpointId, targetPersonId).primaryTerm);
   const subjectId = input.subjectId ?? "";
   const topologyProjection = input.view === "branch" ? service.branch(subjectId)
     : input.view === "ancestors" ? service.ancestors(subjectId)

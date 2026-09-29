@@ -6,6 +6,8 @@ export interface FamilyUnion {
   parentIds: string[];
   marriageId: string | null;
   marriageStatus: "active" | "divorced" | null;
+  marriageStart: PartialDate | null;
+  marriageEnd: PartialDate | null;
   childIds: string[];
   warnings: string[];
 }
@@ -100,6 +102,8 @@ function emptyUnion(id: string, kind: FamilyUnion["kind"], parentIds: string[], 
     parentIds,
     marriageId: marriage?.id ?? null,
     marriageStatus: marriage?.status ?? null,
+    marriageStart: marriage?.start ?? null,
+    marriageEnd: marriage?.end ?? null,
     childIds: [],
     warnings: []
   };

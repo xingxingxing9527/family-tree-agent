@@ -238,6 +238,8 @@ export interface TreeUnionNodeDto {
   display: {
     kind: "marriage" | "coParents" | "singleParent" | "unassigned";
     marriageStatus: "active" | "divorced" | null;
+    marriageStart: PartialDate | null;
+    marriageEnd: PartialDate | null;
     warnings: string[];
   };
 }

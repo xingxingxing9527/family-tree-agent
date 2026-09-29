@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { calculateRelationship } from "../../../../src/main/domain/kinship/relationship-calculator";
+import { calculateRelationship, RelationshipCalculator } from "../../../../src/main/domain/kinship/relationship-calculator";
 import { loadKinshipRuleCatalog } from "../../../../src/main/domain/kinship/rule-loader";
 import type {
   KinshipFactGraph,
@@ -229,6 +229,46 @@ describe("calculateRelationship", () => {
     expect(result.alternatives).toHaveLength(1);
     expect(result.alternatives[0]?.signature.pathRelationIds).toEqual(["m-source", "m-target"]);
     expect(result.alternatives[0]?.primaryTerm).toBe(result.primaryTerm);
+  });
+
+  it("bulk-resolves tree labels with the same primary terms and conservative conflict handling", () => {
+    const facts = graph(
+      [person("source", "male"), person("father", "male"), person("mother", "female"), person("brother", "male"), person("unrelated")],
+      [
+        { id: "f-source", parentId: "father", childId: "source", parentRole: "father" },
+        { id: "f-brother", parentId: "father", childId: "brother", parentRole: "father" },
+        { id: "m-source", parentId: "mother", childId: "source", parentRole: "mother", conflictIds: ["conflicting-maternal-path"] },
+        { id: "m-brother", parentId: "mother", childId: "brother", parentRole: "mother" }
+      ]
+    );
+    const calculator = new RelationshipCalculator(facts);
+
+    const labels = calculator.calculatePrimaryTerms("source", ["source", "father", "brother", "unrelated"]);
+
+    expect(Object.fromEntries(labels)).toEqual({
+      source: calculateRelationship(facts, "source", "source").primaryTerm,
+      father: calculateRelationship(facts, "source", "father").primaryTerm,
+      brother: null,
+      unrelated: null
+    });
+  });
+
+  it("keeps each cached calculator isolated from later mutations to its input fact snapshot", () => {
+    const source = person("source", "male");
+    const facts = graph(
+      [source, person("father", "male")],
+      [{ id: "father-source", parentId: "father", childId: "source", parentRole: "father" }]
+    );
+    const cached = new RelationshipCalculator(facts);
+
+    source.gender = "female";
+    facts.parentChild.length = 0;
+
+    expect(cached.calculateRelationship("source", "father")).toMatchObject({
+      primaryTerm: "父亲",
+      reverseTerm: "儿子"
+    });
+    expect(new RelationshipCalculator(facts).calculateRelationship("source", "father").primaryTerm).toBeNull();
   });
 
   it("withholds a term when any equally ranked factual path carries a conflict", () => {

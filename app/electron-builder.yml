@@ -2,9 +2,25 @@ appId: cn.llmwiki.family
 productName: 家谱智能体
 directories:
   output: release
+# Developer installs still run electron-builder install-app-deps via postinstall.
+# Packaging reuses that ABI-verified binary because this release host has no system MSVC toolchain.
+npmRebuild: false
+asar: true
 files:
   - out/**
   - package.json
+  - "!tests/**"
+  - "!node_modules/**/test/**"
+  - "!node_modules/**/tests/**"
+  - "!node_modules/**/__tests__/**"
+  - "!**/*.map"
+  - "!**/.env*"
+  - "!**/*.sqlite*"
+  - "!coverage/**"
+  - "!release/**"
+  - "!scripts/**"
+  - "!test-results/**"
+  - "!playwright-report/**"
 extraResources:
   - from: resources/kinship-rules/mandarin-v1.json
     to: kinship-rules/mandarin-v1.json
@@ -12,5 +28,19 @@ asarUnpack:
   - node_modules/better-sqlite3/**
 win:
   target:
-    - nsis
-  artifactName: family-agent-${version}-${arch}.${ext}
+    - target: nsis
+      arch:
+        - x64
+  executableName: family-agent
+  requestedExecutionLevel: asInvoker
+  artifactName: family-agent-${version}-win-${arch}.${ext}
+nsis:
+  guid: d1a51a1d-1566-5e0e-9cfa-31a4c775b234
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  deleteAppDataOnUninstall: false
+  uninstallDisplayName: 家谱智能体

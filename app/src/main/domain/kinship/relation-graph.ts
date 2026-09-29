@@ -26,7 +26,11 @@ const compareEdges = (left: RelationEdge, right: RelationEdge): number =>
   || compareText(left.step, right.step);
 
 export function createRelationGraph(input: KinshipFactGraph): RelationGraph {
-  const people = new Map(input.people.map((person) => [person.id, person]));
+  const people = new Map(input.people.map((person) => [person.id, {
+    ...person,
+    birth: person.birth ? { ...person.birth } : null,
+    ...(person.conflictIds ? { conflictIds: [...person.conflictIds] } : {})
+  }]));
   const adjacency = new Map<string, RelationEdge[]>();
   for (const personId of people.keys()) adjacency.set(personId, []);
 

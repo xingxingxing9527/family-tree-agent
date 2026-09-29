@@ -145,4 +145,21 @@ describe("findKinshipPaths", () => {
       ["ä-source", "ä-target"]
     ]);
   });
+
+  it("bounds a disconnected search by shortest discovered depth instead of enumerating simple cycles", () => {
+    const connected = Array.from({ length: 10 }, (_, index) => person(`connected-${index}`));
+    const marriages = connected.flatMap((left, leftIndex) => connected.slice(leftIndex + 1).map((right, rightOffset) => ({
+      id: `marriage-${leftIndex}-${leftIndex + rightOffset + 1}`,
+      spouseAId: left.id,
+      spouseBId: right.id,
+      status: "active" as const
+    })));
+    const relationGraph = graph({ people: [...connected, person("isolated-target")], marriages });
+
+    const started = performance.now();
+    const paths = findKinshipPaths(relationGraph, connected[0]!.id, "isolated-target");
+
+    expect(paths).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
 });

@@ -50,6 +50,8 @@ describe("FamilyUnionProjector", () => {
         parentIds: ["alex", "casey"],
         marriageId: "new",
         marriageStatus: "active",
+        marriageStart: solar(1995, 1),
+        marriageEnd: null,
         childIds: ["child-new"],
         warnings: []
       },
@@ -59,6 +61,8 @@ describe("FamilyUnionProjector", () => {
         parentIds: ["alex", "blair"],
         marriageId: "old",
         marriageStatus: "divorced",
+        marriageStart: solar(1980, 1),
+        marriageEnd: solar(1990, 1),
         childIds: ["child-old"],
         warnings: []
       }
@@ -82,6 +86,8 @@ describe("FamilyUnionProjector", () => {
       parentIds: ["parent-a", "parent-b"],
       marriageId: null,
       marriageStatus: null,
+      marriageStart: null,
+      marriageEnd: null,
       childIds: ["child"],
       warnings: []
     }]);
@@ -100,6 +106,8 @@ describe("FamilyUnionProjector", () => {
       parentIds: ["known"],
       marriageId: null,
       marriageStatus: null,
+      marriageStart: null,
+      marriageEnd: null,
       childIds: ["child"],
       warnings: []
     });
@@ -132,6 +140,8 @@ describe("FamilyUnionProjector", () => {
       parentIds: ["parent-a", "parent-b"],
       marriageId: null,
       marriageStatus: null,
+      marriageStart: null,
+      marriageEnd: null,
       childIds: ["ambiguous-child"],
       warnings: [expect.stringContaining("ambiguous-child")]
     });
@@ -241,6 +251,8 @@ describe("TreeProjectionService", () => {
       parentIds: ["a", "b"],
       marriageId: "first",
       marriageStatus: "divorced" as const,
+      marriageStart: solar(1980, 1),
+      marriageEnd: solar(1990, 1),
       childIds: ["c"],
       warnings: []
     },
@@ -250,6 +262,8 @@ describe("TreeProjectionService", () => {
       parentIds: ["c", "d"],
       marriageId: null,
       marriageStatus: null,
+      marriageStart: null,
+      marriageEnd: null,
       childIds: ["e"],
       warnings: []
     }

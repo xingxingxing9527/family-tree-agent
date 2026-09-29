@@ -23,7 +23,7 @@ export interface TreeUnionNode {
   id: string;
   kind: "union";
   unionId: string;
-  display: Pick<FamilyUnion, "kind" | "marriageStatus" | "warnings">;
+  display: Pick<FamilyUnion, "kind" | "marriageStatus" | "marriageStart" | "marriageEnd" | "warnings">;
 }
 
 export type TreeProjectionNode = TreePersonNode | TreeUnionNode;
@@ -159,7 +159,13 @@ export class TreeProjectionService {
       id: union.id,
       kind: "union",
       unionId: union.id,
-      display: { kind: union.kind, marriageStatus: union.marriageStatus, warnings: [...union.warnings] }
+      display: {
+        kind: union.kind,
+        marriageStatus: union.marriageStatus,
+        marriageStart: union.marriageStart,
+        marriageEnd: union.marriageEnd,
+        warnings: [...union.warnings]
+      }
     }));
     const edges = activeUnions.flatMap((union): TreeProjectionEdge[] => [
       ...union.parentIds.filter((id) => personIds.has(id)).map((parentId) => ({

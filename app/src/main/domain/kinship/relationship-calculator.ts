@@ -1,5 +1,5 @@
 import { createRelationGraph } from "./relation-graph.js";
-import { findKinshipPaths } from "./path-search.js";
+import { findKinshipPaths, findPrimaryKinshipPaths } from "./path-search.js";
 import {
   loadKinshipRuleCatalog,
   matchKinshipRule,
@@ -95,13 +95,12 @@ const resolvePath = (
   };
 };
 
-export function calculateRelationship(
-  facts: KinshipFactGraph,
+function calculateRelationshipInGraph(
+  graph: RelationGraph,
   viewpointId: string,
   targetId: string,
-  catalog: KinshipRuleCatalog = loadKinshipRuleCatalog()
+  catalog: KinshipRuleCatalog
 ): RelationshipResult {
-  const graph = createRelationGraph(facts);
   const paths = findKinshipPaths(graph, viewpointId, targetId);
   if (paths.length === 0) {
     return {
@@ -144,13 +143,35 @@ export function calculateRelationship(
   };
 }
 
+export function calculateRelationship(
+  facts: KinshipFactGraph,
+  viewpointId: string,
+  targetId: string,
+  catalog: KinshipRuleCatalog = loadKinshipRuleCatalog()
+): RelationshipResult {
+  return calculateRelationshipInGraph(createRelationGraph(facts), viewpointId, targetId, catalog);
+}
+
 export class RelationshipCalculator {
+  private readonly graph: RelationGraph;
+
   constructor(
-    private readonly facts: KinshipFactGraph,
+    facts: KinshipFactGraph,
     private readonly catalog: KinshipRuleCatalog = loadKinshipRuleCatalog()
-  ) {}
+  ) {
+    this.graph = createRelationGraph(facts);
+  }
 
   calculateRelationship(viewpointId: string, targetId: string): RelationshipResult {
-    return calculateRelationship(this.facts, viewpointId, targetId, this.catalog);
+    return calculateRelationshipInGraph(this.graph, viewpointId, targetId, this.catalog);
+  }
+
+  calculatePrimaryTerms(viewpointId: string, targetIds: readonly string[]): ReadonlyMap<string, string | null> {
+    const paths = findPrimaryKinshipPaths(this.graph, viewpointId, targetIds);
+    return new Map(targetIds.map((targetId) => {
+      const candidate = paths.get(targetId);
+      if (!candidate || candidate.conflictIds.length > 0) return [targetId, null] as const;
+      return [targetId, resolvePath(this.graph, candidate.path, this.catalog).alternative.primaryTerm] as const;
+    }));
   }
 }

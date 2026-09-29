@@ -37,8 +37,8 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
     },
     children: topology.nodes.map((node) => ({
       id: node.id,
-      width: node.kind === "person" ? 196 : 72,
-      height: node.kind === "person" ? 112 : 56
+      width: node.kind === "person" ? 196 : 136,
+      height: node.kind === "person" ? 112 : 96
     })),
     edges: topology.edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
   });

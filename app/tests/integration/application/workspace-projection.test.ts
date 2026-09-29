@@ -28,7 +28,24 @@ describe("workspace snapshot and tree projection", () => {
       { id: "mother", displayName: "李秀兰", gender: "female" as const },
       { id: "child", displayName: "张敏", gender: "female" as const }
     ]) service.execute({ type: "person.create", draft: { ...person, workspaceId }, source: source() });
-    service.execute({ type: "marriage.add", draft: { id: "marriage", workspaceId, spouseAId: "father", spouseBId: "mother", start: null }, source: source() });
+    service.execute({
+      type: "marriage.add",
+      draft: {
+        id: "marriage",
+        workspaceId,
+        spouseAId: "father",
+        spouseBId: "mother",
+        start: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" }
+      },
+      source: source()
+    });
+    service.execute({
+      type: "marriage.divorce",
+      marriageId: "marriage",
+      endDate: { calendar: "lunar", year: 1990, month: 2, day: 3, leapMonth: true, precision: "day" },
+      expectedVersion: 1,
+      source: source()
+    });
     service.execute({ type: "parentChild.add", draft: { id: "father-child", workspaceId, parentId: "father", childId: "child", parentRole: "father" }, source: source() });
     service.execute({ type: "parentChild.add", draft: { id: "mother-child", workspaceId, parentId: "mother", childId: "child", parentRole: "mother" }, source: source() });
     database.close();
@@ -43,7 +60,15 @@ describe("workspace snapshot and tree projection", () => {
     expect(projected).toMatchObject({ ok: true, value: { viewpointId: "father" } });
     if (!projected.ok) throw new Error("projection failed");
     expect(projected.value.topology.nodes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "union", unionId: "marriage:marriage", display: expect.objectContaining({ marriageStatus: "active" }) }),
+      expect.objectContaining({
+        kind: "union",
+        unionId: "marriage:marriage",
+        display: expect.objectContaining({
+          marriageStatus: "divorced",
+          marriageStart: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" },
+          marriageEnd: { calendar: "lunar", year: 1990, month: 2, day: 3, leapMonth: true, precision: "day" }
+        })
+      }),
       expect.objectContaining({ kind: "person", personId: "child" })
     ]));
     expect(projected.value.labels.child).toBe("女儿");

@@ -9,5 +9,9 @@ describe("desktop CSP", () => {
     expect(policy).toContain("img-src 'self' data: app: app-media:");
     expect(policy).toContain("media-src 'self' app: app-media:");
     expect(policy).not.toMatch(/default-src[^;]*app-media:|script-src[^;]*app-media:|connect-src[^;]*app-media:/);
+    expect(policy).toContain("default-src 'self'");
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain("connect-src 'self'");
+    expect(policy).not.toMatch(/script-src[^;]*'unsafe-inline'|https?:|wss?:/u);
   });
 });
