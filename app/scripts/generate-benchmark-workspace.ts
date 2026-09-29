@@ -39,6 +39,22 @@ interface BenchmarkLineage {
   founderPersonId: string;
 }
 
+export type BenchmarkRelationshipCategory =
+  | "direct"
+  | "ancestor"
+  | "collateral"
+  | "cousin"
+  | "affinity"
+  | "multipath"
+  | "conflict"
+  | "missing";
+
+export interface BenchmarkRelationshipPair {
+  category: BenchmarkRelationshipCategory;
+  viewpointId: string;
+  targetId: string;
+}
+
 export interface BenchmarkBlueprint {
   seed: number;
   workspaceId: string;
@@ -57,6 +73,7 @@ export interface BenchmarkBlueprint {
     metadata: Record<string, unknown>;
     payloadBytes: 0;
   }>;
+  relationshipPairs: BenchmarkRelationshipPair[];
 }
 
 export interface BenchmarkWorkspace {
@@ -197,6 +214,175 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
     });
   });
 
+  // Add a deterministic, internally contained probe topology. Each lineage gets
+  // two sibling parent couples with five children apiece, providing real cousin
+  // and multipath paths without changing the required single-parent or unmarried
+  // co-parent counts.
+  const cousinCandidates: Array<readonly [string, string]> = [];
+  for (let lineageIndex = 0; lineageIndex < LINEAGE_COUNT; lineageIndex += 1) {
+    const start = lineageIndex * PEOPLE_PER_LINEAGE;
+    const branchAFather = people[start + 26]!;
+    const branchAMother = people[start + 27]!;
+    const branchBFather = people[start + 28]!;
+    const branchBMother = people[start + 29]!;
+    for (const [spouseAId, spouseBId] of [
+      [branchAFather.id, branchAMother.id],
+      [branchBFather.id, branchBMother.id]
+    ] as const) {
+      if (marriages.some((entry) => pairKey(entry.spouseAId, entry.spouseBId) === pairKey(spouseAId, spouseBId))) continue;
+      marriages.push({
+        id: stableId(0x55000000, ++marriageIndex),
+        spouseAId,
+        spouseBId,
+        status: "active",
+        remarriageAnchorId: null
+      });
+    }
+    const branchAChildren = people.slice(start + 2, start + 7);
+    const branchBChildren = people.slice(start + 7, start + 12);
+    for (const child of branchAChildren) {
+      parentChild.push({
+        id: stableId(0x44000000, ++relationIndex),
+        parentId: branchAFather.id,
+        childId: child.id,
+        parentRole: "father",
+        familyShape: "marriedParents"
+      }, {
+        id: stableId(0x44000000, ++relationIndex),
+        parentId: branchAMother.id,
+        childId: child.id,
+        parentRole: "mother",
+        familyShape: "marriedParents"
+      });
+    }
+    for (const child of branchBChildren) {
+      parentChild.push({
+        id: stableId(0x44000000, ++relationIndex),
+        parentId: branchBFather.id,
+        childId: child.id,
+        parentRole: "father",
+        familyShape: "marriedParents"
+      }, {
+        id: stableId(0x44000000, ++relationIndex),
+        parentId: branchBMother.id,
+        childId: child.id,
+        parentRole: "mother",
+        familyShape: "marriedParents"
+      });
+    }
+    for (const left of branchAChildren) {
+      for (const right of branchBChildren) cousinCandidates.push([left.id, right.id]);
+    }
+  }
+
+  // These pairs deliberately carry incompatible direct facts (parent/child and
+  // active spouses) so the production query path is timed against conflict-shaped
+  // data instead of a synthetic calculator-only fixture.
+  const conflictCandidates: Array<readonly [string, string]> = [];
+  const occupiedMarriagePairs = new Set(marriages.map((entry) => pairKey(entry.spouseAId, entry.spouseBId)));
+  for (const relation of parentChild) {
+    if (conflictCandidates.length >= 16) break;
+    const key = pairKey(relation.parentId, relation.childId);
+    if (occupiedMarriagePairs.has(key)) continue;
+    occupiedMarriagePairs.add(key);
+    marriages.push({
+      id: stableId(0x55000000, ++marriageIndex),
+      spouseAId: relation.parentId,
+      spouseBId: relation.childId,
+      status: "active",
+      remarriageAnchorId: null
+    });
+    conflictCandidates.push([relation.parentId, relation.childId], [relation.childId, relation.parentId]);
+  }
+
+  const usedRelationshipPairs = new Set<string>();
+  const relationshipPairs: BenchmarkRelationshipPair[] = [];
+  const select = (
+    category: BenchmarkRelationshipCategory,
+    candidates: ReadonlyArray<readonly [string, string]>,
+    count: number
+  ): void => {
+    for (const [viewpointId, targetId] of candidates) {
+      const key = `${viewpointId}:${targetId}`;
+      if (viewpointId === targetId || usedRelationshipPairs.has(key)) continue;
+      usedRelationshipPairs.add(key);
+      relationshipPairs.push({ category, viewpointId, targetId });
+      if (relationshipPairs.filter((entry) => entry.category === category).length === count) return;
+    }
+    throw new Error(`Benchmark relationship category ${category} has fewer than ${count} candidates`);
+  };
+  const orderedPairs = (pairs: ReadonlyArray<readonly [string, string]>): Array<readonly [string, string]> =>
+    [...pairs].sort(([leftA, leftB], [rightA, rightB]) => leftA.localeCompare(rightA) || leftB.localeCompare(rightB));
+  const conflictKeys = new Set(conflictCandidates.map(([left, right]) => `${left}:${right}`));
+  const directCandidates = orderedPairs([
+    ...parentChild.flatMap((entry) => [
+      [entry.parentId, entry.childId] as const,
+      [entry.childId, entry.parentId] as const
+    ]),
+    ...marriages.filter((entry) => entry.status === "active").flatMap((entry) => [
+      [entry.spouseAId, entry.spouseBId] as const,
+      [entry.spouseBId, entry.spouseAId] as const
+    ])
+  ].filter(([left, right]) => !conflictKeys.has(`${left}:${right}`)));
+
+  const parentsByChild = new Map<string, string[]>();
+  const childrenByParent = new Map<string, string[]>();
+  for (const relation of parentChild) {
+    parentsByChild.set(relation.childId, [...(parentsByChild.get(relation.childId) ?? []), relation.parentId]);
+    childrenByParent.set(relation.parentId, [...(childrenByParent.get(relation.parentId) ?? []), relation.childId]);
+  }
+  const ancestorCandidates: Array<readonly [string, string]> = [];
+  for (const [childId, parentIds] of parentsByChild) {
+    for (const parentId of parentIds) {
+      for (const grandparentId of parentsByChild.get(parentId) ?? []) ancestorCandidates.push([childId, grandparentId]);
+    }
+  }
+  const collateralCandidates: Array<readonly [string, string]> = [];
+  for (const childIds of childrenByParent.values()) {
+    for (let left = 0; left < childIds.length; left += 1) {
+      for (let right = left + 1; right < childIds.length; right += 1) {
+        const shared = (parentsByChild.get(childIds[left]!) ?? []).filter((id) => parentsByChild.get(childIds[right]!)?.includes(id));
+        if (shared.length !== 1) continue;
+        collateralCandidates.push([childIds[left]!, childIds[right]!], [childIds[right]!, childIds[left]!]);
+      }
+    }
+  }
+  const multipathCandidates: Array<readonly [string, string]> = [];
+  const allPeopleIds = [...parentsByChild.keys()].sort();
+  for (let left = 0; left < allPeopleIds.length; left += 1) {
+    for (let right = left + 1; right < allPeopleIds.length; right += 1) {
+      const shared = (parentsByChild.get(allPeopleIds[left]!) ?? []).filter((id) => parentsByChild.get(allPeopleIds[right]!)?.includes(id));
+      if (shared.length < 2) continue;
+      multipathCandidates.push(
+        [allPeopleIds[left]!, allPeopleIds[right]!],
+        [allPeopleIds[right]!, allPeopleIds[left]!]
+      );
+    }
+  }
+  const adjacencyByPerson = new Map<string, string[]>();
+  for (const relation of parentChild) {
+    adjacencyByPerson.set(relation.parentId, [...(adjacencyByPerson.get(relation.parentId) ?? []), relation.childId]);
+    adjacencyByPerson.set(relation.childId, [...(adjacencyByPerson.get(relation.childId) ?? []), relation.parentId]);
+  }
+  const affinityCandidates: Array<readonly [string, string]> = [];
+  for (const marriage of marriages.filter((entry) => entry.status === "active")) {
+    for (const targetId of adjacencyByPerson.get(marriage.spouseBId) ?? []) affinityCandidates.push([marriage.spouseAId, targetId]);
+    for (const targetId of adjacencyByPerson.get(marriage.spouseAId) ?? []) affinityCandidates.push([marriage.spouseBId, targetId]);
+  }
+  const missingCandidates: Array<readonly [string, string]> = [];
+  const missingLeft = people.slice(6 * PEOPLE_PER_LINEAGE, 7 * PEOPLE_PER_LINEAGE);
+  const missingRight = people.slice(7 * PEOPLE_PER_LINEAGE, 8 * PEOPLE_PER_LINEAGE);
+  for (let index = 0; index < 20; index += 1) missingCandidates.push([missingLeft[80 + index]!.id, missingRight[80 + index]!.id]);
+
+  select("direct", directCandidates, 30);
+  select("ancestor", orderedPairs(ancestorCandidates), 25);
+  select("collateral", orderedPairs(collateralCandidates), 30);
+  select("cousin", orderedPairs(cousinCandidates), 25);
+  select("affinity", orderedPairs(affinityCandidates), 30);
+  select("multipath", orderedPairs(multipathCandidates), 25);
+  select("conflict", orderedPairs(conflictCandidates), 15);
+  select("missing", missingCandidates, 20);
+
   const wikiEntries = people.slice(0, 80).map((person, index) => ({
     id: stableId(0x66000000, index + 1),
     personId: person.id,
@@ -223,7 +409,8 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
     marriages,
     lineages,
     wikiEntries,
-    media
+    media,
+    relationshipPairs
   };
 }
 

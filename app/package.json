@@ -12,6 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && playwright test",
     "performance": "tsx scripts/run-performance-gates.ts",
+    "performance:constrained": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-performance-gates-constrained.ps1",
     "smoke:packaged": "tsx scripts/smoke-packaged-app.ts",
     "package:win": "npm run build && electron-builder --win nsis",
     "postinstall": "electron-builder install-app-deps"

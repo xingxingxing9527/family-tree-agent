@@ -2,6 +2,7 @@ import { expect, test, _electron as electron } from "@playwright/test";
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { findPlaintextInBoundedZip } from "../support/bounded-zip-plaintext-scan";
 
 const isolatedEnvironment = (root: string): NodeJS.ProcessEnv => ({
   ...process.env,
@@ -158,6 +159,7 @@ test("never writes a model key in plaintext to data, backup, logs or crash stagi
     expect(files.some((path) => path.endsWith("genealogy.sqlite"))).toBe(true);
     expect(files).toContain(backup);
     expect(files.some((path) => path.endsWith("openai-api-key.bin"))).toBe(true);
+    expect(await findPlaintextInBoundedZip(backup, sentinel), "plaintext leaked inside a decompressed backup entry").toEqual([]);
     const utf8 = Buffer.from(sentinel, "utf8");
     const utf16 = Buffer.from(sentinel, "utf16le");
     for (const file of files) {

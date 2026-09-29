@@ -66,6 +66,10 @@ const caseSchema = z.object({
   marriages: z.array(marriageSchema),
   viewpoint: z.string().min(1),
   target: z.string().min(1),
+  missingInformation: z.object({
+    missingFact: z.string().min(1),
+    conservativeResult: z.string().min(1)
+  }).strict().optional(),
   expected: z.object({
     primaryTerm: z.string().nullable(),
     reverseTerm: z.string().nullable(),
@@ -74,7 +78,22 @@ const caseSchema = z.object({
     pathRelationIds: z.array(z.string().min(1)),
     alternatives: z.array(expectedPathSchema)
   }).strict()
-}).strict();
+}).strict().superRefine((testCase, context) => {
+  if (testCase.coverage === "missingInformation" && !testCase.missingInformation) {
+    context.addIssue({
+      code: "custom",
+      path: ["missingInformation"],
+      message: "missing-information cases must name the missing fact and conservative result"
+    });
+  }
+  if (testCase.coverage !== "missingInformation" && testCase.missingInformation) {
+    context.addIssue({
+      code: "custom",
+      path: ["missingInformation"],
+      message: "only missing-information cases may carry missing-information evidence"
+    });
+  }
+});
 
 const fixtureSchema = z.object({
   version: z.literal("kinship-golden-cases.v1"),
@@ -91,22 +110,45 @@ function canonicalCaseKey(testCase: z.infer<typeof caseSchema>): string {
     ...testCase.parentChild.map((entry, index) => [entry.id, `parent-child-${index}`] as const),
     ...testCase.marriages.map((entry, index) => [entry.id, `marriage-${index}`] as const)
   ]);
+  const conflictIds = new Map<string, string>();
+  const normalizeConflicts = (ids: readonly string[] | undefined): string[] | undefined => {
+    if (!ids) return undefined;
+    return ids.map((id) => {
+      if (!conflictIds.has(id)) conflictIds.set(id, `conflict-${conflictIds.size}`);
+      return conflictIds.get(id)!;
+    });
+  };
+  for (const entry of testCase.people) normalizeConflicts(entry.conflictIds);
+  for (const entry of testCase.parentChild) normalizeConflicts(entry.conflictIds);
+  for (const entry of testCase.marriages) normalizeConflicts(entry.conflictIds);
+  const normalizeUncertainty = (entry: string): string => {
+    const prefix = "数据冲突：";
+    if (!entry.startsWith(prefix)) return entry;
+    return `${prefix}${conflictIds.get(entry.slice(prefix.length)) ?? "unreferenced-conflict"}`;
+  };
   return JSON.stringify({
-    people: testCase.people.map(({ id: _id, ...entry }) => entry),
-    parentChild: testCase.parentChild.map(({ id: _id, parentId, childId, ...entry }) => ({
+    people: testCase.people.map(({ id: _id, birth, conflictIds: conflicts, ...entry }) => ({
+      ...entry,
+      birth: birth ? "present" : null,
+      ...(conflicts ? { conflictIds: normalizeConflicts(conflicts) } : {})
+    })),
+    parentChild: testCase.parentChild.map(({ id: _id, parentId, childId, conflictIds: conflicts, ...entry }) => ({
       ...entry,
       parentId: people.get(parentId),
-      childId: people.get(childId)
+      childId: people.get(childId),
+      ...(conflicts ? { conflictIds: normalizeConflicts(conflicts) } : {})
     })),
-    marriages: testCase.marriages.map(({ id: _id, spouseAId, spouseBId, ...entry }) => ({
+    marriages: testCase.marriages.map(({ id: _id, spouseAId, spouseBId, conflictIds: conflicts, ...entry }) => ({
       ...entry,
       spouseAId: people.get(spouseAId),
-      spouseBId: people.get(spouseBId)
+      spouseBId: people.get(spouseBId),
+      ...(conflicts ? { conflictIds: normalizeConflicts(conflicts) } : {})
     })),
     viewpoint: people.get(testCase.viewpoint),
     target: people.get(testCase.target),
     expected: {
       ...testCase.expected,
+      uncertainty: testCase.expected.uncertainty.map(normalizeUncertainty),
       pathPersonIds: testCase.expected.pathPersonIds.map((id) => people.get(id)),
       pathRelationIds: testCase.expected.pathRelationIds.map((id) => relations.get(id)),
       alternatives: testCase.expected.alternatives.map((alternative) => ({
@@ -137,6 +179,17 @@ describe("kinship golden matrix v1", () => {
       expect(new Set(cases.map((testCase) => testCase.coverage)), category).toEqual(
         new Set(["forward", "reverse", "missingInformation"])
       );
+    }
+
+    for (const testCase of fixture.cases.filter((entry) => entry.coverage === "missingInformation")) {
+      expect(testCase.missingInformation?.missingFact, `${testCase.id}: missing fact`).toBeTruthy();
+      expect(testCase.missingInformation?.conservativeResult, `${testCase.id}: conservative result`).toBeTruthy();
+      expect(
+        testCase.expected.primaryTerm !== null
+          || testCase.expected.reverseTerm !== null
+          || testCase.expected.uncertainty.length > 0,
+        `${testCase.id}: generalized term or uncertainty`
+      ).toBe(true);
     }
   });
 

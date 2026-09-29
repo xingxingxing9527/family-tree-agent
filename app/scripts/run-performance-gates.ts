@@ -4,18 +4,20 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
+import { getHeapStatistics } from "node:v8";
+import ExcelJS from "exceljs";
 import { ImportPlanner, ImportPlanStore } from "../src/main/application/import/import-planner.js";
-import type { ParsedImport } from "../src/main/application/import/import-types.js";
-import { FactQueries } from "../src/main/application/facts/fact-queries.js";
+import { IMPORT_TEMPLATE_COLUMNS, parseImport } from "../src/main/application/import/workbook-parser.js";
+import { QueryToolRegistry } from "../src/main/application/query/query-tool-registry.js";
 import { projectWorkspaceTree } from "../src/main/application/query/workspace-projection.js";
-import { RelationshipCalculator } from "../src/main/domain/kinship/relationship-calculator.js";
 import { layoutWithElk } from "../src/renderer/src/features/tree/layout-with-elk.js";
 import {
   BENCHMARK_SEED,
   benchmarkInvariants,
   buildBenchmarkBlueprint,
   materializeBenchmarkWorkspace,
-  type BenchmarkBlueprint
+  type BenchmarkBlueprint,
+  type BenchmarkRelationshipPair
 } from "./generate-benchmark-workspace.js";
 
 export const PERFORMANCE_GATES = Object.freeze({
@@ -57,13 +59,8 @@ export function distribution(samples: readonly number[]): Distribution {
   };
 }
 
-export function buildFixedRelationshipPairs(blueprint: BenchmarkBlueprint): Array<readonly [string, string]> {
-  return Array.from({ length: 200 }, (_, index) => {
-    const fromIndex = (index * 37) % blueprint.people.length;
-    let toIndex = (index * 83 + 17) % blueprint.people.length;
-    if (toIndex === fromIndex) toIndex = (toIndex + 1) % blueprint.people.length;
-    return [blueprint.people[fromIndex]!.id, blueprint.people[toIndex]!.id] as const;
-  });
+export function buildFixedRelationshipPairs(blueprint: BenchmarkBlueprint): BenchmarkRelationshipPair[] {
+  return blueprint.relationshipPairs.map((entry) => ({ ...entry }));
 }
 
 async function measureAsync(samples: number, operation: () => Promise<unknown>): Promise<number[]> {
@@ -89,24 +86,86 @@ function gate(samples: readonly number[], thresholdMs: number): GateResult {
   return { ...stats, thresholdMs, measuredBy: "p95", passed: stats.p95Ms <= thresholdMs };
 }
 
-function importFixture(): ParsedImport {
+export async function writeBenchmarkImportFiles(root: string): Promise<{ csvPath: string; xlsxPath: string }> {
+  await mkdir(root, { recursive: true });
+  const csvPath = resolve(root, "benchmark-1000.csv");
+  const xlsxPath = resolve(root, "benchmark-1000.xlsx");
+  const headers = IMPORT_TEMPLATE_COLUMNS.People;
+  const rows = Array.from({ length: 1_000 }, (_, index) => ({
+    person_external_id: `import-${(index + 1).toString().padStart(4, "0")}`,
+    name: `导入基准-${(index + 1).toString().padStart(4, "0")}`,
+    gender: index % 2 === 0 ? "male" : "female",
+    birth_calendar: "solar",
+    birth_year: 1900 + index % 100,
+    birth_month: index % 12 + 1,
+    birth_day: "",
+    birth_leap_month: "false",
+    notes: `seed=${BENCHMARK_SEED}`
+  }));
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) => headers.map((header) => row[header as keyof typeof row]).join(","))
+  ].join("\r\n");
+  await writeFile(csvPath, `${csv}\r\n`, "utf8");
+
+  const workbook = new ExcelJS.Workbook();
+  const peopleSheet = workbook.addWorksheet("People");
+  peopleSheet.addRow([...headers]);
+  for (const row of rows) peopleSheet.addRow(headers.map((header) => row[header as keyof typeof row]));
+  workbook.addWorksheet("ParentChild").addRow([...IMPORT_TEMPLATE_COLUMNS.ParentChild]);
+  workbook.addWorksheet("Marriages").addRow([...IMPORT_TEMPLATE_COLUMNS.Marriages]);
+  await workbook.xlsx.writeFile(xlsxPath);
+  return { csvPath, xlsxPath };
+}
+
+export interface PerformanceConstraints {
+  logicalCores: number;
+  memoryLimitMb: number | null;
+  affinityMask: string | null;
+  observedHeapLimitBytes: number;
+  constrained: boolean;
+}
+
+export function parsePerformanceConstraints(
+  environment: NodeJS.ProcessEnv,
+  observedHeapLimitBytes: number
+): PerformanceConstraints {
+  const logicalCoresText = environment.FAMILY_AGENT_PERF_LOGICAL_CORES;
+  const memoryLimitText = environment.FAMILY_AGENT_PERF_MEMORY_LIMIT_MB;
+  const affinityMask = environment.FAMILY_AGENT_PERF_AFFINITY_MASK;
+  if (!logicalCoresText && !memoryLimitText && !affinityMask) {
+    return {
+      logicalCores: cpus().length,
+      memoryLimitMb: null,
+      affinityMask: null,
+      observedHeapLimitBytes,
+      constrained: false
+    };
+  }
+  const logicalCores = Number(logicalCoresText);
+  const memoryLimitMb = Number(memoryLimitText);
+  let maskBits = 0;
+  try {
+    let mask = BigInt(affinityMask ?? "");
+    while (mask > 0n) {
+      maskBits += Number(mask & 1n);
+      mask >>= 1n;
+    }
+  } catch {
+    maskBits = 0;
+  }
+  if (logicalCores !== 4 || !Number.isInteger(memoryLimitMb) || memoryLimitMb <= 0 || memoryLimitMb > 8_192 || maskBits !== 4) {
+    throw new Error("Constrained performance evidence requires exactly 4 logical cores and at most 8192 MiB");
+  }
+  if (observedHeapLimitBytes > 8_192 * 1024 * 1024) {
+    throw new Error("Constrained performance evidence observed heap exceeds 8192 MiB");
+  }
   return {
-    sourceKey: "benchmark-import-20260916",
-    fileName: "benchmark-1000.csv",
-    rows: Array.from({ length: 1_000 }, (_, index) => ({
-      sheet: "People" as const,
-      row: index + 2,
-      raw: {
-        person_external_id: `import-${(index + 1).toString().padStart(4, "0")}`,
-        name: `导入基准-${(index + 1).toString().padStart(4, "0")}`,
-        gender: index % 2 === 0 ? "male" : "female",
-        birth_calendar: "solar",
-        birth_year: 1900 + index % 100,
-        birth_month: index % 12 + 1,
-        birth_precision: "month",
-        notes: `seed=${BENCHMARK_SEED}`
-      }
-    }))
+    logicalCores,
+    memoryLimitMb,
+    affinityMask: affinityMask!,
+    observedHeapLimitBytes,
+    constrained: true
   };
 }
 
@@ -135,35 +194,31 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     });
     process.stdout.write("[performance] viewpoint relabel measured\n");
 
-    const queries = new FactQueries(database, workspaceId);
-    const people = queries.listPeople();
-    const parentChild = queries.listParentChild();
-    const marriages = queries.listMarriages();
-    const calculator = new RelationshipCalculator({
-      people: people.map((person) => ({ id: person.id, gender: person.gender, birth: person.birth })),
-      parentChild: parentChild.map((relation) => ({
-        id: relation.id,
-        parentId: relation.parentId,
-        childId: relation.childId,
-        parentRole: relation.parentRole
-      })),
-      marriages: marriages.map((marriage) => ({
-        id: marriage.id,
-        spouseAId: marriage.spouseAId,
-        spouseBId: marriage.spouseBId,
-        status: marriage.status
-      }))
-    });
+    const registry = new QueryToolRegistry(database, workspaceId);
     const relationshipPairs = buildFixedRelationshipPairs(blueprint);
-    calculator.calculateRelationship(...relationshipPairs[0]!);
-    const relationshipSamples = measureSync(relationshipPairs, ([from, to]) => calculator.calculateRelationship(from, to));
-    process.stdout.write("[performance] 200 relationships measured\n");
+    registry.tools.calculate_relationship({
+      viewpointId: relationshipPairs[0]!.viewpointId,
+      targetId: relationshipPairs[0]!.targetId
+    });
+    const relationshipSamples = measureSync(relationshipPairs, ({ viewpointId, targetId }) =>
+      registry.tools.calculate_relationship({ viewpointId, targetId }));
+    process.stdout.write("[performance] 200 categorized production relationship queries measured\n");
 
     const planner = new ImportPlanner(database, workspaceId, new ImportPlanStore());
-    const importInput = importFixture();
-    planner.plan(importInput);
-    const importSamples = measureSync(Array.from({ length: 3 }, (_, index) => index), () => planner.plan(importInput));
-    process.stdout.write("[performance] 1000-row import preview measured\n");
+    const importFiles = await writeBenchmarkImportFiles(join(temporaryRoot, "imports"));
+    const importFormats = ["csv", "xlsx", "csv"] as const;
+    let importSamplesCursor = 0;
+    const importSamples = await measureAsync(importFormats.length, async () => {
+      const sampleIndex = importSamplesCursor++;
+      const format = importFormats[sampleIndex]!;
+      const parsed = await parseImport(
+        format === "csv" ? importFiles.csvPath : importFiles.xlsxPath,
+        `benchmark-import-${format}-${sampleIndex}`,
+        format === "csv" ? { csvEntityType: "People" } : {}
+      );
+      planner.plan(parsed);
+    });
+    process.stdout.write("[performance] real 1000-row CSV/XLSX parse and plan preview measured\n");
 
     const gates = {
       defaultTreeAndLayout: gate(treeSamples, PERFORMANCE_GATES.defaultTreeAndLayoutMs),
@@ -172,8 +227,13 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
       importPreview: gate(importSamples, PERFORMANCE_GATES.importPreviewMs)
     };
     const cpuInfo = cpus();
+    const constraints = parsePerformanceConstraints(process.env, getHeapStatistics().heap_size_limit);
+    const relationshipDistribution = Object.fromEntries(
+      Object.entries(Object.groupBy(relationshipPairs, (entry) => entry.category))
+        .map(([category, entries]) => [category, entries.length])
+    );
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       seed: BENCHMARK_SEED,
       invariants: benchmarkInvariants(blueprint),
@@ -186,7 +246,12 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
         cpuCount: cpuInfo.length,
         cpuModel: cpuInfo[0]?.model ?? "unknown",
         totalMemoryBytes: totalmem(),
-        freeMemoryBytesAtReport: freemem()
+        freeMemoryBytesAtReport: freemem(),
+        constraints
+      },
+      workloads: {
+        relationships: { executionPath: "QueryToolRegistry.calculate_relationship", ...relationshipDistribution },
+        importPreview: { executionPath: "parseImport + ImportPlanner.plan", rowsPerFile: 1_000, formats: importFormats }
       },
       gates,
       passed: Object.values(gates).every(({ passed }) => passed)

@@ -970,7 +970,10 @@
         {
           "id": "direct-missing-01-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-01-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-01-person-parent",
@@ -997,9 +1000,11 @@
       "viewpoint": "direct-missing-01-person-child",
       "target": "direct-missing-01-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-01-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "direct-missing-01-person-child",
           "direct-missing-01-person-parent"
@@ -1008,6 +1013,10 @@
           "direct-missing-01-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-01-reviewed-conflict-1"
       }
     },
     {
@@ -1018,7 +1027,10 @@
         {
           "id": "direct-missing-02-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-02-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-02-person-parent",
@@ -1045,9 +1057,11 @@
       "viewpoint": "direct-missing-02-person-child",
       "target": "direct-missing-02-person-parent",
       "expected": {
-        "primaryTerm": "母亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-02-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "direct-missing-02-person-child",
           "direct-missing-02-person-parent"
@@ -1056,6 +1070,10 @@
           "direct-missing-02-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-02-reviewed-conflict-1"
       }
     },
     {
@@ -1078,7 +1096,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "direct-missing-03-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -1093,9 +1114,11 @@
       "viewpoint": "direct-missing-03-person-child",
       "target": "direct-missing-03-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-03-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "direct-missing-03-person-child",
           "direct-missing-03-person-parent"
@@ -1104,6 +1127,10 @@
           "direct-missing-03-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-03-reviewed-conflict-2"
       }
     },
     {
@@ -1126,7 +1153,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "direct-missing-04-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -1141,9 +1171,11 @@
       "viewpoint": "direct-missing-04-person-child",
       "target": "direct-missing-04-person-parent",
       "expected": {
-        "primaryTerm": "母亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-04-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "direct-missing-04-person-child",
           "direct-missing-04-person-parent"
@@ -1152,6 +1184,10 @@
           "direct-missing-04-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-04-reviewed-conflict-2"
       }
     },
     {
@@ -1162,7 +1198,10 @@
         {
           "id": "direct-missing-05-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-05-person-parent",
@@ -1174,7 +1213,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "direct-missing-05-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -1189,9 +1231,12 @@
       "viewpoint": "direct-missing-05-person-child",
       "target": "direct-missing-05-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-05-reviewed-conflict-1",
+          "数据冲突：direct-missing-05-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "direct-missing-05-person-child",
           "direct-missing-05-person-parent"
@@ -1200,6 +1245,10 @@
           "direct-missing-05-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-05-reviewed-conflict-1；数据冲突：direct-missing-05-reviewed-conflict-2"
       }
     },
     {
@@ -1210,7 +1259,10 @@
         {
           "id": "direct-missing-06-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-06-person-parent",
@@ -1222,7 +1274,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "direct-missing-06-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -1237,9 +1292,12 @@
       "viewpoint": "direct-missing-06-person-child",
       "target": "direct-missing-06-person-parent",
       "expected": {
-        "primaryTerm": "母亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-06-reviewed-conflict-1",
+          "数据冲突：direct-missing-06-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "direct-missing-06-person-child",
           "direct-missing-06-person-parent"
@@ -1248,6 +1306,10 @@
           "direct-missing-06-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-06-reviewed-conflict-1；数据冲突：direct-missing-06-reviewed-conflict-2"
       }
     },
     {
@@ -1258,7 +1320,10 @@
         {
           "id": "direct-missing-07-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-07-person-b",
@@ -1285,9 +1350,11 @@
       "viewpoint": "direct-missing-07-person-a",
       "target": "direct-missing-07-person-b",
       "expected": {
-        "primaryTerm": "配偶",
-        "reverseTerm": "妻子",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "direct-missing-07-person-a",
           "direct-missing-07-person-b"
@@ -1296,6 +1363,10 @@
           "direct-missing-07-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-07-reviewed-conflict-1"
       }
     },
     {
@@ -1344,6 +1415,10 @@
           "direct-missing-08-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶 / 丈夫"
       }
     },
     {
@@ -1354,7 +1429,10 @@
         {
           "id": "direct-missing-09-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "direct-missing-09-reviewed-conflict-1"
+          ]
         },
         {
           "id": "direct-missing-09-person-b",
@@ -1381,9 +1459,11 @@
       "viewpoint": "direct-missing-09-person-a",
       "target": "direct-missing-09-person-b",
       "expected": {
-        "primaryTerm": "丈夫",
-        "reverseTerm": "配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：direct-missing-09-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "direct-missing-09-person-a",
           "direct-missing-09-person-b"
@@ -1392,6 +1472,10 @@
           "direct-missing-09-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：direct-missing-09-reviewed-conflict-1"
       }
     },
     {
@@ -1440,6 +1524,10 @@
           "direct-missing-10-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：妻子 / 配偶"
       }
     },
     {
@@ -2670,7 +2758,10 @@
         {
           "id": "ancestor-descendant-missing-01-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-01-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-01-person-parent",
@@ -2708,9 +2799,11 @@
       "viewpoint": "ancestor-descendant-missing-01-person-child",
       "target": "ancestor-descendant-missing-01-person-grand",
       "expected": {
-        "primaryTerm": "祖父",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-01-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-01-person-child",
           "ancestor-descendant-missing-01-person-parent",
@@ -2721,6 +2814,10 @@
           "ancestor-descendant-missing-01-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-01-reviewed-conflict-1"
       }
     },
     {
@@ -2782,6 +2879,10 @@
           "ancestor-descendant-missing-02-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：祖母 / 孙辈"
       }
     },
     {
@@ -2843,6 +2944,10 @@
           "ancestor-descendant-missing-03-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：外祖父 / 外孙辈"
       }
     },
     {
@@ -2853,7 +2958,10 @@
         {
           "id": "ancestor-descendant-missing-04-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-04-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-04-person-parent",
@@ -2891,9 +2999,11 @@
       "viewpoint": "ancestor-descendant-missing-04-person-child",
       "target": "ancestor-descendant-missing-04-person-grand",
       "expected": {
-        "primaryTerm": "外祖母",
-        "reverseTerm": "外孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-04-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-04-person-child",
           "ancestor-descendant-missing-04-person-parent",
@@ -2904,6 +3014,10 @@
           "ancestor-descendant-missing-04-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-04-reviewed-conflict-1"
       }
     },
     {
@@ -2919,7 +3033,10 @@
         {
           "id": "ancestor-descendant-missing-05-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-05-reviewed-conflict-2"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-05-person-grand",
@@ -2952,9 +3069,11 @@
       "viewpoint": "ancestor-descendant-missing-05-person-child",
       "target": "ancestor-descendant-missing-05-person-grand",
       "expected": {
-        "primaryTerm": "祖父",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-05-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-05-person-child",
           "ancestor-descendant-missing-05-person-parent",
@@ -2965,6 +3084,10 @@
           "ancestor-descendant-missing-05-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-05-reviewed-conflict-2"
       }
     },
     {
@@ -2975,7 +3098,10 @@
         {
           "id": "ancestor-descendant-missing-06-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-06-person-parent",
@@ -3013,9 +3139,11 @@
       "viewpoint": "ancestor-descendant-missing-06-person-child",
       "target": "ancestor-descendant-missing-06-person-grand",
       "expected": {
-        "primaryTerm": "祖母",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-06-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-06-person-child",
           "ancestor-descendant-missing-06-person-parent",
@@ -3026,6 +3154,10 @@
           "ancestor-descendant-missing-06-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-06-reviewed-conflict-1"
       }
     },
     {
@@ -3036,7 +3168,10 @@
         {
           "id": "ancestor-descendant-missing-07-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-07-person-parent",
@@ -3074,9 +3209,11 @@
       "viewpoint": "ancestor-descendant-missing-07-person-child",
       "target": "ancestor-descendant-missing-07-person-grand",
       "expected": {
-        "primaryTerm": "外祖父",
-        "reverseTerm": "外孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-07-person-child",
           "ancestor-descendant-missing-07-person-parent",
@@ -3087,6 +3224,10 @@
           "ancestor-descendant-missing-07-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-07-reviewed-conflict-1"
       }
     },
     {
@@ -3102,7 +3243,10 @@
         {
           "id": "ancestor-descendant-missing-08-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-08-reviewed-conflict-2"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-08-person-grand",
@@ -3135,9 +3279,11 @@
       "viewpoint": "ancestor-descendant-missing-08-person-child",
       "target": "ancestor-descendant-missing-08-person-grand",
       "expected": {
-        "primaryTerm": "外祖母",
-        "reverseTerm": "外孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-08-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-08-person-child",
           "ancestor-descendant-missing-08-person-parent",
@@ -3148,6 +3294,10 @@
           "ancestor-descendant-missing-08-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-08-reviewed-conflict-2"
       }
     },
     {
@@ -3158,12 +3308,18 @@
         {
           "id": "ancestor-descendant-missing-09-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-09-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-09-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-09-reviewed-conflict-2"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-09-person-grand",
@@ -3196,9 +3352,12 @@
       "viewpoint": "ancestor-descendant-missing-09-person-child",
       "target": "ancestor-descendant-missing-09-person-grand",
       "expected": {
-        "primaryTerm": "祖父",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-09-reviewed-conflict-1",
+          "数据冲突：ancestor-descendant-missing-09-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-09-person-child",
           "ancestor-descendant-missing-09-person-parent",
@@ -3209,6 +3368,10 @@
           "ancestor-descendant-missing-09-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-09-reviewed-conflict-1；数据冲突：ancestor-descendant-missing-09-reviewed-conflict-2"
       }
     },
     {
@@ -3219,12 +3382,18 @@
         {
           "id": "ancestor-descendant-missing-10-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-10-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "ancestor-descendant-missing-10-reviewed-conflict-2"
+          ]
         },
         {
           "id": "ancestor-descendant-missing-10-person-grand",
@@ -3257,9 +3426,12 @@
       "viewpoint": "ancestor-descendant-missing-10-person-child",
       "target": "ancestor-descendant-missing-10-person-grand",
       "expected": {
-        "primaryTerm": "外祖母",
-        "reverseTerm": "外孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：ancestor-descendant-missing-10-reviewed-conflict-1",
+          "数据冲突：ancestor-descendant-missing-10-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "ancestor-descendant-missing-10-person-child",
           "ancestor-descendant-missing-10-person-parent",
@@ -3270,6 +3442,10 @@
           "ancestor-descendant-missing-10-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：ancestor-descendant-missing-10-reviewed-conflict-1；数据冲突：ancestor-descendant-missing-10-reviewed-conflict-2"
       }
     },
     {
@@ -3737,7 +3913,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "siblings-forward-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "siblings-forward-07-person-b",
@@ -3782,9 +3961,11 @@
       "viewpoint": "siblings-forward-07-person-a",
       "target": "siblings-forward-07-person-b",
       "expected": {
-        "primaryTerm": "哥哥",
-        "reverseTerm": "弟弟",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：siblings-forward-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "siblings-forward-07-person-a",
           "siblings-forward-07-person-father",
@@ -3812,7 +3993,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "siblings-forward-08-reviewed-conflict-1"
+          ]
         },
         {
           "id": "siblings-forward-08-person-b",
@@ -3857,9 +4041,11 @@
       "viewpoint": "siblings-forward-08-person-a",
       "target": "siblings-forward-08-person-b",
       "expected": {
-        "primaryTerm": "妹妹",
-        "reverseTerm": "姐姐",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：siblings-forward-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "siblings-forward-08-person-a",
           "siblings-forward-08-person-father",
@@ -4349,7 +4535,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "siblings-reverse-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "siblings-reverse-07-person-father",
@@ -4382,9 +4571,11 @@
       "viewpoint": "siblings-reverse-07-person-b",
       "target": "siblings-reverse-07-person-a",
       "expected": {
-        "primaryTerm": "弟弟",
-        "reverseTerm": "哥哥",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：siblings-reverse-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "siblings-reverse-07-person-b",
           "siblings-reverse-07-person-father",
@@ -4424,7 +4615,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "siblings-reverse-08-reviewed-conflict-1"
+          ]
         },
         {
           "id": "siblings-reverse-08-person-father",
@@ -4457,9 +4651,11 @@
       "viewpoint": "siblings-reverse-08-person-b",
       "target": "siblings-reverse-08-person-a",
       "expected": {
-        "primaryTerm": "姐姐",
-        "reverseTerm": "妹妹",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：siblings-reverse-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "siblings-reverse-08-person-b",
           "siblings-reverse-08-person-father",
@@ -4533,6 +4729,10 @@
           "siblings-missing-01-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4610,6 +4810,10 @@
           "siblings-missing-02-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4687,6 +4891,10 @@
           "siblings-missing-03-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4764,6 +4972,10 @@
           "siblings-missing-04-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4834,6 +5046,10 @@
           "siblings-missing-05-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4904,6 +5120,10 @@
           "siblings-missing-06-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -4981,6 +5201,10 @@
           "siblings-missing-07-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -5022,7 +5246,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "siblings-missing-08-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -5043,10 +5270,10 @@
       "viewpoint": "siblings-missing-08-person-a",
       "target": "siblings-missing-08-person-b",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：siblings-missing-08-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "siblings-missing-08-person-a",
@@ -5058,6 +5285,10 @@
           "siblings-missing-08-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：siblings-missing-08-reviewed-conflict-2"
       }
     },
     {
@@ -5645,7 +5876,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-forward-07-person-father",
@@ -5708,9 +5942,11 @@
       "viewpoint": "paternal-collateral-forward-07-person-child",
       "target": "paternal-collateral-forward-07-person-relative",
       "expected": {
-        "primaryTerm": "伯父",
-        "reverseTerm": "侄子",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-07-person-child",
           "paternal-collateral-forward-07-person-father",
@@ -5740,7 +5976,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-08-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-forward-08-person-father",
@@ -5803,9 +6042,11 @@
       "viewpoint": "paternal-collateral-forward-08-person-child",
       "target": "paternal-collateral-forward-08-person-relative",
       "expected": {
-        "primaryTerm": "叔父",
-        "reverseTerm": "侄女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-08-person-child",
           "paternal-collateral-forward-08-person-father",
@@ -5835,7 +6076,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-09-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-forward-09-person-father",
@@ -5898,9 +6142,11 @@
       "viewpoint": "paternal-collateral-forward-09-person-child",
       "target": "paternal-collateral-forward-09-person-relative",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄子",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-09-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-09-person-child",
           "paternal-collateral-forward-09-person-father",
@@ -5942,7 +6188,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-10-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-forward-10-person-relative",
@@ -5993,9 +6242,11 @@
       "viewpoint": "paternal-collateral-forward-10-person-child",
       "target": "paternal-collateral-forward-10-person-relative",
       "expected": {
-        "primaryTerm": "伯父",
-        "reverseTerm": "侄女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-10-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-10-person-child",
           "paternal-collateral-forward-10-person-father",
@@ -6037,7 +6288,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-11-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-forward-11-person-relative",
@@ -6088,9 +6342,11 @@
       "viewpoint": "paternal-collateral-forward-11-person-child",
       "target": "paternal-collateral-forward-11-person-relative",
       "expected": {
-        "primaryTerm": "叔父",
-        "reverseTerm": "侄子",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-11-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-11-person-child",
           "paternal-collateral-forward-11-person-father",
@@ -6120,7 +6376,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-forward-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-forward-12-person-father",
@@ -6183,9 +6442,11 @@
       "viewpoint": "paternal-collateral-forward-12-person-child",
       "target": "paternal-collateral-forward-12-person-relative",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-forward-12-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-forward-12-person-child",
           "paternal-collateral-forward-12-person-father",
@@ -6809,7 +7070,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-reverse-07-person-grand",
@@ -6848,9 +7112,11 @@
       "viewpoint": "paternal-collateral-reverse-07-person-relative",
       "target": "paternal-collateral-reverse-07-person-child",
       "expected": {
-        "primaryTerm": "侄子",
-        "reverseTerm": "伯父",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-07-person-relative",
           "paternal-collateral-reverse-07-person-grand",
@@ -6904,7 +7170,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-08-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-reverse-08-person-grand",
@@ -6943,9 +7212,11 @@
       "viewpoint": "paternal-collateral-reverse-08-person-relative",
       "target": "paternal-collateral-reverse-08-person-child",
       "expected": {
-        "primaryTerm": "侄女",
-        "reverseTerm": "叔叔",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-08-person-relative",
           "paternal-collateral-reverse-08-person-grand",
@@ -6999,7 +7270,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-09-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-reverse-09-person-grand",
@@ -7038,9 +7312,11 @@
       "viewpoint": "paternal-collateral-reverse-09-person-relative",
       "target": "paternal-collateral-reverse-09-person-child",
       "expected": {
-        "primaryTerm": "侄子",
-        "reverseTerm": "姑母",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-09-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-09-person-relative",
           "paternal-collateral-reverse-09-person-grand",
@@ -7106,7 +7382,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-10-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -7133,9 +7412,11 @@
       "viewpoint": "paternal-collateral-reverse-10-person-relative",
       "target": "paternal-collateral-reverse-10-person-child",
       "expected": {
-        "primaryTerm": "侄女",
-        "reverseTerm": "伯父",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-10-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-10-person-relative",
           "paternal-collateral-reverse-10-person-grand",
@@ -7201,7 +7482,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-11-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -7228,9 +7512,11 @@
       "viewpoint": "paternal-collateral-reverse-11-person-relative",
       "target": "paternal-collateral-reverse-11-person-child",
       "expected": {
-        "primaryTerm": "侄子",
-        "reverseTerm": "叔叔",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-11-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-11-person-relative",
           "paternal-collateral-reverse-11-person-grand",
@@ -7284,7 +7570,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "paternal-collateral-reverse-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-reverse-12-person-grand",
@@ -7323,9 +7612,11 @@
       "viewpoint": "paternal-collateral-reverse-12-person-relative",
       "target": "paternal-collateral-reverse-12-person-child",
       "expected": {
-        "primaryTerm": "侄女",
-        "reverseTerm": "姑母",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：paternal-collateral-reverse-12-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-12-person-relative",
           "paternal-collateral-reverse-12-person-grand",
@@ -7414,6 +7705,10 @@
           "paternal-collateral-missing-01-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -7490,6 +7785,10 @@
           "paternal-collateral-missing-02-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -7566,6 +7865,10 @@
           "paternal-collateral-missing-03-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -7576,7 +7879,10 @@
         {
           "id": "paternal-collateral-missing-04-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-04-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-04-person-father",
@@ -7625,10 +7931,10 @@
       "viewpoint": "paternal-collateral-missing-04-person-child",
       "target": "paternal-collateral-missing-04-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-04-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-04-person-child",
@@ -7642,6 +7948,10 @@
           "paternal-collateral-missing-04-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-04-reviewed-conflict-1"
       }
     },
     {
@@ -7652,7 +7962,10 @@
         {
           "id": "paternal-collateral-missing-05-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-05-person-father",
@@ -7701,10 +8014,10 @@
       "viewpoint": "paternal-collateral-missing-05-person-child",
       "target": "paternal-collateral-missing-05-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-05-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-05-person-child",
@@ -7718,6 +8031,10 @@
           "paternal-collateral-missing-05-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-05-reviewed-conflict-1"
       }
     },
     {
@@ -7794,6 +8111,10 @@
           "paternal-collateral-missing-06-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -7809,7 +8130,10 @@
         {
           "id": "paternal-collateral-missing-07-person-father",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-07-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-missing-07-person-relative",
@@ -7853,10 +8177,10 @@
       "viewpoint": "paternal-collateral-missing-07-person-child",
       "target": "paternal-collateral-missing-07-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-07-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-07-person-child",
@@ -7870,6 +8194,10 @@
           "paternal-collateral-missing-07-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-07-reviewed-conflict-2"
       }
     },
     {
@@ -7885,7 +8213,10 @@
         {
           "id": "paternal-collateral-missing-08-person-father",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-08-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-missing-08-person-relative",
@@ -7929,10 +8260,10 @@
       "viewpoint": "paternal-collateral-missing-08-person-child",
       "target": "paternal-collateral-missing-08-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-08-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-08-person-child",
@@ -7946,6 +8277,10 @@
           "paternal-collateral-missing-08-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-08-reviewed-conflict-2"
       }
     },
     {
@@ -7956,7 +8291,10 @@
         {
           "id": "paternal-collateral-missing-09-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-09-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-09-person-father",
@@ -8005,10 +8343,10 @@
       "viewpoint": "paternal-collateral-missing-09-person-child",
       "target": "paternal-collateral-missing-09-person-relative",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-09-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-09-person-child",
@@ -8022,6 +8360,10 @@
           "paternal-collateral-missing-09-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-09-reviewed-conflict-1"
       }
     },
     {
@@ -8032,12 +8374,18 @@
         {
           "id": "paternal-collateral-missing-10-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-10-person-father",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-10-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-missing-10-person-relative",
@@ -8081,10 +8429,11 @@
       "viewpoint": "paternal-collateral-missing-10-person-child",
       "target": "paternal-collateral-missing-10-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-10-reviewed-conflict-1",
+          "数据冲突：paternal-collateral-missing-10-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-10-person-child",
@@ -8098,6 +8447,10 @@
           "paternal-collateral-missing-10-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-10-reviewed-conflict-1；数据冲突：paternal-collateral-missing-10-reviewed-conflict-2"
       }
     },
     {
@@ -8108,12 +8461,18 @@
         {
           "id": "paternal-collateral-missing-11-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-11-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-11-person-father",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-11-reviewed-conflict-2"
+          ]
         },
         {
           "id": "paternal-collateral-missing-11-person-relative",
@@ -8157,10 +8516,11 @@
       "viewpoint": "paternal-collateral-missing-11-person-child",
       "target": "paternal-collateral-missing-11-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-11-reviewed-conflict-1",
+          "数据冲突：paternal-collateral-missing-11-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-11-person-child",
@@ -8174,6 +8534,10 @@
           "paternal-collateral-missing-11-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-11-reviewed-conflict-1；数据冲突：paternal-collateral-missing-11-reviewed-conflict-2"
       }
     },
     {
@@ -8184,7 +8548,10 @@
         {
           "id": "paternal-collateral-missing-12-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "paternal-collateral-missing-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "paternal-collateral-missing-12-person-father",
@@ -8233,10 +8600,10 @@
       "viewpoint": "paternal-collateral-missing-12-person-child",
       "target": "paternal-collateral-missing-12-person-relative",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：paternal-collateral-missing-12-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "paternal-collateral-missing-12-person-child",
@@ -8250,6 +8617,10 @@
           "paternal-collateral-missing-12-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：paternal-collateral-missing-12-reviewed-conflict-1"
       }
     },
     {
@@ -8647,7 +9018,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-05-person-mother",
@@ -8710,9 +9084,11 @@
       "viewpoint": "maternal-collateral-forward-05-person-child",
       "target": "maternal-collateral-forward-05-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-05-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-05-person-child",
           "maternal-collateral-forward-05-person-mother",
@@ -8742,7 +9118,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-06-person-mother",
@@ -8805,9 +9184,11 @@
       "viewpoint": "maternal-collateral-forward-06-person-child",
       "target": "maternal-collateral-forward-06-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-06-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-06-person-child",
           "maternal-collateral-forward-06-person-mother",
@@ -8837,7 +9218,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-07-person-mother",
@@ -8900,9 +9284,11 @@
       "viewpoint": "maternal-collateral-forward-07-person-child",
       "target": "maternal-collateral-forward-07-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-07-person-child",
           "maternal-collateral-forward-07-person-mother",
@@ -8944,7 +9330,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-08-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-forward-08-person-relative",
@@ -8995,9 +9384,11 @@
       "viewpoint": "maternal-collateral-forward-08-person-child",
       "target": "maternal-collateral-forward-08-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-08-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-08-person-child",
           "maternal-collateral-forward-08-person-mother",
@@ -9039,7 +9430,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-09-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-forward-09-person-relative",
@@ -9090,9 +9484,11 @@
       "viewpoint": "maternal-collateral-forward-09-person-child",
       "target": "maternal-collateral-forward-09-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-09-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-09-person-child",
           "maternal-collateral-forward-09-person-mother",
@@ -9122,7 +9518,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-10-person-mother",
@@ -9185,9 +9584,11 @@
       "viewpoint": "maternal-collateral-forward-10-person-child",
       "target": "maternal-collateral-forward-10-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-10-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-10-person-child",
           "maternal-collateral-forward-10-person-mother",
@@ -9217,7 +9618,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-11-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-11-person-mother",
@@ -9229,7 +9633,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-11-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-forward-11-person-relative",
@@ -9280,9 +9687,12 @@
       "viewpoint": "maternal-collateral-forward-11-person-child",
       "target": "maternal-collateral-forward-11-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-11-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-forward-11-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-11-person-child",
           "maternal-collateral-forward-11-person-mother",
@@ -9312,7 +9722,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-forward-12-person-mother",
@@ -9324,7 +9737,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-forward-12-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-forward-12-person-relative",
@@ -9375,9 +9791,12 @@
       "viewpoint": "maternal-collateral-forward-12-person-child",
       "target": "maternal-collateral-forward-12-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-forward-12-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-forward-12-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-forward-12-person-child",
           "maternal-collateral-forward-12-person-mother",
@@ -9811,7 +10230,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-05-person-grand",
@@ -9850,9 +10272,11 @@
       "viewpoint": "maternal-collateral-reverse-05-person-relative",
       "target": "maternal-collateral-reverse-05-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "舅舅",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-05-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-05-person-relative",
           "maternal-collateral-reverse-05-person-grand",
@@ -9906,7 +10330,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-06-person-grand",
@@ -9945,9 +10372,11 @@
       "viewpoint": "maternal-collateral-reverse-06-person-relative",
       "target": "maternal-collateral-reverse-06-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "姨妈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-06-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-06-person-relative",
           "maternal-collateral-reverse-06-person-grand",
@@ -10001,7 +10430,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-07-person-grand",
@@ -10040,9 +10472,11 @@
       "viewpoint": "maternal-collateral-reverse-07-person-relative",
       "target": "maternal-collateral-reverse-07-person-child",
       "expected": {
-        "primaryTerm": "外甥",
-        "reverseTerm": "舅舅",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-07-person-relative",
           "maternal-collateral-reverse-07-person-grand",
@@ -10108,7 +10542,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-08-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -10135,9 +10572,11 @@
       "viewpoint": "maternal-collateral-reverse-08-person-relative",
       "target": "maternal-collateral-reverse-08-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "姨妈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-08-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-08-person-relative",
           "maternal-collateral-reverse-08-person-grand",
@@ -10203,7 +10642,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-09-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -10230,9 +10672,11 @@
       "viewpoint": "maternal-collateral-reverse-09-person-relative",
       "target": "maternal-collateral-reverse-09-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "舅舅",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-09-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-09-person-relative",
           "maternal-collateral-reverse-09-person-grand",
@@ -10286,7 +10730,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-10-person-grand",
@@ -10325,9 +10772,11 @@
       "viewpoint": "maternal-collateral-reverse-10-person-relative",
       "target": "maternal-collateral-reverse-10-person-child",
       "expected": {
-        "primaryTerm": "外甥",
-        "reverseTerm": "姨妈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-10-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-10-person-relative",
           "maternal-collateral-reverse-10-person-grand",
@@ -10381,7 +10830,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-11-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-11-person-grand",
@@ -10393,7 +10845,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-11-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -10420,9 +10875,12 @@
       "viewpoint": "maternal-collateral-reverse-11-person-relative",
       "target": "maternal-collateral-reverse-11-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "舅舅",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-11-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-reverse-11-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-11-person-relative",
           "maternal-collateral-reverse-11-person-grand",
@@ -10476,7 +10934,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-reverse-12-person-grand",
@@ -10488,7 +10949,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "maternal-collateral-reverse-12-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -10515,9 +10979,12 @@
       "viewpoint": "maternal-collateral-reverse-12-person-relative",
       "target": "maternal-collateral-reverse-12-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "姨妈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：maternal-collateral-reverse-12-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-reverse-12-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-12-person-relative",
           "maternal-collateral-reverse-12-person-grand",
@@ -10606,6 +11073,10 @@
           "maternal-collateral-missing-01-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -10682,6 +11153,10 @@
           "maternal-collateral-missing-02-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -10758,6 +11233,10 @@
           "maternal-collateral-missing-03-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -10834,6 +11313,10 @@
           "maternal-collateral-missing-04-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -10844,7 +11327,10 @@
         {
           "id": "maternal-collateral-missing-05-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-05-person-mother",
@@ -10893,10 +11379,10 @@
       "viewpoint": "maternal-collateral-missing-05-person-child",
       "target": "maternal-collateral-missing-05-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-05-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-05-person-child",
@@ -10910,6 +11396,10 @@
           "maternal-collateral-missing-05-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-05-reviewed-conflict-1"
       }
     },
     {
@@ -10920,7 +11410,10 @@
         {
           "id": "maternal-collateral-missing-06-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-06-person-mother",
@@ -10969,10 +11462,10 @@
       "viewpoint": "maternal-collateral-missing-06-person-child",
       "target": "maternal-collateral-missing-06-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-06-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-06-person-child",
@@ -10986,6 +11479,10 @@
           "maternal-collateral-missing-06-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-06-reviewed-conflict-1"
       }
     },
     {
@@ -10996,7 +11493,10 @@
         {
           "id": "maternal-collateral-missing-07-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-07-person-mother",
@@ -11045,10 +11545,10 @@
       "viewpoint": "maternal-collateral-missing-07-person-child",
       "target": "maternal-collateral-missing-07-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-07-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-07-person-child",
@@ -11062,6 +11562,10 @@
           "maternal-collateral-missing-07-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-07-reviewed-conflict-1"
       }
     },
     {
@@ -11077,7 +11581,10 @@
         {
           "id": "maternal-collateral-missing-08-person-mother",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-08-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-missing-08-person-relative",
@@ -11121,10 +11628,10 @@
       "viewpoint": "maternal-collateral-missing-08-person-child",
       "target": "maternal-collateral-missing-08-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-08-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-08-person-child",
@@ -11138,6 +11645,10 @@
           "maternal-collateral-missing-08-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-08-reviewed-conflict-2"
       }
     },
     {
@@ -11153,7 +11664,10 @@
         {
           "id": "maternal-collateral-missing-09-person-mother",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-09-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-missing-09-person-relative",
@@ -11197,10 +11711,10 @@
       "viewpoint": "maternal-collateral-missing-09-person-child",
       "target": "maternal-collateral-missing-09-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-09-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-09-person-child",
@@ -11214,6 +11728,10 @@
           "maternal-collateral-missing-09-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-09-reviewed-conflict-2"
       }
     },
     {
@@ -11224,7 +11742,10 @@
         {
           "id": "maternal-collateral-missing-10-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-10-person-mother",
@@ -11273,10 +11794,10 @@
       "viewpoint": "maternal-collateral-missing-10-person-child",
       "target": "maternal-collateral-missing-10-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-10-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-10-person-child",
@@ -11290,6 +11811,10 @@
           "maternal-collateral-missing-10-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-10-reviewed-conflict-1"
       }
     },
     {
@@ -11300,12 +11825,18 @@
         {
           "id": "maternal-collateral-missing-11-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-11-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-11-person-mother",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-11-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-missing-11-person-relative",
@@ -11349,10 +11880,11 @@
       "viewpoint": "maternal-collateral-missing-11-person-child",
       "target": "maternal-collateral-missing-11-person-relative",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-11-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-missing-11-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-11-person-child",
@@ -11366,6 +11898,10 @@
           "maternal-collateral-missing-11-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-11-reviewed-conflict-1；数据冲突：maternal-collateral-missing-11-reviewed-conflict-2"
       }
     },
     {
@@ -11376,12 +11912,18 @@
         {
           "id": "maternal-collateral-missing-12-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-12-reviewed-conflict-1"
+          ]
         },
         {
           "id": "maternal-collateral-missing-12-person-mother",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "maternal-collateral-missing-12-reviewed-conflict-2"
+          ]
         },
         {
           "id": "maternal-collateral-missing-12-person-relative",
@@ -11425,10 +11967,11 @@
       "viewpoint": "maternal-collateral-missing-12-person-child",
       "target": "maternal-collateral-missing-12-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：maternal-collateral-missing-12-reviewed-conflict-1",
+          "数据冲突：maternal-collateral-missing-12-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-12-person-child",
@@ -11442,6 +11985,10 @@
           "maternal-collateral-missing-12-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：maternal-collateral-missing-12-reviewed-conflict-1；数据冲突：maternal-collateral-missing-12-reviewed-conflict-2"
       }
     },
     {
@@ -12839,7 +13386,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "cousins-forward-13-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-forward-13-person-b",
@@ -12920,9 +13470,11 @@
       "viewpoint": "cousins-forward-13-person-a",
       "target": "cousins-forward-13-person-b",
       "expected": {
-        "primaryTerm": "堂哥",
-        "reverseTerm": "堂弟",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：cousins-forward-13-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "cousins-forward-13-person-a",
           "cousins-forward-13-person-p",
@@ -12954,7 +13506,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "cousins-forward-14-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-forward-14-person-b",
@@ -13035,9 +13590,11 @@
       "viewpoint": "cousins-forward-14-person-a",
       "target": "cousins-forward-14-person-b",
       "expected": {
-        "primaryTerm": "表妹",
-        "reverseTerm": "表姐",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：cousins-forward-14-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "cousins-forward-14-person-a",
           "cousins-forward-14-person-p",
@@ -14461,7 +15018,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "cousins-reverse-13-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-reverse-13-person-p",
@@ -14530,9 +15090,11 @@
       "viewpoint": "cousins-reverse-13-person-b",
       "target": "cousins-reverse-13-person-a",
       "expected": {
-        "primaryTerm": "堂弟",
-        "reverseTerm": "堂哥",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：cousins-reverse-13-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "cousins-reverse-13-person-b",
           "cousins-reverse-13-person-u",
@@ -14576,7 +15138,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "cousins-reverse-14-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-reverse-14-person-p",
@@ -14645,9 +15210,11 @@
       "viewpoint": "cousins-reverse-14-person-b",
       "target": "cousins-reverse-14-person-a",
       "expected": {
-        "primaryTerm": "表姐",
-        "reverseTerm": "表妹",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：cousins-reverse-14-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "cousins-reverse-14-person-b",
           "cousins-reverse-14-person-u",
@@ -14765,6 +15332,10 @@
           "cousins-missing-01-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -14868,6 +15439,10 @@
           "cousins-missing-02-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -14971,6 +15546,10 @@
           "cousins-missing-03-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15074,6 +15653,10 @@
           "cousins-missing-04-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15177,6 +15760,10 @@
           "cousins-missing-05-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15280,6 +15867,10 @@
           "cousins-missing-06-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15383,6 +15974,10 @@
           "cousins-missing-07-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15486,6 +16081,10 @@
           "cousins-missing-08-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15589,6 +16188,10 @@
           "cousins-missing-09-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15692,6 +16295,10 @@
           "cousins-missing-10-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15795,6 +16402,10 @@
           "cousins-missing-11-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15898,6 +16509,10 @@
           "cousins-missing-12-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -15908,7 +16523,10 @@
         {
           "id": "cousins-missing-13-person-a",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "cousins-missing-13-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-missing-13-person-b",
@@ -15982,10 +16600,10 @@
       "viewpoint": "cousins-missing-13-person-a",
       "target": "cousins-missing-13-person-b",
       "expected": {
-        "primaryTerm": "堂亲",
-        "reverseTerm": "堂亲",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：cousins-missing-13-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "cousins-missing-13-person-a",
@@ -16001,6 +16619,10 @@
           "cousins-missing-13-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：cousins-missing-13-reviewed-conflict-1"
       }
     },
     {
@@ -16011,7 +16633,10 @@
         {
           "id": "cousins-missing-14-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "cousins-missing-14-reviewed-conflict-1"
+          ]
         },
         {
           "id": "cousins-missing-14-person-b",
@@ -16085,10 +16710,10 @@
       "viewpoint": "cousins-missing-14-person-a",
       "target": "cousins-missing-14-person-b",
       "expected": {
-        "primaryTerm": "表姐妹",
-        "reverseTerm": "表姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：cousins-missing-14-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "cousins-missing-14-person-a",
@@ -16104,6 +16729,10 @@
           "cousins-missing-14-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：cousins-missing-14-reviewed-conflict-1"
       }
     },
     {
@@ -17231,7 +17860,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-05-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17253,9 +17885,11 @@
       "viewpoint": "current-affinity-reverse-05-person-parent",
       "target": "current-affinity-reverse-05-person-a",
       "expected": {
-        "primaryTerm": "儿媳",
-        "reverseTerm": "公公",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-05-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-05-person-parent",
           "current-affinity-reverse-05-person-spouse",
@@ -17293,7 +17927,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-06-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17315,9 +17952,11 @@
       "viewpoint": "current-affinity-reverse-06-person-parent",
       "target": "current-affinity-reverse-06-person-a",
       "expected": {
-        "primaryTerm": "儿媳",
-        "reverseTerm": "婆婆",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-06-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-06-person-parent",
           "current-affinity-reverse-06-person-spouse",
@@ -17355,7 +17994,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-07-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17377,9 +18019,11 @@
       "viewpoint": "current-affinity-reverse-07-person-parent",
       "target": "current-affinity-reverse-07-person-a",
       "expected": {
-        "primaryTerm": "女婿",
-        "reverseTerm": "岳父",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-07-person-parent",
           "current-affinity-reverse-07-person-spouse",
@@ -17417,7 +18061,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-08-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17439,9 +18086,11 @@
       "viewpoint": "current-affinity-reverse-08-person-parent",
       "target": "current-affinity-reverse-08-person-a",
       "expected": {
-        "primaryTerm": "女婿",
-        "reverseTerm": "岳母",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-08-person-parent",
           "current-affinity-reverse-08-person-spouse",
@@ -17603,7 +18252,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-11-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17625,9 +18277,11 @@
       "viewpoint": "current-affinity-reverse-11-person-spouse",
       "target": "current-affinity-reverse-11-person-parent",
       "expected": {
-        "primaryTerm": "公公",
-        "reverseTerm": "儿媳",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-11-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-11-person-spouse",
           "current-affinity-reverse-11-person-child",
@@ -17665,7 +18319,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "current-affinity-reverse-12-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -17687,9 +18344,11 @@
       "viewpoint": "current-affinity-reverse-12-person-spouse",
       "target": "current-affinity-reverse-12-person-parent",
       "expected": {
-        "primaryTerm": "岳母",
-        "reverseTerm": "女婿",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-reverse-12-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-reverse-12-person-spouse",
           "current-affinity-reverse-12-person-child",
@@ -17762,6 +18421,10 @@
           "current-affinity-missing-01-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶父亲 / 子女配偶"
       }
     },
     {
@@ -17824,6 +18487,10 @@
           "current-affinity-missing-02-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶母亲 / 子女配偶"
       }
     },
     {
@@ -17834,7 +18501,10 @@
         {
           "id": "current-affinity-missing-03-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-03-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-03-person-spouse",
@@ -17873,9 +18543,11 @@
       "viewpoint": "current-affinity-missing-03-person-a",
       "target": "current-affinity-missing-03-person-parent",
       "expected": {
-        "primaryTerm": "配偶父亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-03-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-03-person-a",
           "current-affinity-missing-03-person-spouse",
@@ -17886,6 +18558,10 @@
           "current-affinity-missing-03-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-03-reviewed-conflict-1"
       }
     },
     {
@@ -17948,6 +18624,10 @@
           "current-affinity-missing-04-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶母亲 / 子女配偶"
       }
     },
     {
@@ -18010,6 +18690,10 @@
           "current-affinity-missing-05-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶父亲 / 子女配偶"
       }
     },
     {
@@ -18020,7 +18704,10 @@
         {
           "id": "current-affinity-missing-06-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-06-person-spouse",
@@ -18059,9 +18746,11 @@
       "viewpoint": "current-affinity-missing-06-person-a",
       "target": "current-affinity-missing-06-person-parent",
       "expected": {
-        "primaryTerm": "配偶母亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-06-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-06-person-a",
           "current-affinity-missing-06-person-spouse",
@@ -18072,6 +18761,10 @@
           "current-affinity-missing-06-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-06-reviewed-conflict-1"
       }
     },
     {
@@ -18082,7 +18775,10 @@
         {
           "id": "current-affinity-missing-07-person-a",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-07-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-07-person-spouse",
@@ -18121,9 +18817,11 @@
       "viewpoint": "current-affinity-missing-07-person-a",
       "target": "current-affinity-missing-07-person-parent",
       "expected": {
-        "primaryTerm": "配偶父亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-07-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-07-person-a",
           "current-affinity-missing-07-person-spouse",
@@ -18134,6 +18832,10 @@
           "current-affinity-missing-07-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-07-reviewed-conflict-1"
       }
     },
     {
@@ -18144,7 +18846,10 @@
         {
           "id": "current-affinity-missing-08-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-08-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-08-person-spouse",
@@ -18183,9 +18888,11 @@
       "viewpoint": "current-affinity-missing-08-person-a",
       "target": "current-affinity-missing-08-person-parent",
       "expected": {
-        "primaryTerm": "配偶母亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-08-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-08-person-a",
           "current-affinity-missing-08-person-spouse",
@@ -18196,6 +18903,10 @@
           "current-affinity-missing-08-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-08-reviewed-conflict-1"
       }
     },
     {
@@ -18211,7 +18922,10 @@
         {
           "id": "current-affinity-missing-09-person-spouse",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-09-reviewed-conflict-2"
+          ]
         },
         {
           "id": "current-affinity-missing-09-person-parent",
@@ -18245,9 +18959,11 @@
       "viewpoint": "current-affinity-missing-09-person-a",
       "target": "current-affinity-missing-09-person-parent",
       "expected": {
-        "primaryTerm": "配偶父亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-09-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-09-person-a",
           "current-affinity-missing-09-person-spouse",
@@ -18258,6 +18974,10 @@
           "current-affinity-missing-09-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-09-reviewed-conflict-2"
       }
     },
     {
@@ -18268,7 +18988,10 @@
         {
           "id": "current-affinity-missing-10-person-a",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-10-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-10-person-spouse",
@@ -18307,9 +19030,11 @@
       "viewpoint": "current-affinity-missing-10-person-a",
       "target": "current-affinity-missing-10-person-parent",
       "expected": {
-        "primaryTerm": "配偶母亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-10-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-10-person-a",
           "current-affinity-missing-10-person-spouse",
@@ -18320,6 +19045,10 @@
           "current-affinity-missing-10-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-10-reviewed-conflict-1"
       }
     },
     {
@@ -18330,7 +19059,10 @@
         {
           "id": "current-affinity-missing-11-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-11-reviewed-conflict-1"
+          ]
         },
         {
           "id": "current-affinity-missing-11-person-spouse",
@@ -18369,9 +19101,11 @@
       "viewpoint": "current-affinity-missing-11-person-a",
       "target": "current-affinity-missing-11-person-parent",
       "expected": {
-        "primaryTerm": "配偶父亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-11-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-11-person-a",
           "current-affinity-missing-11-person-spouse",
@@ -18382,6 +19116,10 @@
           "current-affinity-missing-11-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-11-reviewed-conflict-1"
       }
     },
     {
@@ -18397,7 +19135,10 @@
         {
           "id": "current-affinity-missing-12-person-spouse",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "current-affinity-missing-12-reviewed-conflict-2"
+          ]
         },
         {
           "id": "current-affinity-missing-12-person-parent",
@@ -18431,9 +19172,11 @@
       "viewpoint": "current-affinity-missing-12-person-a",
       "target": "current-affinity-missing-12-person-parent",
       "expected": {
-        "primaryTerm": "配偶母亲",
-        "reverseTerm": "子女配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：current-affinity-missing-12-reviewed-conflict-2"
+        ],
         "pathPersonIds": [
           "current-affinity-missing-12-person-a",
           "current-affinity-missing-12-person-spouse",
@@ -18444,6 +19187,10 @@
           "current-affinity-missing-12-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：current-affinity-missing-12-reviewed-conflict-2"
       }
     },
     {
@@ -18884,7 +19631,10 @@
         {
           "id": "divorce-remarriage-reverse-03-person-source",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "divorce-remarriage-reverse-03-reviewed-conflict-1"
+          ]
         },
         {
           "id": "divorce-remarriage-reverse-03-person-former",
@@ -19160,6 +19910,10 @@
           "divorce-remarriage-missing-01-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：前配偶 / 前配偶"
       }
     },
     {
@@ -19208,6 +19962,10 @@
           "divorce-remarriage-missing-02-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：前配偶 / 前妻"
       }
     },
     {
@@ -19267,6 +20025,10 @@
         ],
         "pathRelationIds": [],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少离婚关系端点之外仍可通行的亲属事实",
+        "conservativeResult": "保留不确定性：未找到可用关系路径"
       }
     },
     {
@@ -19326,6 +20088,10 @@
           "divorce-remarriage-missing-04-relation-m2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：配偶 / 配偶"
       }
     },
     {
@@ -19386,6 +20152,10 @@
           "divorce-remarriage-missing-05-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：父亲 / 子女"
       }
     },
     {
@@ -19446,6 +20216,10 @@
           "divorce-remarriage-missing-06-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "使用保守称谓：母亲 / 子女"
       }
     },
     {
@@ -19456,7 +20230,10 @@
         {
           "id": "unknown-age-order-forward-01-person-a",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-forward-01-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-forward-01-person-b",
@@ -19494,10 +20271,10 @@
       "viewpoint": "unknown-age-order-forward-01-person-a",
       "target": "unknown-age-order-forward-01-person-b",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-forward-01-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-01-person-a",
@@ -19604,7 +20381,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-forward-03-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -19631,10 +20411,10 @@
       "viewpoint": "unknown-age-order-forward-03-person-child",
       "target": "unknown-age-order-forward-03-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-forward-03-reviewed-conflict-3"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-03-person-child",
@@ -19680,7 +20460,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-forward-04-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -19707,10 +20490,10 @@
       "viewpoint": "unknown-age-order-forward-04-person-child",
       "target": "unknown-age-order-forward-04-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-forward-04-reviewed-conflict-3"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-04-person-child",
@@ -19837,7 +20620,10 @@
         {
           "id": "unknown-age-order-forward-06-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-forward-06-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-forward-06-person-b",
@@ -19911,10 +20697,10 @@
       "viewpoint": "unknown-age-order-forward-06-person-a",
       "target": "unknown-age-order-forward-06-person-b",
       "expected": {
-        "primaryTerm": "表姐妹",
-        "reverseTerm": "表姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-forward-06-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-06-person-a",
@@ -20441,7 +21227,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-missing-01-reviewed-conflict-2"
+          ]
         }
       ],
       "parentChild": [
@@ -20462,10 +21251,10 @@
       "viewpoint": "unknown-age-order-missing-01-person-a",
       "target": "unknown-age-order-missing-01-person-b",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-01-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-01-person-a",
@@ -20477,6 +21266,10 @@
           "unknown-age-order-missing-01-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-01-reviewed-conflict-2"
       }
     },
     {
@@ -20487,7 +21280,10 @@
         {
           "id": "unknown-age-order-missing-02-person-a",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-missing-02-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-missing-02-person-b",
@@ -20525,10 +21321,10 @@
       "viewpoint": "unknown-age-order-missing-02-person-a",
       "target": "unknown-age-order-missing-02-person-b",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-02-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-02-person-a",
@@ -20540,6 +21336,10 @@
           "unknown-age-order-missing-02-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-02-reviewed-conflict-1"
       }
     },
     {
@@ -20550,7 +21350,10 @@
         {
           "id": "unknown-age-order-missing-03-person-child",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-missing-03-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-missing-03-person-father",
@@ -20572,7 +21375,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-missing-03-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -20599,10 +21405,11 @@
       "viewpoint": "unknown-age-order-missing-03-person-child",
       "target": "unknown-age-order-missing-03-person-relative",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-03-reviewed-conflict-1",
+          "数据冲突：unknown-age-order-missing-03-reviewed-conflict-3"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-03-person-child",
@@ -20616,6 +21423,10 @@
           "unknown-age-order-missing-03-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-03-reviewed-conflict-1；数据冲突：unknown-age-order-missing-03-reviewed-conflict-3"
       }
     },
     {
@@ -20626,7 +21437,10 @@
         {
           "id": "unknown-age-order-missing-04-person-child",
           "gender": "female",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-missing-04-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-missing-04-person-mother",
@@ -20648,7 +21462,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-missing-04-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -20675,10 +21492,11 @@
       "viewpoint": "unknown-age-order-missing-04-person-child",
       "target": "unknown-age-order-missing-04-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-04-reviewed-conflict-1",
+          "数据冲突：unknown-age-order-missing-04-reviewed-conflict-3"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-04-person-child",
@@ -20692,6 +21510,10 @@
           "unknown-age-order-missing-04-relation-r3"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-04-reviewed-conflict-1；数据冲突：unknown-age-order-missing-04-reviewed-conflict-3"
       }
     },
     {
@@ -20702,7 +21524,10 @@
         {
           "id": "unknown-age-order-missing-05-person-a",
           "gender": "male",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-age-order-missing-05-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-age-order-missing-05-person-b",
@@ -20776,10 +21601,10 @@
       "viewpoint": "unknown-age-order-missing-05-person-a",
       "target": "unknown-age-order-missing-05-person-b",
       "expected": {
-        "primaryTerm": "堂兄弟",
-        "reverseTerm": "堂兄弟",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-05-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-05-person-a",
@@ -20795,6 +21620,10 @@
           "unknown-age-order-missing-05-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-05-reviewed-conflict-1"
       }
     },
     {
@@ -20822,7 +21651,10 @@
             "day": 1,
             "leapMonth": false,
             "precision": "day"
-          }
+          },
+          "conflictIds": [
+            "unknown-age-order-missing-06-reviewed-conflict-2"
+          ]
         },
         {
           "id": "unknown-age-order-missing-06-person-u",
@@ -20879,10 +21711,10 @@
       "viewpoint": "unknown-age-order-missing-06-person-a",
       "target": "unknown-age-order-missing-06-person-b",
       "expected": {
-        "primaryTerm": "表姐妹",
-        "reverseTerm": "表姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-age-order-missing-06-reviewed-conflict-2"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-06-person-a",
@@ -20898,6 +21730,10 @@
           "unknown-age-order-missing-06-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可进一步细分称谓的可靠事实",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-age-order-missing-06-reviewed-conflict-2"
       }
     },
     {
@@ -20928,16 +21764,21 @@
           "id": "unknown-gender-forward-01-relation-r1",
           "parentId": "unknown-gender-forward-01-person-parent",
           "childId": "unknown-gender-forward-01-person-child",
-          "parentRole": "father"
+          "parentRole": "father",
+          "conflictIds": [
+            "unknown-gender-forward-01-reviewed-conflict-3"
+          ]
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-gender-forward-01-person-child",
       "target": "unknown-gender-forward-01-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-forward-01-reviewed-conflict-3"
+        ],
         "pathPersonIds": [
           "unknown-gender-forward-01-person-child",
           "unknown-gender-forward-01-person-parent"
@@ -21084,7 +21925,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-gender-forward-04-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -21105,9 +21949,11 @@
       "viewpoint": "unknown-gender-forward-04-person-child",
       "target": "unknown-gender-forward-04-person-grand",
       "expected": {
-        "primaryTerm": "祖父",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-forward-04-reviewed-conflict-3"
+        ],
         "pathPersonIds": [
           "unknown-gender-forward-04-person-child",
           "unknown-gender-forward-04-person-parent",
@@ -21255,7 +22101,10 @@
             "day": null,
             "leapMonth": true,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-gender-reverse-01-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -21270,9 +22119,11 @@
       "viewpoint": "unknown-gender-reverse-01-person-parent",
       "target": "unknown-gender-reverse-01-person-child",
       "expected": {
-        "primaryTerm": "子女",
-        "reverseTerm": "父亲",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-reverse-01-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "unknown-gender-reverse-01-person-parent",
           "unknown-gender-reverse-01-person-child"
@@ -21419,7 +22270,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-gender-reverse-04-reviewed-conflict-1"
+          ]
         }
       ],
       "parentChild": [
@@ -21440,9 +22294,11 @@
       "viewpoint": "unknown-gender-reverse-04-person-grand",
       "target": "unknown-gender-reverse-04-person-child",
       "expected": {
-        "primaryTerm": "孙辈",
-        "reverseTerm": "祖父",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-reverse-04-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "unknown-gender-reverse-04-person-grand",
           "unknown-gender-reverse-04-person-parent",
@@ -21578,7 +22434,10 @@
         {
           "id": "unknown-gender-missing-01-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-gender-missing-01-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-gender-missing-01-person-parent",
@@ -21598,16 +22457,22 @@
           "id": "unknown-gender-missing-01-relation-r1",
           "parentId": "unknown-gender-missing-01-person-parent",
           "childId": "unknown-gender-missing-01-person-child",
-          "parentRole": "father"
+          "parentRole": "father",
+          "conflictIds": [
+            "unknown-gender-missing-01-reviewed-conflict-3"
+          ]
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-gender-missing-01-person-child",
       "target": "unknown-gender-missing-01-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-missing-01-reviewed-conflict-1",
+          "数据冲突：unknown-gender-missing-01-reviewed-conflict-3"
+        ],
         "pathPersonIds": [
           "unknown-gender-missing-01-person-child",
           "unknown-gender-missing-01-person-parent"
@@ -21616,6 +22481,10 @@
           "unknown-gender-missing-01-relation-r1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-gender-missing-01-reviewed-conflict-1；数据冲突：unknown-gender-missing-01-reviewed-conflict-3"
       }
     },
     {
@@ -21626,7 +22495,10 @@
         {
           "id": "unknown-gender-missing-02-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-gender-missing-02-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-gender-missing-02-person-b",
@@ -21653,9 +22525,11 @@
       "viewpoint": "unknown-gender-missing-02-person-a",
       "target": "unknown-gender-missing-02-person-b",
       "expected": {
-        "primaryTerm": "配偶",
-        "reverseTerm": "配偶",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-missing-02-reviewed-conflict-1"
+        ],
         "pathPersonIds": [
           "unknown-gender-missing-02-person-a",
           "unknown-gender-missing-02-person-b"
@@ -21664,6 +22538,10 @@
           "unknown-gender-missing-02-relation-m1"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-gender-missing-02-reviewed-conflict-1"
       }
     },
     {
@@ -21674,7 +22552,10 @@
         {
           "id": "unknown-gender-missing-03-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-gender-missing-03-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-gender-missing-03-person-b",
@@ -21712,10 +22593,10 @@
       "viewpoint": "unknown-gender-missing-03-person-a",
       "target": "unknown-gender-missing-03-person-b",
       "expected": {
-        "primaryTerm": "兄弟姐妹",
-        "reverseTerm": "兄弟姐妹",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "数据冲突：unknown-gender-missing-03-reviewed-conflict-1"
         ],
         "pathPersonIds": [
           "unknown-gender-missing-03-person-a",
@@ -21727,6 +22608,10 @@
           "unknown-gender-missing-03-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-gender-missing-03-reviewed-conflict-1"
       }
     },
     {
@@ -21737,7 +22622,10 @@
         {
           "id": "unknown-gender-missing-04-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": null,
+          "conflictIds": [
+            "unknown-gender-missing-04-reviewed-conflict-1"
+          ]
         },
         {
           "id": "unknown-gender-missing-04-person-parent",
@@ -21754,7 +22642,10 @@
             "day": null,
             "leapMonth": false,
             "precision": "month"
-          }
+          },
+          "conflictIds": [
+            "unknown-gender-missing-04-reviewed-conflict-3"
+          ]
         }
       ],
       "parentChild": [
@@ -21775,9 +22666,12 @@
       "viewpoint": "unknown-gender-missing-04-person-child",
       "target": "unknown-gender-missing-04-person-grand",
       "expected": {
-        "primaryTerm": "祖父",
-        "reverseTerm": "孙辈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "数据冲突：unknown-gender-missing-04-reviewed-conflict-1",
+          "数据冲突：unknown-gender-missing-04-reviewed-conflict-3"
+        ],
         "pathPersonIds": [
           "unknown-gender-missing-04-person-child",
           "unknown-gender-missing-04-person-parent",
@@ -21788,6 +22682,10 @@
           "unknown-gender-missing-04-relation-r2"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "关系路径上人物的性别事实未知",
+        "conservativeResult": "保留不确定性：数据冲突：unknown-gender-missing-04-reviewed-conflict-1；数据冲突：unknown-gender-missing-04-reviewed-conflict-3"
       }
     },
     {
@@ -21891,6 +22789,10 @@
           "unknown-gender-missing-05-relation-r4"
         ],
         "alternatives": []
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -23045,6 +23947,10 @@
             ]
           }
         ]
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -23139,6 +24045,10 @@
             ]
           }
         ]
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -23233,6 +24143,10 @@
             ]
           }
         ]
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -23327,6 +24241,10 @@
             ]
           }
         ]
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     },
     {
@@ -23421,6 +24339,10 @@
             ]
           }
         ]
+      },
+      "missingInformation": {
+        "missingFact": "缺少可用于长幼判定的可靠公历出生日期",
+        "conservativeResult": "保留不确定性：缺少可靠出生日期，未推断长幼顺序"
       }
     }
   ]

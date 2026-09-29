@@ -253,6 +253,124 @@ describe("calculateRelationship", () => {
     });
   });
 
+  it("keeps a lower-ranked prefix when a marriage suffix makes both shortest paths equally ranked", () => {
+    const facts = graph(
+      [
+        person("s", "male", solar(2000)),
+        person("a", "male"),
+        person("b", "female"),
+        person("v", "male", solar(1990)),
+        person("t", "female")
+      ],
+      [
+        { id: "p1", parentId: "a", childId: "s", parentRole: "father" },
+        { id: "p2", parentId: "a", childId: "v", parentRole: "father" },
+        { id: "p3", parentId: "b", childId: "v", parentRole: "mother" }
+      ],
+      [
+        {
+          id: "m1",
+          spouseAId: "s",
+          spouseBId: "b",
+          status: "active",
+          conflictIds: ["conflict-affinity-prefix"]
+        },
+        { id: "m2", spouseAId: "v", spouseBId: "t", status: "active" }
+      ]
+    );
+    const calculator = new RelationshipCalculator(facts);
+
+    const authoritative = calculator.calculateRelationship("s", "t");
+    const bulk = calculator.calculatePrimaryTerms("s", ["t"]);
+
+    expect(authoritative).toMatchObject({
+      primaryTerm: null,
+      uncertainty: ["数据冲突：conflict-affinity-prefix"],
+      signature: { pathRelationIds: ["m1", "p3", "m2"] }
+    });
+    expect(authoritative.alternatives.map((entry) => entry.signature.pathRelationIds)).toEqual([
+      ["p1", "p2", "m2"]
+    ]);
+    expect(bulk.get("t")).toBeNull();
+  });
+
+  it("matches authoritative per-target primary terms across generated multipath graphs and fresh snapshots", () => {
+    let state = 0x20260916;
+    const random = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x1_0000_0000;
+    };
+
+    for (let graphIndex = 0; graphIndex < 80; graphIndex += 1) {
+      const people = Array.from({ length: 9 }, (_, personIndex) => person(
+        `g${graphIndex}-p${personIndex}`,
+        (["male", "female", "unknown"] as const)[Math.floor(random() * 3)]!,
+        personIndex < 3 ? solar(1970 + personIndex * 12 + (graphIndex % 5)) : null,
+        random() < 0.08 ? [`person-conflict-${graphIndex}-${personIndex}`] : undefined
+      ));
+      const parentChild: ParentChildFact[] = [];
+      const marriages: MarriageFact[] = [];
+
+      for (let childIndex = 1; childIndex < people.length; childIndex += 1) {
+        const parentIndex = Math.floor(random() * childIndex);
+        parentChild.push({
+          id: `g${graphIndex}-tree-${childIndex}`,
+          parentId: people[parentIndex]!.id,
+          childId: people[childIndex]!.id,
+          parentRole: random() < 0.5 ? "father" : "mother",
+          ...(random() < 0.08 ? { conflictIds: [`edge-conflict-${graphIndex}-${childIndex}`] } : {})
+        });
+      }
+      for (let extraIndex = 0; extraIndex < 5; extraIndex += 1) {
+        const left = Math.floor(random() * people.length);
+        let right = Math.floor(random() * people.length);
+        if (right === left) right = (right + 1) % people.length;
+        if (random() < 0.55) {
+          parentChild.push({
+            id: `g${graphIndex}-extra-parent-${extraIndex}`,
+            parentId: people[Math.min(left, right)]!.id,
+            childId: people[Math.max(left, right)]!.id,
+            parentRole: random() < 0.5 ? "father" : "mother",
+            ...(random() < 0.12 ? { conflictIds: [`extra-conflict-${graphIndex}-${extraIndex}`] } : {})
+          });
+        } else {
+          marriages.push({
+            id: `g${graphIndex}-marriage-${extraIndex}`,
+            spouseAId: people[left]!.id,
+            spouseBId: people[right]!.id,
+            status: random() < 0.8 ? "active" : "divorced",
+            ...(random() < 0.12 ? { conflictIds: [`marriage-conflict-${graphIndex}-${extraIndex}`] } : {})
+          });
+        }
+      }
+
+      const snapshot = graph(people, parentChild, marriages);
+      const sourceId = people[Math.floor(random() * people.length)]!.id;
+      const targets = people.map((entry) => entry.id);
+      const calculator = new RelationshipCalculator(snapshot);
+      const actual = calculator.calculatePrimaryTerms(sourceId, targets);
+
+      for (const targetId of targets) {
+        expect(actual.get(targetId), `${graphIndex}:${sourceId}->${targetId}`).toBe(
+          calculator.calculateRelationship(sourceId, targetId).primaryTerm
+        );
+      }
+
+      const freshSnapshot = graph(
+        people.map((entry) => ({ ...entry, conflictIds: undefined })),
+        parentChild.slice(0, Math.max(1, parentChild.length - 2)),
+        marriages.filter((entry) => entry.status === "active")
+      );
+      const freshCalculator = new RelationshipCalculator(freshSnapshot);
+      const freshActual = freshCalculator.calculatePrimaryTerms(sourceId, targets);
+      for (const targetId of targets) {
+        expect(freshActual.get(targetId), `fresh:${graphIndex}:${sourceId}->${targetId}`).toBe(
+          freshCalculator.calculateRelationship(sourceId, targetId).primaryTerm
+        );
+      }
+    }
+  });
+
   it("keeps each cached calculator isolated from later mutations to its input fact snapshot", () => {
     const source = person("source", "male");
     const facts = graph(

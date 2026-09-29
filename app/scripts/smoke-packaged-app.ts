@@ -30,6 +30,11 @@ export interface RegistryProbe {
   view: "32" | "64";
 }
 
+export interface RegistrySnapshot {
+  probe: RegistryProbe;
+  values: Record<string, string>;
+}
+
 export function nsisRegistryProbes(guid: string): RegistryProbe[] {
   const keys = [
     `HKCU\\Software\\${guid}`,
@@ -38,6 +43,68 @@ export function nsisRegistryProbes(guid: string): RegistryProbe[] {
     `HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${guid}`
   ];
   return keys.flatMap((key) => (["32", "64"] as const).map((view) => ({ key, view })));
+}
+
+function normalizedWindowsPath(path: string): string {
+  return resolve(path).replaceAll("/", "\\").toLowerCase();
+}
+
+function executableFromRegistryCommand(command: string): string | null {
+  const trimmed = command.trim();
+  if (trimmed.startsWith('"')) {
+    const closingQuote = trimmed.indexOf('"', 1);
+    return closingQuote > 1 ? trimmed.slice(1, closingQuote) : null;
+  }
+  const match = /^(.+?\.exe)(?:\s|$)/iu.exec(trimmed);
+  return match?.[1] ?? null;
+}
+
+export function validateInstalledRegistrySnapshots(
+  snapshots: readonly RegistrySnapshot[],
+  installRoot: string,
+  uninstaller: string,
+  version: string
+): { installViews: Array<"32" | "64">; uninstallViews: Array<"32" | "64">; installLocation: string; uninstallExecutable: string } {
+  assertContainedPath(installRoot, uninstaller, "registered uninstaller");
+  const machine = snapshots.filter(({ probe }) => probe.key.toUpperCase().startsWith("HKLM\\"));
+  if (machine.length > 0) throw new Error(`Unexpected HKLM registration: ${machine.map(({ probe }) => `${probe.key} [${probe.view}]`).join(", ")}`);
+
+  const installKey = `HKCU\\Software\\${NSIS_APP_GUID}`.toLowerCase();
+  const uninstallKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${NSIS_APP_GUID}`.toLowerCase();
+  const installs = snapshots.filter(({ probe }) => probe.key.toLowerCase() === installKey);
+  const uninstalls = snapshots.filter(({ probe }) => probe.key.toLowerCase() === uninstallKey);
+  if (installs.length === 0 || uninstalls.length === 0) throw new Error("Expected HKCU install and uninstall registry keys were not observed");
+  const expectedInstallRoot = normalizedWindowsPath(installRoot);
+  const expectedUninstaller = normalizedWindowsPath(uninstaller);
+  for (const { probe, values } of installs) {
+    if (!values.InstallLocation || normalizedWindowsPath(values.InstallLocation) !== expectedInstallRoot) {
+      throw new Error(`InstallLocation is outside or differs from the isolated install root (${probe.view}-bit view)`);
+    }
+  }
+  for (const { probe, values } of uninstalls) {
+    if (values.DisplayVersion !== version) throw new Error(`DisplayVersion differs from ${version} (${probe.view}-bit view)`);
+    const normalExecutable = executableFromRegistryCommand(values.UninstallString ?? "");
+    const quietExecutable = executableFromRegistryCommand(values.QuietUninstallString ?? "");
+    if (!normalExecutable || !quietExecutable
+      || normalizedWindowsPath(normalExecutable) !== expectedUninstaller
+      || normalizedWindowsPath(quietExecutable) !== expectedUninstaller) {
+      throw new Error(`Registered uninstaller is outside or differs from the installed uninstaller (${probe.view}-bit view)`);
+    }
+    if (!/(?:^|\s)\/S(?:\s|$)/iu.test(values.QuietUninstallString ?? "")) {
+      throw new Error(`QuietUninstallString is not silent (${probe.view}-bit view)`);
+    }
+  }
+  return {
+    installViews: installs.map(({ probe }) => probe.view).sort(),
+    uninstallViews: uninstalls.map(({ probe }) => probe.view).sort(),
+    installLocation: installs[0]!.values.InstallLocation!,
+    uninstallExecutable: executableFromRegistryCommand(uninstalls[0]!.values.UninstallString!)!
+  };
+}
+
+export function newShortcutPaths(before: readonly string[], after: readonly string[]): string[] {
+  const previous = new Set(before.map(normalizedWindowsPath));
+  return after.filter((path) => !previous.has(normalizedWindowsPath(path))).sort();
 }
 
 function pathIsInside(root: string, candidate: string): boolean {
@@ -118,58 +185,169 @@ export function resolveExecutableWorkingDirectory(file: string, workingDirectory
   return resolve(workingDirectory ?? dirname(file));
 }
 
-async function runExecutable(
+export async function runExecutable(
   file: string,
   args: string[],
   timeoutMs = 120_000,
-  workingDirectory?: string
+  workingDirectory?: string,
+  environment: NodeJS.ProcessEnv = process.env
 ): Promise<void> {
   await new Promise<void>((resolveRun, rejectRun) => {
     const child = spawn(file, args, {
       cwd: resolveExecutableWorkingDirectory(file, workingDirectory),
-      env: process.env,
+      env: environment,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    let settled = false;
     child.stdout.on("data", (chunk: Buffer) => { stdout = `${stdout}${chunk.toString("utf8")}`.slice(-8_000); });
     child.stderr.on("data", (chunk: Buffer) => { stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_000); });
     const timeout = setTimeout(() => {
+      timedOut = true;
       child.kill();
-      rejectRun(new Error(`${basename(file)} timed out after ${timeoutMs} ms`));
     }, timeoutMs);
     child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       rejectRun(error);
     });
     child.once("exit", (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
-      if (code === 0) resolveRun();
+      if (timedOut) rejectRun(new Error(`${basename(file)} timed out after ${timeoutMs} ms; process termination was observed`));
+      else if (code === 0) resolveRun();
       else rejectRun(new Error(`${basename(file)} exited ${code ?? "without a code"}\n${stdout}\n${stderr}`));
     });
   });
 }
 
-async function registryKeyExists(probe: RegistryProbe): Promise<boolean> {
-  return new Promise<boolean>((resolveQuery, rejectQuery) => {
+export interface PackagedSmokeCleanupState {
+  temporaryRoot: string;
+  installRoot: string;
+  uninstaller?: string;
+  installationMayExist: boolean;
+}
+
+export interface PackagedSmokeCleanupOperations {
+  discoverUninstaller(): Promise<string | undefined>;
+  runUninstaller(uninstaller: string): Promise<void>;
+  installRootExists(): Promise<boolean>;
+  registeredInstallations(): Promise<RegistryProbe[]>;
+  removeTemporaryRoot(): Promise<void>;
+}
+
+export async function finalizePackagedSmokeCleanup(
+  state: PackagedSmokeCleanupState,
+  operations: PackagedSmokeCleanupOperations
+): Promise<{ temporaryRootRemoved: true; uninstallerRun: boolean; uninstaller: string | null }> {
+  let installPresent = await operations.installRootExists();
+  let registrations = await operations.registeredInstallations();
+  if (!state.installationMayExist && registrations.length === 0) {
+    await operations.removeTemporaryRoot();
+    return { temporaryRootRemoved: true, uninstallerRun: false, uninstaller: null };
+  }
+
+  let uninstaller = state.uninstaller;
+  if (!uninstaller && installPresent) uninstaller = await operations.discoverUninstaller();
+  let uninstallerRun = false;
+  if (installPresent || registrations.length > 0) {
+    if (!uninstaller) {
+      throw new Error(`Packaged-smoke recovery is required; temporary root preserved at ${state.temporaryRoot}; exact uninstaller=not-found`);
+    }
+    assertContainedPath(state.installRoot, uninstaller, "cleanup uninstaller");
+    try {
+      await operations.runUninstaller(uninstaller);
+      uninstallerRun = true;
+    } catch (error) {
+      throw new Error(`Packaged-smoke cleanup failed; temporary root preserved at ${state.temporaryRoot} for recovery; exact uninstaller=${uninstaller}`, { cause: error });
+    }
+  }
+
+  installPresent = await operations.installRootExists();
+  registrations = await operations.registeredInstallations();
+  if (installPresent || registrations.length > 0) {
+    throw new Error(`Packaged-smoke cleanup is incomplete; temporary root preserved at ${state.temporaryRoot} for recovery; exact uninstaller=${uninstaller ?? "not-found"} (${registrations.length} registry keys remain)`);
+  }
+  await operations.removeTemporaryRoot();
+  return { temporaryRootRemoved: true, uninstallerRun, uninstaller: uninstaller ?? null };
+}
+
+export interface PackagedSmokeRecoveryInput {
+  temporaryRoot: string;
+  installRoot: string;
+  uninstaller?: string;
+  registry: readonly RegistryProbe[];
+  reason: string;
+}
+
+export function buildPackagedSmokeRecoveryReport(input: PackagedSmokeRecoveryInput): object {
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    passed: false,
+    recoveryRequired: true,
+    temporaryRoot: input.temporaryRoot,
+    installRoot: input.installRoot,
+    exactUninstaller: input.uninstaller ?? null,
+    registry: input.registry,
+    failure: input.reason,
+    recovery: {
+      instruction: input.uninstaller
+        ? `Run the retained uninstaller silently and inspect its exit status: \"${input.uninstaller}\" /S`
+        : "Inspect the retained install root for its exact uninstaller; do not delete the root while registration may remain.",
+      removeTemporaryRootOnlyAfter: [
+        "uninstaller succeeds",
+        "install root is absent",
+        "all expected registry probes are absent"
+      ]
+    }
+  };
+}
+
+function parseRegistryValues(output: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const line of output.split(/\r?\n/u)) {
+    const match = /^\s+(\S+)\s+REG_\S+\s+(.*)$/u.exec(line);
+    if (match) values[match[1]!] = match[2]!.trim();
+  }
+  return values;
+}
+
+async function registrySnapshot(probe: RegistryProbe): Promise<RegistrySnapshot | null> {
+  return new Promise<RegistrySnapshot | null>((resolveQuery, rejectQuery) => {
     const child = spawn("reg.exe", ["query", probe.key, `/reg:${probe.view}`], {
       windowsHide: true,
-      stdio: "ignore"
+      stdio: ["ignore", "pipe", "pipe"]
     });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.once("error", rejectQuery);
     child.once("exit", (code) => {
-      if (code === 0) resolveQuery(true);
-      else if (code === 1) resolveQuery(false);
-      else rejectQuery(new Error(`Unable to inspect ${probe.key} (${probe.view}-bit view): reg.exe exited ${code ?? "without a code"}`));
+      if (code === 0) {
+        resolveQuery({ probe, values: parseRegistryValues(Buffer.concat(stdout).toString("utf8")) });
+      } else if (code === 1) {
+        resolveQuery(null);
+      } else {
+        rejectQuery(new Error(`Unable to inspect ${probe.key} (${probe.view}-bit view): reg.exe exited ${code ?? "without a code"}: ${Buffer.concat(stderr).toString("utf8")}`));
+      }
     });
   });
 }
 
+async function installedRegistrySnapshots(): Promise<RegistrySnapshot[]> {
+  const snapshots = await Promise.all(nsisRegistryProbes(NSIS_APP_GUID).map(registrySnapshot));
+  return snapshots.filter((entry): entry is RegistrySnapshot => entry !== null);
+}
+
 async function registeredInstallations(): Promise<RegistryProbe[]> {
-  const probes = nsisRegistryProbes(NSIS_APP_GUID);
-  const present = await Promise.all(probes.map(async (probe) => ({ probe, exists: await registryKeyExists(probe) })));
-  return present.filter(({ exists: found }) => found).map(({ probe }) => probe);
+  return (await installedRegistrySnapshots()).map(({ probe }) => probe);
 }
 
 async function assertNoRegisteredInstallation(stage: string): Promise<void> {
@@ -186,6 +364,52 @@ async function waitFor(description: string, predicate: () => Promise<boolean>, t
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
   throw new Error(`Timed out waiting for ${description}`);
+}
+
+interface ShortcutLocation {
+  label: string;
+  path: string;
+}
+
+export function shortcutLocations(
+  isolatedAppData: string,
+  isolatedProfile: string,
+  hostEnvironment: NodeJS.ProcessEnv = process.env
+): ShortcutLocation[] {
+  const candidates: ShortcutLocation[] = [
+    { label: "isolated-user-desktop", path: join(isolatedProfile, "Desktop") },
+    { label: "isolated-user-start-menu", path: join(isolatedAppData, "Microsoft", "Windows", "Start Menu", "Programs") }
+  ];
+  if (hostEnvironment.USERPROFILE) candidates.push({ label: "actual-user-desktop", path: join(hostEnvironment.USERPROFILE, "Desktop") });
+  if (hostEnvironment.APPDATA) candidates.push({ label: "actual-user-start-menu", path: join(hostEnvironment.APPDATA, "Microsoft", "Windows", "Start Menu", "Programs") });
+  if (hostEnvironment.PUBLIC) candidates.push({ label: "public-desktop", path: join(hostEnvironment.PUBLIC, "Desktop") });
+  if (hostEnvironment.ProgramData) candidates.push({ label: "machine-start-menu", path: join(hostEnvironment.ProgramData, "Microsoft", "Windows", "Start Menu", "Programs") });
+  const seen = new Set<string>();
+  return candidates.filter(({ path }) => {
+    const identity = normalizedWindowsPath(path);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}
+
+async function shortcutSnapshot(locations: readonly ShortcutLocation[]): Promise<string[]> {
+  const shortcuts: string[] = [];
+  for (const location of locations) {
+    for (const file of await filesBelow(location.path)) {
+      if (file.toLowerCase().endsWith(".lnk")) shortcuts.push(file);
+    }
+  }
+  return shortcuts.sort();
+}
+
+async function discoverContainedUninstaller(installRoot: string): Promise<string | undefined> {
+  if (!await exists(installRoot)) return undefined;
+  const matches = (await readdir(installRoot)).filter((entry) => /^uninstall.*\.exe$/iu.test(entry));
+  if (matches.length !== 1) return undefined;
+  const uninstaller = await realpath(resolve(installRoot, matches[0]!));
+  assertContainedPath(installRoot, uninstaller, "discovered cleanup uninstaller");
+  return uninstaller;
 }
 
 async function packageScan(packageRoot: string): Promise<{ files: number; asarEntries: number; nativeModule: string }> {
@@ -354,13 +578,16 @@ export async function smokePackagedApp(): Promise<string> {
   const profile = resolve(userDataRoot, "profile");
   const appData = resolve(userDataRoot, "appdata");
   const localAppData = resolve(userDataRoot, "localappdata");
+  const installerProfile = resolve(userDataRoot, "installer-profile");
   const guard = resolve(temporaryRoot, "must-survive-uninstall.txt");
   const importCanary = resolve(temporaryRoot, "hostile-import.csv");
   const mediaCanary = resolve(temporaryRoot, "hostile-media.jpg");
   const backupCanary = resolve(temporaryRoot, "hostile-backup.zip");
   let application: ElectronApplication | undefined;
   let uninstaller: string | undefined;
-  let uninstallAttempted = false;
+  let installationMayExist = false;
+  let lifecycleFailure: unknown;
+  let shortcutBaseline: string[] = [];
 
   assertContainedPath(temporaryRoot, installRoot, "install root");
   assertContainedPath(temporaryRoot, userDataRoot, "user-data root");
@@ -369,6 +596,8 @@ export async function smokePackagedApp(): Promise<string> {
   await mkdir(profile, { recursive: true });
   await mkdir(appData, { recursive: true });
   await mkdir(localAppData, { recursive: true });
+  await mkdir(resolve(installerProfile, "Desktop"), { recursive: true });
+  await mkdir(resolve(appData, "Microsoft", "Windows", "Start Menu", "Programs"), { recursive: true });
   await writeFile(guard, "installer and uninstaller must preserve this sibling\n", "utf8");
   await writeFile(importCanary, "hostile seam must not be consumed\n", "utf8");
   await writeFile(mediaCanary, "hostile seam must not be consumed\n", "utf8");
@@ -380,11 +609,29 @@ export async function smokePackagedApp(): Promise<string> {
   assertContainedPath(resolvedTemporaryRoot, resolvedUserDataRoot, "resolved user-data root");
   assertSeparatedRoots(resolvedInstallRoot, resolvedUserDataRoot);
 
+  const installerEnvironment: NodeJS.ProcessEnv = {
+    ...process.env,
+    APPDATA: appData,
+    LOCALAPPDATA: localAppData,
+    USERPROFILE: installerProfile
+  };
+  const observedShortcutLocations = shortcutLocations(appData, installerProfile);
+  shortcutBaseline = await shortcutSnapshot(observedShortcutLocations);
+  const reportDirectory = resolve(releaseRoot, "reports");
+  const recoveryReportPath = resolve(reportDirectory, "packaged-smoke-recovery-report.json");
+
   try {
     const unpackedRoot = resolve(releaseRoot, "win-unpacked");
     const unpackedScan = await packageScan(unpackedRoot);
     await assertNoRegisteredInstallation("Pre-install registry check");
-    await runExecutable(installerPath, ["/S", "/currentuser", `/D=${resolvedInstallRoot}`]);
+    installationMayExist = true;
+    await runExecutable(
+      installerPath,
+      ["/S", "/currentuser", `/D=${resolvedInstallRoot}`],
+      120_000,
+      releaseRoot,
+      installerEnvironment
+    );
     const executable = resolve(resolvedInstallRoot, "family-agent.exe");
     await waitFor("installed executable", () => exists(executable));
     const resolvedExecutable = await realpath(executable);
@@ -395,12 +642,24 @@ export async function smokePackagedApp(): Promise<string> {
     if (!uninstallerName) throw new Error("Installed NSIS uninstaller was not found");
     uninstaller = await realpath(resolve(resolvedInstallRoot, uninstallerName));
     assertContainedPath(resolvedInstallRoot, uninstaller, "uninstaller");
+    const installedRegistry = validateInstalledRegistrySnapshots(
+      await installedRegistrySnapshots(),
+      resolvedInstallRoot,
+      uninstaller,
+      packageJson.version
+    );
+    const shortcutsAfterInstall = await shortcutSnapshot(observedShortcutLocations);
+    const shortcutsCreatedAfterInstall = newShortcutPaths(shortcutBaseline, shortcutsAfterInstall);
+    if (shortcutsCreatedAfterInstall.length > 0) {
+      throw new Error(`NSIS unexpectedly created shortcuts: ${shortcutsCreatedAfterInstall.join(", ")}`);
+    }
     const installedScan = await packageScan(resolvedInstallRoot);
 
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
       APPDATA: appData,
       LOCALAPPDATA: localAppData,
+      USERPROFILE: installerProfile,
       ELECTRON_RENDERER_URL: "https://example.invalid/hostile-renderer",
       FAMILY_AGENT_E2E_IMPORT_PATH: importCanary,
       FAMILY_AGENT_E2E_MEDIA_PATH: mediaCanary,
@@ -440,10 +699,14 @@ export async function smokePackagedApp(): Promise<string> {
     assertContainedPath(resolvedTemporaryRoot, userDataRootBeforeUninstall, "pre-uninstall user-data root");
     assertSeparatedRoots(installRootBeforeUninstall, userDataRootBeforeUninstall);
     assertContainedPath(installRootBeforeUninstall, uninstaller, "pre-uninstall executable");
-    uninstallAttempted = true;
-    await runExecutable(uninstaller, ["/S"], 120_000, resolvedTemporaryRoot);
+    await runExecutable(uninstaller, ["/S"], 120_000, resolvedTemporaryRoot, installerEnvironment);
     await waitFor("temporary install root removal", async () => !await exists(resolvedInstallRoot));
     await waitFor("temporary install registry removal", async () => (await registeredInstallations()).length === 0);
+    const shortcutsAfterUninstall = await shortcutSnapshot(observedShortcutLocations);
+    const shortcutsRemainingAfterUninstall = newShortcutPaths(shortcutBaseline, shortcutsAfterUninstall);
+    if (shortcutsRemainingAfterUninstall.length > 0) {
+      throw new Error(`NSIS uninstall left shortcuts created during the smoke: ${shortcutsRemainingAfterUninstall.join(", ")}`);
+    }
 
     if (!await exists(guard)) throw new Error("Uninstaller removed a sibling outside the temporary install root");
     if (!await exists(userDataRootBeforeUninstall)) throw new Error("Uninstaller deleted the isolated persistent user-data root");
@@ -452,7 +715,7 @@ export async function smokePackagedApp(): Promise<string> {
     if (databaseHashAfterUninstall !== databaseHashBeforeUninstall) throw new Error("Uninstaller modified the persistent workspace database");
 
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       platform: { platform: process.platform, architecture: process.arch, node: process.version },
       installerMode: { silent: true, currentUser: true, customTemporaryDirectory: true },
@@ -466,19 +729,27 @@ export async function smokePackagedApp(): Promise<string> {
         userDataFilesBeforeUninstall,
         userDataPreservedAfterUninstall: true
       },
-      uninstall: { exactTemporaryInstallRemoved: true, siblingGuardPreserved: true },
+      uninstall: { exactTemporaryInstallRemoved: true, exactUninstallerSucceeded: true, siblingGuardPreserved: true },
       registry: {
         guid: NSIS_APP_GUID,
         checkedHives: ["HKCU", "HKLM"],
         checkedViews: ["32", "64"],
         cleanBeforeInstall: true,
         cleanAfterUninstall: true,
-        shortcutsCreated: false
+        observedAfterInstall: installedRegistry
+      },
+      shortcuts: {
+        checkedLocations: observedShortcutLocations.map(({ label }) => label),
+        baselineCount: shortcutBaseline.length,
+        afterInstallCount: shortcutsAfterInstall.length,
+        afterUninstallCount: shortcutsAfterUninstall.length,
+        createdAfterInstall: shortcutsCreatedAfterInstall,
+        remainingAfterUninstall: shortcutsRemainingAfterUninstall,
+        existingEntriesNeverDeletedBySmoke: true
       },
       artifacts,
       passed: true
     };
-    const reportDirectory = resolve(releaseRoot, "reports");
     await mkdir(reportDirectory, { recursive: true });
     const reportPath = resolve(reportDirectory, "packaged-smoke-report.json");
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -489,13 +760,54 @@ export async function smokePackagedApp(): Promise<string> {
     ].join("\n") + "\n", "utf8");
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     return reportPath;
+  } catch (error) {
+    lifecycleFailure = error;
+    throw error;
   } finally {
     await application?.close().catch(() => undefined);
-    if (!uninstallAttempted && uninstaller && await exists(uninstaller)) {
-      assertContainedPath(installRoot, uninstaller, "cleanup uninstaller");
-      await runExecutable(uninstaller, ["/S"], 60_000, temporaryRoot).catch(() => undefined);
+    try {
+      const retainedUninstaller = uninstaller ?? await discoverContainedUninstaller(resolvedInstallRoot);
+      if (retainedUninstaller) uninstaller = retainedUninstaller;
+      await finalizePackagedSmokeCleanup({
+        temporaryRoot: resolvedTemporaryRoot,
+        installRoot: resolvedInstallRoot,
+        uninstaller,
+        installationMayExist
+      }, {
+        discoverUninstaller: () => discoverContainedUninstaller(resolvedInstallRoot),
+        runUninstaller: async (cleanupUninstaller) => {
+          await runExecutable(cleanupUninstaller, ["/S"], 60_000, resolvedTemporaryRoot, installerEnvironment);
+          await waitFor("cleanup install-root removal", async () => !await exists(resolvedInstallRoot));
+          await waitFor("cleanup registry removal", async () => (await registeredInstallations()).length === 0);
+          const remainingShortcuts = newShortcutPaths(shortcutBaseline, await shortcutSnapshot(observedShortcutLocations));
+          if (remainingShortcuts.length > 0) {
+            throw new Error(`Cleanup left shortcuts created during the smoke; no shortcut was deleted: ${remainingShortcuts.join(", ")}`);
+          }
+        },
+        installRootExists: () => exists(resolvedInstallRoot),
+        registeredInstallations,
+        removeTemporaryRoot: () => removeSmokeRoot(resolvedTemporaryRoot)
+      });
+    } catch (cleanupError) {
+      const registry = await registeredInstallations().catch(() => []);
+      await mkdir(reportDirectory, { recursive: true });
+      const reason = [lifecycleFailure, cleanupError]
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined && entry !== null)
+        .map((entry) => entry instanceof Error ? entry.stack ?? entry.message : String(entry))
+        .join("\n--- cleanup ---\n");
+      const recovery = buildPackagedSmokeRecoveryReport({
+        temporaryRoot: resolvedTemporaryRoot,
+        installRoot: resolvedInstallRoot,
+        uninstaller,
+        registry,
+        reason
+      });
+      await writeFile(recoveryReportPath, `${JSON.stringify(recovery, null, 2)}\n`, "utf8");
+      throw new AggregateError(
+        lifecycleFailure ? [lifecycleFailure, cleanupError] : [cleanupError],
+        `Packaged smoke left recoverable state; follow ${recoveryReportPath}`
+      );
     }
-    await removeSmokeRoot(temporaryRoot);
   }
 }
 
