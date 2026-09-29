@@ -22,10 +22,24 @@ export class WorkspaceMergeGateway implements MergeApi {
   constructor(private readonly workspaces: OpenWorkspaceContextProvider) {}
   async findDuplicateCandidates(input: { personId: string }) { return this.withWorkspace((db, workspaceId) => new DuplicateCandidateService(db, workspaceId).findDuplicateCandidates(input.personId)); }
   async preview(input: { primaryPersonId: string; secondaryPersonId: string }) { return this.withWorkspace((db, workspaceId) => new MergePreviewService(db, workspaceId).previewMerge(input.primaryPersonId, input.secondaryPersonId)); }
-  async merge(input: MergeDecisionDto) { return this.withWorkspace((db, workspaceId) => { const result = new PersonMergeService(db, workspaceId).mergePeople(input); return { id: result.id, status: result.status }; }); }
+  async merge(input: MergeDecisionDto) {
+    const result = await this.withWorkspace((db, workspaceId) => { const merged = new PersonMergeService(db, workspaceId).mergePeople(input); return { id: merged.id, status: merged.status }; });
+    if (result.ok) {
+      try { await this.workspaces.synchronizeOriginPerson?.(); }
+      catch { return failure<{ id: string; status: "active" }>("INTERNAL", "Unable to publish workspace origin person"); }
+    }
+    return result;
+  }
   async history() { return this.withWorkspace((db, workspaceId) => new MergeRepository(db, workspaceId).list().map((record) => ({ id: record.id, primaryPersonId: record.survivorPersonId, secondaryPersonId: record.mergedPersonId, status: record.status, createdAt: record.createdAt }))); }
   async canUnmerge(input: { mergeId: string }) { return this.withWorkspace((db, workspaceId) => new UnmergeService(db, workspaceId).canUnmerge(input.mergeId)); }
-  async unmerge(input: { mergeId: string }) { return this.withWorkspace((db, workspaceId) => { const result = new UnmergeService(db, workspaceId).unmerge(input.mergeId); return { id: result.id, status: result.status }; }); }
+  async unmerge(input: { mergeId: string }) {
+    const result = await this.withWorkspace((db, workspaceId) => { const unmerged = new UnmergeService(db, workspaceId).unmerge(input.mergeId); return { id: unmerged.id, status: unmerged.status }; });
+    if (result.ok) {
+      try { await this.workspaces.synchronizeOriginPerson?.(); }
+      catch { return failure<{ id: string; status: "reversed" }>("INTERNAL", "Unable to publish workspace origin person"); }
+    }
+    return result;
+  }
   private withWorkspace<T>(operation: (database: WorkspaceDatabase, workspaceId: string) => T): Promise<AppResult<T>> {
     const context = this.workspaces.getOpenWorkspaceContext();
     if (!context) return Promise.resolve(failure("NOT_FOUND", "No workspace is open"));
@@ -39,14 +53,14 @@ export class WorkspaceMergeGateway implements MergeApi {
 
 export function registerMergeIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: MergeApi, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
-  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
+  const run = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runOperation(operation) : operation();
   const handle = <T>(channel: string, schema: z.ZodType, work: (input: T) => Promise<AppResult<unknown>>) => ipc.handle(channel, async (event, input) => {
     if (!trusted(event)) return failure("INTERNAL", "IPC sender was denied"); const parsed = schema.safeParse(input); if (!parsed.success) return failure("VALIDATION", "Invalid request"); return work(parsed.data as T);
   });
-  handle<{ personId: string }>(MERGE_CHANNELS.candidates, z.object({ personId: id }).strict(), (input) => gateway.findDuplicateCandidates(input));
-  handle<{ primaryPersonId: string; secondaryPersonId: string }>(MERGE_CHANNELS.preview, z.object({ primaryPersonId: id, secondaryPersonId: id }).strict(), (input) => gateway.preview(input));
-  handle<MergeDecisionDto>(MERGE_CHANNELS.merge, decision, (input) => mutate(() => gateway.merge(input)));
-  ipc.handle(MERGE_CHANNELS.history, (event) => trusted(event) ? gateway.history() : failure("INTERNAL", "IPC sender was denied"));
-  handle<{ mergeId: string }>(MERGE_CHANNELS.canUnmerge, z.object({ mergeId: id }).strict(), (input) => gateway.canUnmerge(input));
-  handle<{ mergeId: string }>(MERGE_CHANNELS.unmerge, z.object({ mergeId: id }).strict(), (input) => mutate(() => gateway.unmerge(input)));
+  handle<{ personId: string }>(MERGE_CHANNELS.candidates, z.object({ personId: id }).strict(), (input) => run(() => gateway.findDuplicateCandidates(input)));
+  handle<{ primaryPersonId: string; secondaryPersonId: string }>(MERGE_CHANNELS.preview, z.object({ primaryPersonId: id, secondaryPersonId: id }).strict(), (input) => run(() => gateway.preview(input)));
+  handle<MergeDecisionDto>(MERGE_CHANNELS.merge, decision, (input) => run(() => gateway.merge(input)));
+  ipc.handle(MERGE_CHANNELS.history, (event) => trusted(event) ? run(() => gateway.history()) : failure("INTERNAL", "IPC sender was denied"));
+  handle<{ mergeId: string }>(MERGE_CHANNELS.canUnmerge, z.object({ mergeId: id }).strict(), (input) => run(() => gateway.canUnmerge(input)));
+  handle<{ mergeId: string }>(MERGE_CHANNELS.unmerge, z.object({ mergeId: id }).strict(), (input) => run(() => gateway.unmerge(input)));
 }

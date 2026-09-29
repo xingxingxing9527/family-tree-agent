@@ -1,9 +1,13 @@
-import { mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BackupService } from "../../../src/main/application/backup/backup-service";
 import { BackupValidationError, RestoreService } from "../../../src/main/application/backup/restore-service";
+import { WorkspaceFactsGateway } from "../../../src/main/application/facts/facts-gateway";
 import { openDatabase } from "../../../src/main/database/open-database";
+import { WorkspaceDataManagementGateway } from "../../../src/main/ipc/data-management-ipc";
+import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
 import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
 import { createBackupFixture, mediaBytes, originPersonId, workspaceDirectory, workspaceId } from "./backup-fixture";
 import { readZipEntries } from "./backup-test-support";
@@ -12,6 +16,46 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 describe("verified backup and staged restore", () => {
+  it("backs up, inspects, and restores a normally created workspace after its first person save", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-normal-origin-"));
+    roots.push(root);
+    const manager = new WorkspaceManager(join(root, "workspaces"));
+    const created = await manager.create({ name: "Normal family" });
+    if (!created.ok) throw new Error("workspace creation failed");
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: true });
+    const facts = new WorkspaceFactsGateway(manager);
+    const saved = await facts.savePerson({
+      draft: { displayName: "第一人", aliases: [], gender: "unknown", birth: null, death: null, notes: null, sourceDescription: "normal entry" },
+      confirmWarnings: true
+    });
+    expect(saved).toMatchObject({ ok: true, value: { saved: true, entityId: expect.any(String) } });
+    if (!saved.ok || !saved.value.entityId) throw new Error("person fixture failed");
+    const archivePath = join(root, "normal.zip");
+    const dialogs = {
+      showSaveDialog: async () => ({ canceled: false, filePath: archivePath }),
+      showOpenDialog: async () => ({ canceled: false, filePaths: [archivePath] })
+    };
+    const gateway = new WorkspaceDataManagementGateway(manager, dialogs, { mutationGate: new WorkspaceMutationGate() });
+    await expect(gateway.createBackup()).resolves.toMatchObject({ ok: true, value: { saved: true, verified: true } });
+    const selected = await gateway.selectRestoreFile();
+    if (!selected.ok || !selected.value.fileToken) throw new Error("restore selection failed");
+    const inspected = await gateway.inspectBackup({ fileToken: selected.value.fileToken, targetWorkspaceId: created.value.id });
+    expect(inspected).toMatchObject({ ok: true, value: { verified: true } });
+    if (!inspected.ok) return;
+    const changed = openDatabase(manager.getOpenWorkspaceContext()!.databasePath);
+    changed.prepare("UPDATE person SET display_name='changed', row_version=row_version+1 WHERE id=?").run(saved.value.entityId);
+    changed.close();
+    await expect(gateway.restoreBackup({ restoreToken: inspected.value.restoreToken, targetWorkspaceId: created.value.id, confirmReplace: true }))
+      .resolves.toMatchObject({ ok: true, value: { restored: true, automaticSnapshotVerified: true } });
+    const restored = openDatabase(manager.getOpenWorkspaceContext()!.databasePath);
+    expect(restored.prepare("SELECT display_name FROM person WHERE id=?").pluck().get(saved.value.entityId)).toBe("第一人");
+    expect(restored.prepare("SELECT origin_person_id FROM workspace_meta WHERE workspace_id=?").pluck().get(created.value.id)).toBe(saved.value.entityId);
+    restored.close();
+    const listed = await manager.list();
+    expect(listed.ok && listed.value[0]?.originPersonId).toBe(saved.value.entityId);
+    await gateway.dispose();
+  });
+
   it("creates a deterministic manifest from a SQLite snapshot and restores every payload", async () => {
     const value = await createBackupFixture(roots);
     const backup = await new BackupService(value.workspace).createBackup(value.archivePath);
@@ -78,6 +122,20 @@ describe("verified backup and staged restore", () => {
     await expect(new BackupService(value.workspace).createBackup(value.archivePath))
       .rejects.toThrowError(expect.objectContaining<Partial<BackupValidationError>>({ code: "MEDIA_INVALID" }));
     await expect(stat(value.archivePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it.each(["index", "manifest"] as const)("rejects a verified backup when the %s origin disagrees with the active database origin", async (source) => {
+    const value = await createBackupFixture(roots);
+    if (source === "index") {
+      const indexPath = join(dirname(value.workspace.workspaceRoot), "index.json");
+      const index = JSON.parse(await readFile(indexPath, "utf8"));
+      await writeFile(indexPath, JSON.stringify({ workspaces: index.workspaces.map((entry: Record<string, unknown>) => ({ ...entry, originPersonId: null })) }));
+    } else {
+      const manifest = JSON.parse(await readFile(value.workspace.manifestPath, "utf8"));
+      await writeFile(value.workspace.manifestPath, JSON.stringify({ ...manifest, originPersonId: null }));
+    }
+    await expect(new BackupService(value.workspace).createBackup(value.archivePath))
+      .rejects.toThrowError(expect.objectContaining<Partial<BackupValidationError>>({ code: "WORKSPACE_MISMATCH" }));
   });
 
   it("refuses a declared media object reached through an intermediate link outside the media root", async () => {

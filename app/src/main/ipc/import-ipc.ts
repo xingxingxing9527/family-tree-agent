@@ -64,9 +64,13 @@ export class WorkspaceImportGateway implements ImportGateway {
   }
   async commitImport(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>> {
     const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open"); if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request"); const database = openDatabase(context.databasePath);
-    try { applyMigrations(database); return { ok: true, value: new ImportCommitter(database, context.workspaceId, this.plans).commitImport(input.planId, input.selectedActionIds) }; }
+    let value: ImportCommitReportDto;
+    try { applyMigrations(database); value = new ImportCommitter(database, context.workspaceId, this.plans).commitImport(input.planId, input.selectedActionIds); }
     catch (error) { const stale = /changed since preview/i.test(error instanceof Error ? error.message : ""); return failure(stale ? "CONFLICT" : "VALIDATION", stale ? "Import data changed since preview; create a new preview" : "Import selection could not be committed"); }
     finally { database.close(); }
+    try { await this.workspaces.synchronizeOriginPerson?.(); }
+    catch { return failure("INTERNAL", "Unable to publish workspace origin person"); }
+    return { ok: true, value };
   }
   async exportTemplate(): Promise<AppResult<{ saved: boolean }>> {
     const selected = await this.dialogs.showSaveDialog({ title: "保存导入模板", defaultPath: "family-import-template.xlsx", filters: [{ name: "Excel workbook", extensions: ["xlsx"] }] });
@@ -82,7 +86,7 @@ const parseSchema = z.object({ fileToken: z.string().uuid(), sourceKey: sourceKe
 const commitSchema = z.object({ planId: z.string().min(1).max(200), selectedActionIds: z.array(z.string().min(1).max(200)).max(10_000) }).strict().refine((input) => new Set(input.selectedActionIds).size === input.selectedActionIds.length);
 const emptySchema = z.object({}).strict(); const denied = (): AppResult<never> => failure("PATH_DENIED", "IPC sender was denied"); const invalid = (): AppResult<never> => failure("VALIDATION", "Invalid request"); const internal = (): AppResult<never> => failure("INTERNAL", "Unable to complete import request");
 export function registerImportIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, imports: ImportGateway, mutations?: WorkspaceMutationGate): void {
-  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
+  const run = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runOperation(operation) : operation();
   const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>): void => ipc.handle(channel, async (event: IpcMainInvokeEvent, input: unknown) => { if (event.sender.id !== mainWindowId()) return denied(); const parsed = schema.safeParse(input); if (!parsed.success) return invalid(); try { return await operation(parsed.data); } catch { return internal(); } });
-  register(IMPORT_CHANNELS.selectFile, emptySchema, () => imports.selectImportFile()); register(IMPORT_CHANNELS.parse, parseSchema, (input) => imports.parseImport(input)); register(IMPORT_CHANNELS.commit, commitSchema, (input) => mutate(() => imports.commitImport(input))); register(IMPORT_CHANNELS.exportTemplate, emptySchema, () => imports.exportTemplate());
+  register(IMPORT_CHANNELS.selectFile, emptySchema, () => run(() => imports.selectImportFile())); register(IMPORT_CHANNELS.parse, parseSchema, (input) => run(() => imports.parseImport(input))); register(IMPORT_CHANNELS.commit, commitSchema, (input) => run(() => imports.commitImport(input))); register(IMPORT_CHANNELS.exportTemplate, emptySchema, () => imports.exportTemplate());
 }

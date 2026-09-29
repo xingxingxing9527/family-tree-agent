@@ -22,9 +22,9 @@ const invalid = <T>(field: string): AppResult<T> => ({ ok: false, error: { code:
 
 export function registerWorkspaceIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, manager: WorkspaceManager, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
-  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
-  ipc.handle(WORKSPACE_CHANNELS.list, (event) => trusted(event) ? manager.list() : denied());
-  ipc.handle(WORKSPACE_CHANNELS.create, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = createSchema.safeParse(input); return parsed.success ? mutate(() => manager.create(parsed.data)) : invalid("name"); });
-  ipc.handle(WORKSPACE_CHANNELS.open, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = openSchema.safeParse(input); return parsed.success ? mutate(() => manager.open(parsed.data)) : invalid("id"); });
-  ipc.handle(WORKSPACE_CHANNELS.close, (event) => trusted(event) ? mutate(() => manager.close()) : denied());
+  const run = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runOperation(operation) : operation();
+  ipc.handle(WORKSPACE_CHANNELS.list, (event) => trusted(event) ? run(() => manager.list()) : denied());
+  ipc.handle(WORKSPACE_CHANNELS.create, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = createSchema.safeParse(input); return parsed.success ? run(() => manager.create(parsed.data)) : invalid("name"); });
+  ipc.handle(WORKSPACE_CHANNELS.open, (event, input: unknown) => { if (!trusted(event)) return denied(); const parsed = openSchema.safeParse(input); return parsed.success ? run(() => manager.open(parsed.data)) : invalid("id"); });
+  ipc.handle(WORKSPACE_CHANNELS.close, (event) => trusted(event) ? run(() => manager.close()) : denied());
 }

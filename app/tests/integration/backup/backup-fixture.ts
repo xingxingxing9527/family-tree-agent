@@ -34,6 +34,7 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
   await mkdir(join(root, "archives"));
   const workspaceManifest = { id: workspaceId, name: "王氏家谱", directory: workspaceDirectory, originPersonId, lastOpenedAt: "2026-09-16T00:00:00.000Z", schemaVersion: 4 };
   await writeFile(manifestPath, JSON.stringify(workspaceManifest));
+  await writeFile(join(root, "workspaces", "index.json"), JSON.stringify({ workspaces: [workspaceManifest] }));
   const database = openDatabase(databasePath);
   applyMigrations(database);
   const now = new Date().toISOString();
@@ -44,7 +45,6 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
     draft: { id: originPersonId, workspaceId, displayName: "王小明", gender: "male", birth: { calendar: "lunar", year: 1980, month: 4, day: 2, leapMonth: true, precision: "day" } },
     source: { sourceKey: "seed", title: "seed", kind: "test" }
   });
-  database.prepare("UPDATE workspace_meta SET origin_person_id = ? WHERE workspace_id = ?").run(originPersonId, workspaceId);
   new WikiService(database, workspaceId).create({ title: "家训", body: "正文", personIds: [originPersonId], sourceIds: [] });
   const hash = createHash("sha256").update(mediaBytes).digest("hex");
   const relativePath = `media/${hash.slice(0, 2)}/${hash}.jpg`;
@@ -53,11 +53,11 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
   database.prepare("INSERT INTO media_asset (id, workspace_id, sha256, original_name, mime_type, byte_size, relative_path, created_at, updated_at) VALUES ('media-one', ?, ?, 'portrait.jpg', 'image/jpeg', ?, ?, ?, ?)")
     .run(workspaceId, hash, mediaBytes.length, relativePath.replaceAll("/", "\\"), now, now);
   database.close();
-  const workspace: BackupWorkspace = { workspaceId, workspaceName: workspaceManifest.name, workspaceRoot, databasePath, mediaRoot, manifestPath, backupsRoot };
+  const workspace: BackupWorkspace = { workspaceId, workspaceName: workspaceManifest.name, workspaceRoot, databasePath, mediaRoot, manifestPath, backupsRoot, originPersonId } as BackupWorkspace;
   return {
     root,
     workspace,
-    target: { workspaceId, workspaceName: workspaceManifest.name, directory: workspaceDirectory, rootPath: workspaceRoot, databasePath, mediaPath: mediaRoot, manifestPath, backupsPath: backupsRoot },
+    target: { workspaceId, workspaceName: workspaceManifest.name, directory: workspaceDirectory, rootPath: workspaceRoot, databasePath, mediaPath: mediaRoot, manifestPath, backupsPath: backupsRoot, originPersonId } as RestoreTarget,
     archivePath: join(root, "archives", "family-backup.zip")
   };
 }

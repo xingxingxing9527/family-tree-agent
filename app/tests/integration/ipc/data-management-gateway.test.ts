@@ -38,6 +38,7 @@ describe("data-management native capabilities", () => {
     await new BackupService({
       workspaceId: context.workspaceId,
       workspaceName: context.workspaceName,
+      originPersonId,
       workspaceRoot: context.workspaceRoot,
       databasePath: context.databasePath,
       mediaRoot: context.mediaPath,
@@ -63,6 +64,7 @@ describe("data-management native capabilities", () => {
     await new BackupService({
       workspaceId: context.workspaceId,
       workspaceName: context.workspaceName,
+      originPersonId,
       workspaceRoot: context.workspaceRoot,
       databasePath: context.databasePath,
       mediaRoot: context.mediaPath,
@@ -113,7 +115,7 @@ describe("data-management native capabilities", () => {
     await writeFile(indexPath, JSON.stringify({ workspaces: index.workspaces.map((entry) => entry.id === context.workspaceId ? { ...entry, originPersonId } : entry) }));
     const archivePath = join(archives, "valid.zip");
     await new BackupService({
-      workspaceId: context.workspaceId, workspaceName: context.workspaceName, workspaceRoot: context.workspaceRoot,
+      workspaceId: context.workspaceId, workspaceName: context.workspaceName, originPersonId, workspaceRoot: context.workspaceRoot,
       databasePath: context.databasePath, mediaRoot: context.mediaPath, manifestPath: context.manifestPath, backupsRoot: context.backupsPath
     }).createBackup(archivePath);
     await symlink(outside, manager.getAutomaticSnapshotRoot(), process.platform === "win32" ? "junction" : "dir");

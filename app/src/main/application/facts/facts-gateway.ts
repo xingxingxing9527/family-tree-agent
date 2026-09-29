@@ -30,6 +30,7 @@ export interface OpenWorkspaceContext {
 
 export interface OpenWorkspaceContextProvider {
   getOpenWorkspaceContext(): OpenWorkspaceContext | null;
+  synchronizeOriginPerson?(): Promise<void>;
 }
 
 const failure = <T>(code: AppErrorCode, message: string, details?: unknown): AppResult<T> => ({
@@ -124,7 +125,7 @@ export class WorkspaceFactsGateway implements FactsGateway {
   }
 
   async savePerson(input: { draft: PublicPersonDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>> {
-    return this.withWorkspace((database, workspaceId) => {
+    const result = this.withWorkspace((database, workspaceId) => {
       const service = new FactCommandService(database, workspaceId);
       return receipt(service.execute({
         type: "person.create",
@@ -140,6 +141,14 @@ export class WorkspaceFactsGateway implements FactsGateway {
         source: source(input.draft.sourceDescription, "person-create")
       }, { confirmWarnings: input.confirmWarnings }));
     });
+    if (result.ok && result.value.saved) {
+      try {
+        await this.workspaces.synchronizeOriginPerson?.();
+      } catch {
+        return failure("INTERNAL", "Unable to publish workspace origin person");
+      }
+    }
+    return result;
   }
 
   async updatePerson(input: { personId: string; patch: PublicPersonPatch; expectedVersion: number; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>> {

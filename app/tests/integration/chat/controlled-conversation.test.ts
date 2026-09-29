@@ -1,11 +1,15 @@
+import { mkdtemp, rename, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ControlledChatGateway, DisclosureCapabilityService, WorkspaceChatGateway } from "../../../src/main/ipc/chat-ipc";
+import { CHAT_CHANNELS, ControlledChatGateway, DisclosureCapabilityService, registerChatIpc, WorkspaceChatGateway } from "../../../src/main/ipc/chat-ipc";
 import { ConversationService } from "../../../src/main/application/chat/conversation-service";
 import { DraftService } from "../../../src/main/application/chat/draft-service";
 import { QueryToolRegistry } from "../../../src/main/application/query/query-tool-registry";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import type { ConversationMutationDraft } from "../../../src/shared/chat";
+import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
 
 const workspaceId = "workspace-controlled-chat";
 const emptyDraft: ConversationMutationDraft = {
@@ -13,9 +17,57 @@ const emptyDraft: ConversationMutationDraft = {
 };
 
 describe("controlled conversational model boundary", () => {
+  const roots: string[] = [];
   let database: WorkspaceDatabase;
   beforeEach(() => { database = openDatabase(":memory:"); applyMigrations(database); });
-  afterEach(() => database.close());
+  afterEach(async () => { database.close(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
+
+  it.each(["stage", "ask"] as const)("drains a delayed chat %s before restore can dispose the old workspace runtime", async (operation) => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-chat-drain-"));
+    roots.push(root);
+    const databasePath = join(root, "genealogy.sqlite");
+    const stored = openDatabase(databasePath);
+    applyMigrations(stored);
+    stored.close();
+    let context: { workspaceId: string; databasePath: string } | null = { workspaceId, databasePath };
+    let started!: () => void;
+    let resume!: () => void;
+    const modelStarted = new Promise<void>((resolve) => { started = resolve; });
+    const modelCanFinish = new Promise<void>((resolve) => { resume = resolve; });
+    const model = {
+      extractDraft: vi.fn(async () => { started(); await modelCanFinish; return emptyDraft; }),
+      continueWithTools: vi.fn()
+        .mockImplementationOnce(async () => { started(); await modelCanFinish; return { answer: null, toolCalls: [{ callId: "one", name: "search_people", arguments: { query: "nobody", limit: 1 } }] }; })
+        .mockResolvedValueOnce({ answer: "没有找到。", toolCalls: [] })
+    };
+    const gateway = new WorkspaceChatGateway({ getOpenWorkspaceContext: () => context }, { readKey: async () => "sk-test" }, () => model as never);
+    const handlers = new Map<string, (event: { sender: { id: number } }, input: unknown) => Promise<unknown>>();
+    const gate = new WorkspaceMutationGate();
+    registerChatIpc({ handle: (channel, handler) => { handlers.set(channel, handler as never); } } as never, () => 7, gateway, gate);
+    const payload = operation === "stage"
+      ? { text: "录入一个人", candidatePeople: [] }
+      : { question: "有谁？", viewpointId: "viewpoint", selectedPersonId: null };
+    const authorized = await gateway.authorize({ sessionId: "session", operation: operation === "stage" ? "extract" : "ask", payload });
+    if (!authorized.ok) throw new Error("authorization fixture failed");
+    const pending = handlers.get(operation === "stage" ? CHAT_CHANNELS.stageMutation : CHAT_CHANNELS.ask)!({ sender: { id: 7 } }, {
+      sessionId: "session", authorizationToken: authorized.value.authorizationToken, payload
+    });
+    await modelStarted;
+    let exclusiveGranted = false;
+    const exclusive = gate.acquireExclusive().then((lease) => { exclusiveGranted = true; return lease; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const grantedBeforeModelFinished = exclusiveGranted;
+    resume();
+    await expect(pending).resolves.toMatchObject({ ok: true });
+    const lease = await exclusive;
+    context = null;
+    gateway.dispose();
+    const moved = `${root}-moved`;
+    await rename(root, moved);
+    roots[roots.indexOf(root)] = moved;
+    lease.release();
+    expect(grantedBeforeModelFinished).toBe(false);
+  });
 
   it("bounds outstanding disclosure capabilities while preserving single-use semantics", () => {
     const capabilities = new DisclosureCapabilityService(() => 0, 60_000, 2);

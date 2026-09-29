@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { OpenWorkspaceContext } from "../application/facts/facts-gateway.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 import { openQueryDatabase } from "../database/open-query-database.js";
 import { isAllowedMediaMime, type ManagedMediaMime } from "./media-service.js";
 
@@ -10,6 +11,18 @@ const assetId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const suffix: Record<ManagedMediaMime, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/mp4": "m4a", "audio/ogg": "ogg" };
 const missing = (): Response => new Response("Not found", { status: 404 });
 const under = (root: string, candidate: string): boolean => { const value = relative(root, candidate); return !value.startsWith("..") && !isAbsolute(value); };
+
+export function resolveWorkspaceMediaRequest(
+  url: string,
+  workspaces: { getOpenWorkspaceContext(): OpenWorkspaceContext | null },
+  operations: WorkspaceMutationGate,
+  resolver: typeof resolveMediaAssetRequest = resolveMediaAssetRequest
+): Promise<Response> {
+  return operations.runOperation(async () => {
+    const context = workspaces.getOpenWorkspaceContext();
+    return context ? resolver(url, context) : missing();
+  });
+}
 
 export async function resolveMediaAssetRequest(url: string, context: OpenWorkspaceContext & { mediaPath?: string }): Promise<Response> {
   const request = new URL(url); const id = request.hostname === "asset" ? request.pathname.slice(1) : "";

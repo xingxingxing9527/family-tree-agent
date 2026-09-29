@@ -59,6 +59,25 @@ interface PersonAliasRow {
   created_at: string; updated_at: string; deleted_at: string | null; row_version: number;
 }
 
+interface WorkspaceMetaRecord {
+  id: string;
+  workspaceId: string;
+  name: string;
+  originPersonId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  rowVersion: number;
+}
+
+interface WorkspaceMetaRow {
+  workspace_id: string;
+  name: string;
+  origin_person_id: string | null;
+  created_at: string;
+  updated_at: string;
+  row_version: number;
+}
+
 const aliasRecord = (row: PersonAliasRow): PersonAliasRecord => ({
   id: row.id,
   workspaceId: row.workspace_id,
@@ -142,6 +161,7 @@ export class PersonRepository {
     `).run(id, this.workspaceId, input.displayName, input.gender, ...dateValues(input.birth), ...dateValues(input.death), input.notes ?? null, now, now);
     const created = this.require(id, true);
     ctx.audit.append({ entityType: "person", entityId: id, action: "create", before: null, after: created });
+    this.claimOriginPerson(ctx, id, now);
     return created;
   }
 
@@ -222,5 +242,32 @@ export class PersonRepository {
     const alias = this.getAlias(id, { includeArchived });
     if (!alias) throw new Error(`Person alias not found: ${id}`);
     return alias;
+  }
+
+  private claimOriginPerson(ctx: TransactionContext, personId: string, now: string): void {
+    const before = this.workspaceMeta();
+    if (!before || before.originPersonId !== null) return;
+    const claimed = this.database.prepare(`
+      UPDATE workspace_meta
+      SET origin_person_id = ?, updated_at = ?, row_version = row_version + 1
+      WHERE workspace_id = ? AND origin_person_id IS NULL
+    `).run(personId, now, this.workspaceId).changes;
+    if (claimed !== 1) return;
+    const after = this.workspaceMeta();
+    if (!after) throw new Error(`Workspace metadata disappeared: ${this.workspaceId}`);
+    ctx.audit.append({ entityType: "workspace_meta", entityId: this.workspaceId, action: "update", before, after });
+  }
+
+  private workspaceMeta(): WorkspaceMetaRecord | null {
+    const row = this.database.prepare("SELECT * FROM workspace_meta WHERE workspace_id = ?").get(this.workspaceId) as WorkspaceMetaRow | undefined;
+    return row ? {
+      id: row.workspace_id,
+      workspaceId: row.workspace_id,
+      name: row.name,
+      originPersonId: row.origin_person_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      rowVersion: row.row_version
+    } : null;
   }
 }

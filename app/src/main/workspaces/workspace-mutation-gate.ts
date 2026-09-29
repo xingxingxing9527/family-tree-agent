@@ -5,20 +5,22 @@ export interface WorkspaceExclusiveLease {
 type ExclusiveRequest = (lease: WorkspaceExclusiveLease) => void;
 
 export class WorkspaceMutationGate {
-  private activeMutations = 0;
+  private activeOperations = 0;
   private exclusiveActive = false;
   private readonly exclusiveQueue: ExclusiveRequest[] = [];
   private readonly mutationWaiters: Array<() => void> = [];
 
-  async runMutation<T>(operation: () => T | Promise<T>): Promise<T> {
-    await this.enterMutation();
+  async runOperation<T>(operation: () => T | Promise<T>): Promise<T> {
+    await this.enterOperation();
     try {
       return await operation();
     } finally {
-      this.activeMutations -= 1;
+      this.activeOperations -= 1;
       this.pump();
     }
   }
+
+  runMutation<T>(operation: () => T | Promise<T>): Promise<T> { return this.runOperation(operation); }
 
   acquireExclusive(): Promise<WorkspaceExclusiveLease> {
     return new Promise((resolve) => {
@@ -27,17 +29,17 @@ export class WorkspaceMutationGate {
     });
   }
 
-  private async enterMutation(): Promise<void> {
+  private async enterOperation(): Promise<void> {
     while (this.exclusiveActive || this.exclusiveQueue.length > 0) {
       await new Promise<void>((resolve) => this.mutationWaiters.push(resolve));
     }
-    this.activeMutations += 1;
+    this.activeOperations += 1;
   }
 
   private pump(): void {
     if (this.exclusiveActive) return;
     if (this.exclusiveQueue.length > 0) {
-      if (this.activeMutations !== 0) return;
+      if (this.activeOperations !== 0) return;
       this.exclusiveActive = true;
       const grant = this.exclusiveQueue.shift()!;
       let released = false;

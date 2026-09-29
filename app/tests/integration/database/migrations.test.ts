@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../../../src/main/database/open-database";
-import { applyMigrations } from "../../../src/main/database/migrations";
+import { applyMigrations, validateCurrentSchema } from "../../../src/main/database/migrations";
 import { initialSchemaMigration } from "../../../src/main/database/migrations/001-initial-schema";
 
 describe("database migrations", () => {
@@ -91,6 +91,47 @@ describe("database migrations", () => {
     } finally {
       database.close();
     }
+  });
+
+  it.each([
+    ["person.display_name", "ALTER TABLE person DROP COLUMN display_name"],
+    ["person.notes", "ALTER TABLE person DROP COLUMN notes"],
+    ["a relied-upon relationship index", "DROP INDEX parent_child_active_father_uq"],
+    ["the wiki FTS update trigger", "DROP TRIGGER wiki_fts_after_update"]
+  ])("rejects a latest-version database missing %s", async (_case, mutation) => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    try {
+      applyMigrations(database);
+      database.exec(mutation);
+      expect(() => validateCurrentSchema(database)).toThrow(/migration|schema/i);
+    } finally { database.close(); }
+  });
+
+  it("rejects altered required column properties", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const properties = openDatabase(join(root, "properties.sqlite"));
+    try {
+      applyMigrations(properties);
+      const createPerson = properties.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='person'").pluck().get() as string;
+      properties.pragma("foreign_keys = OFF");
+      properties.exec(`${createPerson.replace("CREATE TABLE person", "CREATE TABLE person_new").replace("display_name TEXT NOT NULL", "display_name TEXT")}; DROP TABLE person; ALTER TABLE person_new RENAME TO person;`);
+      properties.pragma("foreign_keys = ON");
+      expect(() => validateCurrentSchema(properties)).toThrow(/migration|schema/i);
+    } finally { properties.close(); }
+  });
+
+  it("rejects an altered FTS virtual-table definition", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const fts = openDatabase(join(root, "fts.sqlite"));
+    try {
+      applyMigrations(fts);
+      fts.exec("DROP TABLE wiki_fts; CREATE VIRTUAL TABLE wiki_fts USING fts5(wiki_entry_id, workspace_id, title, body)");
+      expect(() => validateCurrentSchema(fts)).toThrow(/migration|schema/i);
+    } finally { fts.close(); }
   });
 
   it("accepts a genuine contiguous version-1 database and migrates it exactly to the latest version", async () => {

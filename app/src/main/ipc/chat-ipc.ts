@@ -127,7 +127,11 @@ export class WorkspaceChatGateway implements ChatGateway {
   async confirm(input: Parameters<ChatGateway["confirm"]>[0]): ReturnType<ChatGateway["confirm"]> {
     const workspace = this.workspaces.getOpenWorkspaceContext();
     if (!workspace) return failure("NOT_FOUND", "No workspace is open");
-    try { return { ok: true, value: this.getRuntime(workspace).drafts.confirm(input.draftId, input.draftVersion, input.selectedChangeIds, input.expectedVersions, input.acknowledgedWarningCodes) }; }
+    try {
+      const value = this.getRuntime(workspace).drafts.confirm(input.draftId, input.draftVersion, input.selectedChangeIds, input.expectedVersions, input.acknowledgedWarningCodes);
+      await this.workspaces.synchronizeOriginPerson?.();
+      return { ok: true, value };
+    }
     catch (error) { return failure("VALIDATION", error instanceof Error ? error.message.slice(0, 500) : "Draft confirmation failed"); }
   }
 
@@ -185,12 +189,12 @@ const handler = <T>(trusted: (event: IpcMainInvokeEvent) => boolean, schema: Zod
 
 export function registerChatIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, gateway: ChatGateway, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
-  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
-  ipc.handle(CHAT_CHANNELS.authorize, handler(trusted, disclosureRequestSchema, (input) => gateway.authorize(input)));
-  ipc.handle(CHAT_CHANNELS.stageMutation, handler(trusted, stageMutationRequestSchema, (input) => gateway.stageMutation(input)));
-  ipc.handle(CHAT_CHANNELS.ask, handler(trusted, askRequestSchema, (input) => gateway.ask(input)));
-  ipc.handle(CHAT_CHANNELS.confirm, handler(trusted, confirmDraftRequestSchema, (input) => mutate(() => gateway.confirm(input))));
-  ipc.handle(CHAT_CHANNELS.revise, handler(trusted, reviseDraftRequestSchema, (input) => gateway.revise(input)));
+  const run = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runOperation(operation) : operation();
+  ipc.handle(CHAT_CHANNELS.authorize, handler(trusted, disclosureRequestSchema, (input) => run(() => gateway.authorize(input))));
+  ipc.handle(CHAT_CHANNELS.stageMutation, handler(trusted, stageMutationRequestSchema, (input) => run(() => gateway.stageMutation(input))));
+  ipc.handle(CHAT_CHANNELS.ask, handler(trusted, askRequestSchema, (input) => run(() => gateway.ask(input))));
+  ipc.handle(CHAT_CHANNELS.confirm, handler(trusted, confirmDraftRequestSchema, (input) => run(() => gateway.confirm(input))));
+  ipc.handle(CHAT_CHANNELS.revise, handler(trusted, reviseDraftRequestSchema, (input) => run(() => gateway.revise(input))));
 }
 
 export const MODEL_SETTINGS_CHANNELS = { status: "model-settings:status", saveKey: "model-settings:save-key", clearKey: "model-settings:clear-key" } as const;

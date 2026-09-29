@@ -85,8 +85,6 @@ class WorkspaceRestoreController implements RestoreController {
   acquireExclusive(): ReturnType<WorkspaceMutationGate["acquireExclusive"]> { return this.mutations.acquireExclusive(); }
 
   async createVerifiedSnapshot(target: RestoreTarget): Promise<void> {
-    const state = await this.workspaces.captureRestoreState();
-    this.states.set(target.workspaceId, state);
     try {
       const snapshotRoot = this.workspaces.getAutomaticSnapshotRoot();
       await mkdir(snapshotRoot, { recursive: true });
@@ -101,6 +99,7 @@ class WorkspaceRestoreController implements RestoreController {
       await new BackupService({
         workspaceId: target.workspaceId,
         workspaceName: target.workspaceName,
+        originPersonId: target.originPersonId,
         workspaceRoot: target.rootPath,
         databasePath: target.databasePath,
         mediaRoot: target.mediaPath,
@@ -112,15 +111,14 @@ class WorkspaceRestoreController implements RestoreController {
       if (!archiveInfo.isFile() || archiveInfo.isSymbolicLink() || !pathContains(canonicalSnapshotRoot, canonicalArchive)) {
         throw new BackupValidationError("ACTIVATION_FAILED", "Automatic snapshot escaped its managed root");
       }
-    } catch (error) {
-      this.states.delete(target.workspaceId);
-      throw error;
-    }
+    } catch (error) { throw error; }
   }
 
   async deactivate(target: RestoreTarget): Promise<void> {
+    const state = await this.workspaces.captureRestoreState();
+    this.states.set(target.workspaceId, state);
+    await this.workspaces.deactivateForRestore(target.workspaceId);
     await this.disposeWorkspaceServices();
-    this.workspaces.deactivateForRestore(target.workspaceId);
   }
 
   async commitActivation(target: RestoreTarget, manifest: Parameters<RestoreController["commitActivation"]>[1], schemaVersion: number): Promise<void> {
@@ -177,12 +175,16 @@ export class WorkspaceDataManagementGateway implements DataManagementGateway {
     const context = this.workspaces.getOpenWorkspaceContext();
     if (!context) return failure("NOT_FOUND", "No workspace is open");
     let database;
+    let value: { operationGroupId: string; undoneAt: string; restoredEntities: number };
     try {
       database = openDatabase(context.databasePath);
       applyMigrations(database);
-      return { ok: true, value: new UndoService(database, context.workspaceId).undoOperationGroup(input.operationGroupId) };
+      value = new UndoService(database, context.workspaceId).undoOperationGroup(input.operationGroupId);
     } catch (error) { return safeError(error, "Unable to undo operation group"); }
     finally { database?.close(); }
+    try { await this.workspaces.synchronizeOriginPerson(); }
+    catch { return failure("INTERNAL", "Unable to publish workspace origin person"); }
+    return { ok: true, value };
   }
 
   async createBackup(): Promise<AppResult<{ saved: boolean; verified?: true; createdAt?: string; schemaVersion?: number; counts?: BackupSummaryDto["counts"] }>> {
@@ -282,6 +284,7 @@ export class WorkspaceDataManagementGateway implements DataManagementGateway {
     return {
       workspaceId: context.workspaceId,
       workspaceName: context.workspaceName,
+      originPersonId: context.originPersonId,
       workspaceRoot: context.workspaceRoot,
       databasePath: context.databasePath,
       mediaRoot: context.mediaPath,
@@ -313,12 +316,12 @@ const inspectSchema = z.object({ fileToken: identifier, targetWorkspaceId: ident
 const activateSchema = z.object({ restoreToken: identifier, targetWorkspaceId: identifier, confirmReplace: z.literal(true) }).strict();
 
 export function registerDataManagementIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, data: DataManagementGateway, mutations?: WorkspaceMutationGate): void {
-  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>, mutates = false): void => {
+  const register = <T>(channel: string, schema: z.ZodType<T>, operation: (input: T) => Promise<AppResult<unknown>>, gated = true): void => {
     ipc.handle(channel, async (event: IpcMainInvokeEvent, raw: unknown) => {
       if (event.sender.id !== mainWindowId()) return failure("PATH_DENIED", "IPC sender was denied");
       const parsed = schema.safeParse(raw);
       if (!parsed.success) return failure("VALIDATION", "Invalid request");
-      try { return await (mutates && mutations ? mutations.runMutation(() => operation(parsed.data)) : operation(parsed.data)); }
+      try { return await (gated && mutations ? mutations.runOperation(() => operation(parsed.data)) : operation(parsed.data)); }
       catch { return failure("INTERNAL", "Unable to complete data-management request"); }
     });
   };
@@ -326,8 +329,8 @@ export function registerDataManagementIpc(ipc: IpcMainLike, mainWindowId: () => 
   register(DATA_MANAGEMENT_CHANNELS.auditUndo, undoSchema, (input) => data.undoOperationGroup(input), true);
   register(DATA_MANAGEMENT_CHANNELS.backupCreate, emptySchema, () => data.createBackup(), true);
   register(DATA_MANAGEMENT_CHANNELS.restoreTargets, emptySchema, () => data.listRestoreTargets());
-  register(DATA_MANAGEMENT_CHANNELS.restoreSelect, emptySchema, () => data.selectRestoreFile());
+  register(DATA_MANAGEMENT_CHANNELS.restoreSelect, emptySchema, () => data.selectRestoreFile(), false);
   register(DATA_MANAGEMENT_CHANNELS.restoreInspect, inspectSchema, (input) => data.inspectBackup(input));
-  register(DATA_MANAGEMENT_CHANNELS.restoreActivate, activateSchema, (input) => data.restoreBackup(input));
+  register(DATA_MANAGEMENT_CHANNELS.restoreActivate, activateSchema, (input) => data.restoreBackup(input), false);
   register(DATA_MANAGEMENT_CHANNELS.exportCreate, emptySchema, () => data.exportWorkspace(), true);
 }

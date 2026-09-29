@@ -15,6 +15,7 @@ import { openQueryDatabase } from "../database/open-query-database.js";
 import type { WorkspaceDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 import { QUERY_TOOL_SCHEMAS, QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
+import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export const QUERY_CHANNELS = {
   searchPeople: "query:search-people",
@@ -117,12 +118,13 @@ const parsedHandler = (
   }
 };
 
-export function registerQueryIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, query: QueryGateway): void {
+export function registerQueryIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, query: QueryGateway, operations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
-  ipc.handle(QUERY_CHANNELS.searchPeople, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_people, (input) => query.searchPeople(input)));
-  ipc.handle(QUERY_CHANNELS.getPerson, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.get_person, (input) => query.getPerson(input)));
-  ipc.handle(QUERY_CHANNELS.listRelatives, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.list_relatives, (input) => query.listRelatives(input)));
-  ipc.handle(QUERY_CHANNELS.calculateRelationship, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.calculate_relationship, (input) => query.calculateRelationship(input)));
-  ipc.handle(QUERY_CHANNELS.summarizeLineage, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.summarize_lineage, (input) => query.summarizeLineage(input)));
-  ipc.handle(QUERY_CHANNELS.searchWiki, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_wiki, (input) => query.searchWiki(input)));
+  const run = <T>(operation: () => Promise<T>): Promise<T> => operations ? operations.runOperation(operation) : operation();
+  ipc.handle(QUERY_CHANNELS.searchPeople, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_people, (input) => run(() => query.searchPeople(input))));
+  ipc.handle(QUERY_CHANNELS.getPerson, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.get_person, (input) => run(() => query.getPerson(input))));
+  ipc.handle(QUERY_CHANNELS.listRelatives, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.list_relatives, (input) => run(() => query.listRelatives(input))));
+  ipc.handle(QUERY_CHANNELS.calculateRelationship, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.calculate_relationship, (input) => run(() => query.calculateRelationship(input))));
+  ipc.handle(QUERY_CHANNELS.summarizeLineage, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.summarize_lineage, (input) => run(() => query.summarizeLineage(input))));
+  ipc.handle(QUERY_CHANNELS.searchWiki, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_wiki, (input) => run(() => query.searchWiki(input))));
 }

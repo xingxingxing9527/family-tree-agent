@@ -263,7 +263,14 @@ export class FactCommandService {
     ids.entityType = entityType;
     if (entityType === "person") {
       const person = this.loadPerson(requestedId, "entityId", ids, errors);
-      if (person) this.requireVersion(person.rowVersion, expectedVersion, entityType, person.id, errors);
+      if (person) {
+        this.requireVersion(person.rowVersion, expectedVersion, entityType, person.id, errors);
+        const origin = this.database.prepare("SELECT origin_person_id FROM workspace_meta WHERE workspace_id = ?")
+          .get(this.workspaceId) as { origin_person_id: string | null } | undefined;
+        if (origin?.origin_person_id === person.id) {
+          errors.push(issue("CONFLICT", "The workspace origin person cannot be archived", { entityId: person.id }));
+        }
+      }
       return;
     }
     if (entityType === "marriage") {

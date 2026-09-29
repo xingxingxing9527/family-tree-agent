@@ -7,13 +7,14 @@ import { once } from "node:events";
 import archiver from "archiver";
 import { openDatabase } from "../../database/open-database.js";
 import { validateCurrentSchema } from "../../database/migrations/index.js";
-import { workspaceSummarySchema } from "../../workspaces/workspace-schema.js";
+import { workspaceIndexSchema, workspaceSummarySchema } from "../../workspaces/workspace-schema.js";
 import { backupManifestSchema, canonicalArchivePath, type BackupManifest } from "./backup-manifest.js";
 import { BackupValidationError, inspectBackupArchive } from "./restore-service.js";
 
 export interface BackupWorkspace {
   workspaceId: string;
   workspaceName: string;
+  originPersonId: string | null;
   workspaceRoot: string;
   databasePath: string;
   mediaRoot: string;
@@ -119,9 +120,15 @@ export class BackupService {
         try { validateCurrentSchema(snapshot); }
         catch { throw new BackupValidationError("DATABASE_INVALID", "Workspace migration ledger or schema is inconsistent"); }
         const identity = snapshot.prepare("SELECT workspace_id, name, origin_person_id FROM workspace_meta").all() as Array<{ workspace_id: string; name: string; origin_person_id: string | null }>;
-        if (identity.length !== 1 || identity[0]?.workspace_id !== this.workspace.workspaceId || identity[0]?.name !== this.workspace.workspaceName) {
+        if (
+          identity.length !== 1 || identity[0]?.workspace_id !== this.workspace.workspaceId || identity[0]?.name !== this.workspace.workspaceName ||
+          this.workspace.originPersonId === null || identity[0]?.origin_person_id !== this.workspace.originPersonId
+        ) {
           throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace database identity does not match the selected workspace");
         }
+        const origin = snapshot.prepare("SELECT 1 FROM person WHERE id=? AND workspace_id=? AND deleted_at IS NULL")
+          .get(this.workspace.originPersonId, this.workspace.workspaceId);
+        if (!origin) throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace origin person is missing or archived");
         counts = {
           people: Number(snapshot.prepare("SELECT COUNT(*) FROM person").pluck().get()),
           parentChild: Number(snapshot.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()),
@@ -134,8 +141,17 @@ export class BackupService {
       } finally { snapshot.close(); }
 
       const persistedWorkspace = workspaceSummarySchema.parse(JSON.parse(await readFile(this.workspace.manifestPath, "utf8")));
+      let indexedWorkspace: typeof persistedWorkspace | undefined;
+      try {
+        indexedWorkspace = workspaceIndexSchema.parse(JSON.parse(await readFile(join(dirname(workspaceRoot), "index.json"), "utf8")))
+          .workspaces.find((entry) => entry.id === this.workspace.workspaceId);
+      } catch {
+        throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace index is unavailable or invalid");
+      }
       if (
+        !indexedWorkspace || JSON.stringify(indexedWorkspace) !== JSON.stringify(persistedWorkspace) ||
         persistedWorkspace.id !== this.workspace.workspaceId || persistedWorkspace.name !== this.workspace.workspaceName ||
+        persistedWorkspace.originPersonId !== this.workspace.originPersonId ||
         persistedWorkspace.directory.toLocaleLowerCase("en-US") !== basename(dirname(this.workspace.manifestPath)).toLocaleLowerCase("en-US")
       ) throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace manifest identity or directory does not match");
       const snapshotWorkspacePath = join(staging, "workspace.json");

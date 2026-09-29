@@ -11,7 +11,7 @@ import { WorkspaceQueryGateway } from "./ipc/query-ipc.js";
 import { WorkspaceManager } from "./workspaces/workspace-manager.js";
 import { WorkspaceMediaGateway } from "./ipc/media-ipc.js";
 import { WorkspaceWikiGateway } from "./ipc/wiki-ipc.js";
-import { resolveMediaAssetRequest } from "./media/media-protocol.js";
+import { resolveWorkspaceMediaRequest } from "./media/media-protocol.js";
 import { CredentialVault } from "./security/credential-vault.js";
 import { WorkspaceChatGateway } from "./ipc/chat-ipc.js";
 import { OpenAIResponsesAdapter } from "./llm/openai-responses-adapter.js";
@@ -28,7 +28,7 @@ protocol.registerSchemesAsPrivileged([
   , { scheme: "app-media", privileges: { secure: true, standard: true, supportFetchAPI: true } }
 ]);
 
-function registerAppProtocol(workspaces?: WorkspaceManager): void {
+function registerAppProtocol(workspaces?: WorkspaceManager, operations?: WorkspaceMutationGate): void {
   protocol.handle("app", (request) => {
     const requestPath = new URL(request.url).pathname;
     const filePath = resolve(rendererRoot, `.${normalize(requestPath)}`);
@@ -40,8 +40,9 @@ function registerAppProtocol(workspaces?: WorkspaceManager): void {
     return net.fetch(pathToFileURL(filePath).toString());
   });
   protocol.handle("app-media", (request) => {
-    const context = workspaces?.getOpenWorkspaceContext();
-    return context ? resolveMediaAssetRequest(request.url, context) : new Response("Not found", { status: 404 });
+    return workspaces && operations
+      ? resolveWorkspaceMediaRequest(request.url, workspaces, operations)
+      : new Response("Not found", { status: 404 });
   });
 }
 
@@ -70,12 +71,12 @@ app.whenReady().then(() => {
   let mainWindow: BrowserWindow | null = null;
   const workspaceManager = new WorkspaceManager(join(app.getPath("userData"), "workspaces"));
   const workspaceMutations = new WorkspaceMutationGate();
-  registerAppProtocol(workspaceManager);
+  registerAppProtocol(workspaceManager, workspaceMutations);
   ipcMain.handle("desktop:get-version", () => app.getVersion());
   mainWindow = createWindow();
   registerWorkspaceIpc(ipcMain, () => mainWindow?.webContents.id, workspaceManager, workspaceMutations);
   registerFactsIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceFactsGateway(workspaceManager), workspaceMutations);
-  registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager));
+  registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager), workspaceMutations);
   registerImportIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceImportGateway(workspaceManager), workspaceMutations);
   registerMergeIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceMergeGateway(workspaceManager), workspaceMutations);
   const mediaGateway = new WorkspaceMediaGateway(workspaceManager);

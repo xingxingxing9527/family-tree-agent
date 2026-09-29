@@ -16,6 +16,14 @@ describe("WorkspaceManager", () => {
     return { root, manager: new WorkspaceManager(root) };
   }
 
+  function managerWithStorage(root: string, options: {
+    index?: Pick<WorkspaceIndex, "read" | "write">;
+    publishManifest?: (path: string, summary: unknown) => Promise<void>;
+  }): WorkspaceManager {
+    const Constructor = WorkspaceManager as unknown as new (workspaceRoot: string, storage: typeof options) => WorkspaceManager;
+    return new Constructor(root, options);
+  }
+
   it("creates isolated UUID workspace directories with their required resources", async () => {
     const { root, manager } = await createManager();
     const first = await manager.create({ name: "First family" });
@@ -46,6 +54,75 @@ describe("WorkspaceManager", () => {
     await expect(readFile(join(workspaceRoot, "genealogy.sqlite"))).resolves.toBeInstanceOf(Buffer);
     expect((await stat(join(workspaceRoot, "media"))).isDirectory()).toBe(true);
     expect((await stat(join(workspaceRoot, "backups"))).isDirectory()).toBe(true);
+  });
+
+  it("serializes concurrent creates so every successful workspace remains listed and openable", async () => {
+    const { manager } = await createManager();
+    const created = await Promise.all(Array.from({ length: 12 }, (_, index) => manager.create({ name: `Family ${index}` })));
+    expect(created.every((result) => result.ok)).toBe(true);
+    const listed = await manager.list();
+    expect(listed.ok && listed.value).toHaveLength(12);
+    if (!listed.ok) return;
+    for (const workspace of listed.value) await expect(manager.open({ id: workspace.id })).resolves.toMatchObject({ ok: true });
+  });
+
+  it("serializes concurrent opens without losing either manifest/index update", async () => {
+    const { root, manager } = await createManager();
+    const first = await manager.create({ name: "First" });
+    const second = await manager.create({ name: "Second" });
+    if (!first.ok || !second.ok) throw new Error("workspace fixture failed");
+    const opened = await Promise.all([manager.open({ id: first.value.id }), manager.open({ id: second.value.id })]);
+    expect(opened.every((result) => result.ok)).toBe(true);
+    const index = await new WorkspaceIndex(root).read();
+    expect(index.find((entry) => entry.id === first.value.id)?.lastOpenedAt).toEqual(expect.any(String));
+    expect(index.find((entry) => entry.id === second.value.id)?.lastOpenedAt).toEqual(expect.any(String));
+    for (const workspace of index) {
+      expect(JSON.parse(await readFile(join(root, workspace.directory, "workspace.json"), "utf8"))).toEqual(workspace);
+    }
+  });
+
+  it("removes a newly created directory when index publication fails", async () => {
+    const { root } = await createManager();
+    const realIndex = new WorkspaceIndex(root);
+    const manager = managerWithStorage(root, {
+      index: { read: () => realIndex.read(), write: async () => { throw new Error("injected index failure"); } }
+    });
+    await expect(manager.create({ name: "Must roll back" })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    await expect(realIndex.read()).resolves.toEqual([]);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it("restores the prior manifest when index publication fails after an open update", async () => {
+    const { root, manager: setup } = await createManager();
+    const created = await setup.create({ name: "Publication family" });
+    if (!created.ok) throw new Error("workspace fixture failed");
+    const manifestPath = join(root, created.value.directory, "workspace.json");
+    const indexPath = join(root, "index.json");
+    const beforeManifest = await readFile(manifestPath, "utf8");
+    const beforeIndex = await readFile(indexPath, "utf8");
+    const realIndex = new WorkspaceIndex(root);
+    const manager = managerWithStorage(root, {
+      index: { read: () => realIndex.read(), write: async () => { throw new Error("injected index failure"); } }
+    });
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    expect(await readFile(manifestPath, "utf8")).toBe(beforeManifest);
+    expect(await readFile(indexPath, "utf8")).toBe(beforeIndex);
+  });
+
+  it("leaves the index and manifest unchanged when manifest publication fails", async () => {
+    const { root, manager: setup } = await createManager();
+    const created = await setup.create({ name: "Manifest failure family" });
+    if (!created.ok) throw new Error("workspace fixture failed");
+    const manifestPath = join(root, created.value.directory, "workspace.json");
+    const indexPath = join(root, "index.json");
+    const beforeManifest = await readFile(manifestPath, "utf8");
+    const beforeIndex = await readFile(indexPath, "utf8");
+    const manager = managerWithStorage(root, { publishManifest: async () => { throw new Error("injected manifest failure"); } });
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "INTERNAL" } });
+    expect(await readFile(manifestPath, "utf8")).toBe(beforeManifest);
+    expect(await readFile(indexPath, "utf8")).toBe(beforeIndex);
   });
 
   it("validates a new workspace with the shared strict schema before creating files", async () => {
@@ -121,6 +198,26 @@ describe("WorkspaceManager", () => {
     expect(index.workspaces.find((workspace) => workspace.id === created.value.id)?.lastOpenedAt).toBeNull();
   });
 
+  it("rejects stale metadata without overwriting a conflicting database origin", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Origin family" });
+    if (!created.ok) throw new Error("workspace fixture failed");
+    await manager.open({ id: created.value.id });
+    const databasePath = join(root, created.value.directory, "genealogy.sqlite");
+    const database = new Database(databasePath);
+    const personId = "33333333-3333-4333-8333-333333333333";
+    const now = new Date().toISOString();
+    database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, ?, 'Origin', 'unknown', ?, ?)").run(personId, created.value.id, now, now);
+    database.prepare("UPDATE workspace_meta SET origin_person_id=? WHERE workspace_id=?").run(personId, created.value.id);
+    database.close();
+    await manager.close();
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
+    const verified = new Database(databasePath, { readonly: true });
+    expect(verified.prepare("SELECT origin_person_id FROM workspace_meta WHERE workspace_id=?").pluck().get(created.value.id)).toBe(personId);
+    verified.close();
+  });
+
   it("validates the complete workspace index before atomically publishing it", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-workspaces-"));
     roots.push(root);
@@ -137,6 +234,25 @@ describe("WorkspaceManager", () => {
 
     await expect(index.write([{ ...valid, id: "not-a-uuid", directory: "opaque" }])).rejects.toThrow();
     await expect(index.read()).resolves.toEqual([valid]);
+  });
+
+  it("uses operation-unique index publications under concurrent writes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-workspaces-"));
+    roots.push(root);
+    const index = new WorkspaceIndex(root);
+    const summary = (ordinal: number) => ({
+      id: `${ordinal}1111111-1111-4111-8111-111111111111`,
+      name: `Family ${ordinal}`,
+      directory: `${ordinal}2222222-2222-4222-8222-222222222222`,
+      originPersonId: null,
+      lastOpenedAt: null,
+      schemaVersion: 4
+    });
+    const first = summary(1);
+    const second = summary(2);
+    await expect(Promise.all([index.write([first]), index.write([second])])).resolves.toEqual([undefined, undefined]);
+    expect([[first], [second]]).toContainEqual(await index.read());
+    expect((await readdir(root)).filter((entry) => entry.includes(".tmp"))).toEqual([]);
   });
 
   it("rejects a workspace whose persisted manifest is not the same strict summary as its index entry", async () => {

@@ -142,12 +142,12 @@ function parsedHandler(
 
 export function registerFactsIpc(ipc: IpcMainLike, mainWindowId: () => number | undefined, facts: FactsGateway, mutations?: WorkspaceMutationGate): void {
   const trusted = (event: IpcMainInvokeEvent) => event.sender.id === mainWindowId();
-  const mutate = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runMutation(operation) : operation();
-  ipc.handle(FACT_CHANNELS.peopleList, parsedHandler(trusted, schemas.list, (input) => facts.listPeople(input)));
-  ipc.handle(FACT_CHANNELS.peopleGet, parsedHandler(trusted, schemas.get, (input) => facts.getPerson(input)));
-  ipc.handle(FACT_CHANNELS.peopleSave, parsedHandler(trusted, schemas.save, (input) => mutate(() => facts.savePerson(input))));
-  ipc.handle(FACT_CHANNELS.peopleUpdate, parsedHandler(trusted, schemas.update, (input) => mutate(() => facts.updatePerson(input))));
-  ipc.handle(FACT_CHANNELS.addParentChild, parsedHandler(trusted, schemas.parentChild, (input) => mutate(() => facts.addParentChild(input))));
-  ipc.handle(FACT_CHANNELS.addMarriage, parsedHandler(trusted, schemas.marriage, (input) => mutate(() => facts.addMarriage(input))));
-  ipc.handle(FACT_CHANNELS.divorce, parsedHandler(trusted, schemas.divorce, (input) => mutate(() => facts.divorce(input))));
+  const run = <T>(operation: () => Promise<T>): Promise<T> => mutations ? mutations.runOperation(operation) : operation();
+  ipc.handle(FACT_CHANNELS.peopleList, parsedHandler(trusted, schemas.list, (input) => run(() => facts.listPeople(input))));
+  ipc.handle(FACT_CHANNELS.peopleGet, parsedHandler(trusted, schemas.get, (input) => run(() => facts.getPerson(input))));
+  ipc.handle(FACT_CHANNELS.peopleSave, parsedHandler(trusted, schemas.save, (input) => run(() => facts.savePerson(input))));
+  ipc.handle(FACT_CHANNELS.peopleUpdate, parsedHandler(trusted, schemas.update, (input) => run(() => facts.updatePerson(input))));
+  ipc.handle(FACT_CHANNELS.addParentChild, parsedHandler(trusted, schemas.parentChild, (input) => run(() => facts.addParentChild(input))));
+  ipc.handle(FACT_CHANNELS.addMarriage, parsedHandler(trusted, schemas.marriage, (input) => run(() => facts.addMarriage(input))));
+  ipc.handle(FACT_CHANNELS.divorce, parsedHandler(trusted, schemas.divorce, (input) => run(() => facts.divorce(input))));
 }

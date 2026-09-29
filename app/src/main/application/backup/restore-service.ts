@@ -69,6 +69,7 @@ export interface InspectedBackupArchive {
 export interface RestoreTarget {
   workspaceId: string;
   workspaceName: string;
+  originPersonId: string | null;
   directory: string;
   rootPath: string;
   databasePath: string;
@@ -236,7 +237,7 @@ const countRows = (database: Database.Database): BackupManifest["counts"] => ({
   mediaAssets: Number(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get())
 });
 
-function validateDatabase(stagingPath: string, manifest: BackupManifest): number {
+function validateDatabase(stagingPath: string, manifest: BackupManifest, expectedOriginPersonId: string | null): number {
   const databasePath = join(stagingPath, "genealogy.sqlite");
   let database: Database.Database;
   try { database = new Database(databasePath, { readonly: true, fileMustExist: true }); }
@@ -256,10 +257,16 @@ function validateDatabase(stagingPath: string, manifest: BackupManifest): number
     } catch {
       throw new BackupValidationError("DATABASE_INVALID", "Backup migration ledger or schema is inconsistent");
     }
-    const identity = database.prepare("SELECT workspace_id, name FROM workspace_meta").all() as Array<{ workspace_id: string; name: string }>;
-    if (identity.length !== 1 || identity[0]?.workspace_id !== manifest.workspaceId || identity[0]?.name !== manifest.workspaceName) {
+    const identity = database.prepare("SELECT workspace_id, name, origin_person_id FROM workspace_meta").all() as Array<{ workspace_id: string; name: string; origin_person_id: string | null }>;
+    if (
+      identity.length !== 1 || identity[0]?.workspace_id !== manifest.workspaceId || identity[0]?.name !== manifest.workspaceName ||
+      expectedOriginPersonId === null || identity[0]?.origin_person_id !== expectedOriginPersonId
+    ) {
       throw new BackupValidationError("WORKSPACE_MISMATCH", "Backup workspace identity does not match its manifest");
     }
+    const origin = database.prepare("SELECT 1 FROM person WHERE id=? AND workspace_id=? AND deleted_at IS NULL")
+      .get(expectedOriginPersonId, manifest.workspaceId);
+    if (!origin) throw new BackupValidationError("WORKSPACE_MISMATCH", "Backup origin person is missing or archived");
     if (JSON.stringify(countRows(database)) !== JSON.stringify(manifest.counts)) throw new BackupValidationError("DATABASE_INVALID", "Backup row counts do not match its manifest");
     const files = new Map(manifest.files.map((file) => [file.path, file]));
     const semanticPaths = new Set(["genealogy.sqlite", "workspace.json"]);
@@ -424,7 +431,7 @@ export async function inspectBackupArchive(
     ) {
       throw new BackupValidationError("WORKSPACE_MISMATCH", "Workspace manifest does not match the backup manifest");
     }
-    const originalSchemaVersion = validateDatabase(stagingPath, manifest);
+    const originalSchemaVersion = validateDatabase(stagingPath, manifest, workspaceManifest.data.originPersonId);
     let migratedSchemaVersion = originalSchemaVersion;
     if (originalSchemaVersion < LATEST_SCHEMA_VERSION) {
       const database = openDatabase(join(stagingPath, "genealogy.sqlite"));
@@ -571,7 +578,6 @@ export class RestoreService {
         target.directory.toLocaleLowerCase("en-US") !== stored.workspace.directory.toLocaleLowerCase("en-US")
       ) throw new BackupValidationError("TARGET_INVALID", "Restore target changed after inspection");
       await validateAndSealStaging(stored.stagingPath, stored.workspace, stored.seal);
-      await this.controller.createVerifiedSnapshot(target);
       let originalMoved = false;
       let stagedActivated = false;
       let deactivated = false;
@@ -581,6 +587,7 @@ export class RestoreService {
       try {
         deactivated = true;
         await this.controller.deactivate(target);
+        await this.controller.createVerifiedSnapshot(target);
         await validateAndSealStaging(stored.stagingPath, stored.workspace, stored.seal);
         await rename(stored.targetRoot, rollbackPath);
         originalMoved = true;

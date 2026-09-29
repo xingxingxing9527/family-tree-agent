@@ -1,4 +1,5 @@
 import type { WorkspaceDatabase } from "../open-database.js";
+import Database from "better-sqlite3";
 import { initialSchemaMigration } from "./001-initial-schema.js";
 import { mergeHistoryMigration } from "./002-merge-history.js";
 import { wikiFtsMigration } from "./003-wiki-fts.js";
@@ -14,25 +15,76 @@ const migrations: readonly Migration[] = [initialSchemaMigration, mergeHistoryMi
 
 export const LATEST_SCHEMA_VERSION = migrations.at(-1)!.version;
 
-const requiredTables = [
-  "audit_log", "id_redirect", "import_identity", "lineage", "lineage_membership", "marriage", "media_asset", "media_person",
-  "merge_record", "operation_group", "parent_child", "person", "person_alias", "schema_migrations", "source", "wiki_entry",
-  "wiki_fts", "wiki_person", "wiki_source", "workspace_meta"
-] as const;
+const migrationLedgerSql = `
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at TEXT NOT NULL
+  )
+`;
 
-const requiredColumns: Readonly<Record<string, readonly string[]>> = {
-  workspace_meta: ["workspace_id", "name", "origin_person_id", "row_version"],
-  operation_group: ["id", "workspace_id", "kind", "undone_at", "row_version"],
-  merge_record: ["id", "workspace_id", "status", "snapshot_json", "post_versions_json", "reversed_operation_group_id"],
-  media_asset: ["id", "workspace_id", "sha256", "byte_size", "relative_path"],
-  audit_log: ["id", "workspace_id", "operation_group_id", "entity_type", "entity_id", "before_json", "after_json"],
-  wiki_source: ["id", "workspace_id", "wiki_entry_id", "source_id"]
-};
+interface SchemaObjectRow {
+  type: string;
+  name: string;
+  tbl_name: string;
+  sql: string | null;
+}
 
-const requiredIndexes = [
-  "audit_log_operation_group_idx", "media_asset_active_hash_uq", "operation_group_history_idx", "person_alias_active_uq",
-  "source_active_key_uq", "wiki_source_active_uq"
-] as const;
+interface TableColumnRow {
+  cid: number;
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+  hidden: number;
+}
+
+interface CurrentSchemaContract {
+  objects: readonly SchemaObjectRow[];
+  columns: ReadonlyMap<string, readonly TableColumnRow[]>;
+}
+
+const normalizedSql = (sql: string | null): string | null => sql
+  ?.replace(/CREATE\s+(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS/giu, "CREATE $1")
+  .replace(/\s+/gu, " ")
+  .replace(/\s*([(),])\s*/gu, "$1")
+  .trim() ?? null;
+
+function schemaObjects(database: Database.Database): SchemaObjectRow[] {
+  return (database.prepare(`
+    SELECT type, name, tbl_name, sql
+    FROM sqlite_master
+    WHERE name NOT LIKE 'sqlite_%'
+    ORDER BY type, name
+  `).all() as SchemaObjectRow[]).map((row) => ({ ...row, sql: normalizedSql(row.sql) }));
+}
+
+function tableColumns(database: Database.Database, table: string): TableColumnRow[] {
+  return (database.prepare('SELECT cid, name, type, "notnull" AS "notnull", dflt_value, pk, hidden FROM pragma_table_xinfo(?) ORDER BY cid').all(table) as TableColumnRow[])
+    .map((row) => ({ ...row, type: row.type.toLocaleUpperCase("en-US") }));
+}
+
+function buildCurrentSchemaContract(): CurrentSchemaContract {
+  const reference = new Database(":memory:");
+  try {
+    reference.pragma("foreign_keys = ON");
+    reference.exec(migrationLedgerSql);
+    const record = reference.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)");
+    for (const migration of migrations) {
+      reference.exec(migration.sql);
+      record.run(migration.version, migration.name, "1970-01-01T00:00:00.000Z");
+      reference.pragma(`user_version = ${migration.version}`);
+    }
+    const objects = schemaObjects(reference);
+    return {
+      objects,
+      columns: new Map(objects.filter((object) => object.type === "table").map((object) => [object.name, tableColumns(reference, object.name)]))
+    };
+  } finally { reference.close(); }
+}
+
+const currentSchemaContract = buildCurrentSchemaContract();
 
 const failSchema = (message: string): never => { throw new Error(`Migration schema validation failed: ${message}`); };
 
@@ -62,26 +114,24 @@ export function validateMigrationLedger(database: WorkspaceDatabase, expectedVer
 
 export function validateCurrentSchema(database: WorkspaceDatabase): void {
   validateMigrationLedger(database, LATEST_SCHEMA_VERSION);
-  const objects = new Map((database.prepare("SELECT name, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all() as Array<{ name: string; type: string }>).map((row) => [row.name, row.type]));
-  for (const table of requiredTables) if (objects.get(table) !== "table") failSchema(`required table ${table} is missing`);
-  for (const [table, columns] of Object.entries(requiredColumns)) {
-    const actual = new Set((database.prepare(`SELECT name FROM pragma_table_info(?)`).pluck().all(table) as string[]));
-    for (const column of columns) if (!actual.has(column)) failSchema(`required column ${table}.${column} is missing`);
+  const actualObjects = new Map(schemaObjects(database).map((object) => [object.name, object]));
+  for (const expected of currentSchemaContract.objects) {
+    const actual = actualObjects.get(expected.name);
+    if (!actual || actual.type !== expected.type || actual.tbl_name !== expected.tbl_name || actual.sql !== expected.sql) {
+      failSchema(`required ${expected.type} ${expected.name} has an unexpected definition`);
+    }
   }
-  for (const index of requiredIndexes) if (objects.get(index) !== "index") failSchema(`required index ${index} is missing`);
+  for (const [table, expectedColumns] of currentSchemaContract.columns) {
+    const actualColumns = tableColumns(database, table);
+    if (JSON.stringify(actualColumns) !== JSON.stringify(expectedColumns)) failSchema(`required table ${table} has unexpected columns or properties`);
+  }
 }
 
 export function applyMigrations(database: WorkspaceDatabase): number {
   database.exec("BEGIN IMMEDIATE");
   try {
     const currentVersion = validateMigrationLedger(database);
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      )
-    `);
+    database.exec(migrationLedgerSql);
     const record = database.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)");
     for (const migration of migrations) {
       if (migration.version <= currentVersion) continue;

@@ -108,6 +108,15 @@ const importIdentitySchema = z.object({
   rawJson: z.string().max(1_000_000).nullable(),
   rowVersion
 }).strict();
+const workspaceMetaSchema = z.object({
+  id: bounded,
+  workspaceId: bounded,
+  name: bounded,
+  originPersonId: bounded.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  rowVersion
+}).strict();
 
 type Snapshot = Record<string, unknown> & { id: string; workspaceId: string; rowVersion: number };
 type Dependency = { entityType: string; entityId: string };
@@ -310,6 +319,23 @@ export class UndoService {
     });
     const none = (): Dependency[] => [];
     return {
+      workspace_meta: {
+        table: "workspace_meta", schema: workspaceMetaSchema as z.ZodType<Snapshot>, supportsRestore: true,
+        read: (id) => {
+          const value = this.database.prepare("SELECT * FROM workspace_meta WHERE workspace_id = ?").get(id) as Record<string, unknown> | undefined;
+          return value ? {
+            id: String(value.workspace_id), workspaceId: String(value.workspace_id), name: String(value.name),
+            originPersonId: value.origin_person_id === null ? null : String(value.origin_person_id),
+            createdAt: String(value.created_at), updatedAt: String(value.updated_at), rowVersion: Number(value.row_version)
+          } : null;
+        },
+        restore: (snapshot) => {
+          const value = workspaceMetaSchema.parse(snapshot);
+          this.database.prepare("UPDATE workspace_meta SET name=?, origin_person_id=?, created_at=?, updated_at=?, row_version=? WHERE workspace_id=?")
+            .run(value.name, value.originPersonId, value.createdAt, value.updatedAt, value.rowVersion, value.workspaceId);
+        },
+        dependencies: none
+      },
       person: {
         table: "person", schema: personSchema as z.ZodType<Snapshot>, supportsRestore: true,
         read: (id) => row("SELECT * FROM person WHERE workspace_id = ? AND id = ?", id, (value) => ({ ...base(value), displayName: String(value.display_name), gender: value.gender as "male" | "female" | "unknown", birth: date(value, "birth"), death: date(value, "death"), notes: value.notes === null ? null : String(value.notes) })),

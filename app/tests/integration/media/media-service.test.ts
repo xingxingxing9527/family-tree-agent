@@ -8,7 +8,9 @@ import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { ManagedMediaService, openSelectedMediaFile } from "../../../src/main/media/media-service";
 import { acquireHashLease } from "../../../src/main/media/media-lease.mjs";
+import * as mediaProtocol from "../../../src/main/media/media-protocol";
 import { resolveMediaAssetRequest } from "../../../src/main/media/media-protocol";
+import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
 
 const roots: string[] = [];
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
@@ -78,6 +80,47 @@ async function setup(): Promise<{ root: string; mediaRoot: string; database: Ret
 }
 
 describe("managed media", () => {
+  it("drains in-flight protocol reads and resolves late requests against the post-restore context", async () => {
+    const gate = new WorkspaceMutationGate();
+    let context: { workspaceId: string; databasePath: string } | null = { workspaceId: "workspace-1", databasePath: "old.sqlite" };
+    let started!: () => void;
+    let resume!: () => void;
+    const readStarted = new Promise<void>((resolve) => { started = resolve; });
+    const canFinish = new Promise<void>((resolve) => { resume = resolve; });
+    const resolveWorkspaceMediaRequest = (mediaProtocol as unknown as {
+      resolveWorkspaceMediaRequest?: (
+        url: string,
+        workspaces: { getOpenWorkspaceContext(): typeof context },
+        operations: WorkspaceMutationGate,
+        resolver: (url: string, current: NonNullable<typeof context>) => Promise<Response>
+      ) => Promise<Response>
+    }).resolveWorkspaceMediaRequest;
+    expect(typeof resolveWorkspaceMediaRequest).toBe("function");
+    if (!resolveWorkspaceMediaRequest) return;
+    const inFlight = resolveWorkspaceMediaRequest("app-media://asset/11111111-1111-4111-8111-111111111111", { getOpenWorkspaceContext: () => context }, gate, async (_url, current) => {
+      expect(current.databasePath).toBe("old.sqlite");
+      started();
+      await canFinish;
+      return new Response("old");
+    });
+    await readStarted;
+    let exclusiveGranted = false;
+    const exclusive = gate.acquireExclusive().then((lease) => { exclusiveGranted = true; return lease; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(exclusiveGranted).toBe(false);
+    resume();
+    expect(await (await inFlight).text()).toBe("old");
+    const lease = await exclusive;
+    let staleResolverCalled = false;
+    const late = resolveWorkspaceMediaRequest("app-media://asset/11111111-1111-4111-8111-111111111111", { getOpenWorkspaceContext: () => context }, gate, async () => {
+      staleResolverCalled = true;
+      return new Response("stale");
+    });
+    context = null;
+    lease.release();
+    expect((await late).status).toBe(404);
+    expect(staleResolverCalled).toBe(false);
+  });
   it("imports from the selected open handle after the selected pathname is replaced", async () => {
     const { root, database, service } = await setup();
     const selected = join(root, "selected.jpg");
