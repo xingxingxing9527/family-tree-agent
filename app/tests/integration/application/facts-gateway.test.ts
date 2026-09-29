@@ -98,6 +98,28 @@ describe("WorkspaceFactsGateway", () => {
     });
   });
 
+  it("serializes concurrent creation requests at the 1,000-person boundary", async () => {
+    const database = openDatabase(databasePath);
+    const now = new Date().toISOString();
+    const insert = database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, 'workspace-1', ?, 'unknown', ?, ?)");
+    database.transaction(() => {
+      for (let index = 0; index < 999; index += 1) insert.run(`seed-${index}`, `成员 ${index}`, now, now);
+    })();
+    database.close();
+
+    const outcomes = await Promise.all([
+      gateway.savePerson({ draft: draft("边界甲", "unknown"), confirmWarnings: false }),
+      gateway.savePerson({ draft: draft("边界乙", "unknown"), confirmWarnings: false })
+    ]);
+    expect(outcomes.filter((result) => result.ok)).toHaveLength(1);
+    expect(outcomes.filter((result) => !result.ok)).toEqual([
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: "VALIDATION", message: expect.stringMatching(/1,?000/u) }) })
+    ]);
+    const verified = openDatabase(databasePath);
+    expect(verified.prepare("SELECT COUNT(*) FROM person WHERE workspace_id = 'workspace-1' AND deleted_at IS NULL").pluck().get()).toBe(1_000);
+    verified.close();
+  });
+
   it("returns a sanitized internal result when the open database becomes unavailable", async () => {
     await rm(databasePath, { force: true });
     await expect(gateway.listPeople({ limit: 20, offset: 0 })).resolves.toEqual({

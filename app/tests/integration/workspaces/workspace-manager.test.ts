@@ -166,6 +166,32 @@ describe("WorkspaceManager", () => {
     }
   });
 
+  it("refuses to open an existing workspace with more than 1,000 active people", async () => {
+    const { root, manager } = await createManager();
+    const created = await manager.create({ name: "Over-cap family" });
+    if (!created.ok) throw new Error("workspace fixture failed");
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({ ok: true });
+    await expect(new WorkspaceFactsGateway(manager).savePerson({
+      draft: { displayName: "起始人物", aliases: [], gender: "unknown", birth: null, death: null, notes: null, sourceDescription: "test" },
+      confirmWarnings: true
+    })).resolves.toMatchObject({ ok: true });
+    await manager.close();
+
+    const database = new Database(join(root, created.value.directory, "genealogy.sqlite"));
+    const now = new Date().toISOString();
+    const insert = database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, ?, ?, 'unknown', ?, ?)");
+    database.transaction(() => {
+      for (let index = 1; index < 1_001; index += 1) insert.run(`person-${index}`, created.value.id, `成员 ${index}`, now, now);
+    })();
+    database.close();
+
+    await expect(manager.open({ id: created.value.id })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "VALIDATION", message: expect.stringMatching(/1,?000|上限/u) }
+    });
+    expect(manager.getOpenWorkspaceContext()).toBeNull();
+  });
+
   it("provides main-only open database context until the workspace is closed", async () => {
     const { root, manager } = await createManager();
     const created = await manager.create({ name: "Facts family" });

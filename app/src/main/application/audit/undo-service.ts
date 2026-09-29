@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { WorkspaceDatabase } from "../../database/open-database.js";
+import { MAX_WORKSPACE_PEOPLE, WORKSPACE_PEOPLE_LIMIT_MESSAGE, countActiveWorkspacePeople } from "../../database/workspace-people-limit.js";
 
 export type UndoErrorCode = "NOT_FOUND" | "NOT_UNDOABLE" | "CONFLICT" | "ALREADY_UNDONE";
 
@@ -264,6 +265,15 @@ export class UndoService {
           throw new UndoError("NOT_UNDOABLE", `Unexpected dependent entity blocks undo: ${dependency.entityType}:${dependency.entityId}`);
         }
       }
+    }
+    const personDelta = prepared.reduce((delta, item) => {
+      if (item.entityType !== "person") return delta;
+      const beforeActive = item.before?.deletedAt === null ? 1 : 0;
+      const afterActive = item.after.deletedAt === null ? 1 : 0;
+      return delta + beforeActive - afterActive;
+    }, 0);
+    if (countActiveWorkspacePeople(this.database, this.workspaceId) + personDelta > MAX_WORKSPACE_PEOPLE) {
+      throw new UndoError("CONFLICT", WORKSPACE_PEOPLE_LIMIT_MESSAGE);
     }
     return prepared;
   }

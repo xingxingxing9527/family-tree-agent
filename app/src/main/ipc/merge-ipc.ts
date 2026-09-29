@@ -11,6 +11,7 @@ import { openDatabase, type WorkspaceDatabase } from "../database/open-database.
 import { MergeRepository } from "../database/repositories/merge-repository.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
+import { WorkspacePeopleLimitError, WORKSPACE_PEOPLE_LIMIT_MESSAGE } from "../database/workspace-people-limit.js";
 
 export const MERGE_CHANNELS = { candidates: "merges:candidates", preview: "merges:preview", merge: "merges:merge", history: "merges:history", canUnmerge: "merges:can-unmerge", unmerge: "merges:unmerge" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;
@@ -46,7 +47,11 @@ export class WorkspaceMergeGateway implements MergeApi {
     if (!existsSync(context.databasePath)) return Promise.resolve(failure("INTERNAL", "Unable to complete merge request"));
     let database: WorkspaceDatabase | null = null;
     try { database = openDatabase(context.databasePath); applyMigrations(database); return Promise.resolve({ ok: true, value: operation(database, context.workspaceId) }); }
-    catch (error) { const message = error instanceof Error ? error.message : "Unable to complete merge request"; return Promise.resolve(failure(/not found/i.test(message) ? "NOT_FOUND" : /changed|cannot|second|cycle|own|marry/i.test(message) ? "CONFLICT" : "INTERNAL", message.slice(0, 500))); }
+    catch (error) {
+      if (error instanceof WorkspacePeopleLimitError) return Promise.resolve(failure("VALIDATION", WORKSPACE_PEOPLE_LIMIT_MESSAGE));
+      const message = error instanceof Error ? error.message : "Unable to complete merge request";
+      return Promise.resolve(failure(/not found/i.test(message) ? "NOT_FOUND" : /changed|cannot|second|cycle|own|marry/i.test(message) ? "CONFLICT" : "INTERNAL", message.slice(0, 500)));
+    }
     finally { database?.close(); }
   }
 }

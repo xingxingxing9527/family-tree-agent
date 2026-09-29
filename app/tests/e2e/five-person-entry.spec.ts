@@ -87,6 +87,60 @@ async function expectCardAndFieldTextReadable(window: Page): Promise<void> {
   expect(result.minimum).toBeGreaterThanOrEqual(4.5);
 }
 
+async function expectNonTextBoundariesReadable(window: Page): Promise<void> {
+  const result = await window.locator([
+    ".workspace-content",
+    ".person-card",
+    ".detail-card",
+    ".family-tree-canvas",
+    ".tree-person-node",
+    ".family-union-node",
+    "input:not([type='checkbox']):not([type='radio'])",
+    "select",
+    "textarea"
+  ].join(",")).evaluateAll((elements) => {
+    type Rgb = [number, number, number];
+    const parse = (value: string): Rgb => {
+      const values = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return [values[0] ?? 0, values[1] ?? 0, values[2] ?? 0];
+    };
+    const luminance = ([red, green, blue]: Rgb): number => {
+      const channel = (value: number): number => {
+        const normalized = value / 255;
+        return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+    };
+    const ratio = (first: Rgb, second: Rgb): number => {
+      const a = luminance(first); const b = luminance(second);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    };
+    const visible = elements.filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    });
+    const samples = visible.map((element) => {
+      const style = getComputedStyle(element);
+      return { selector: `${element.tagName.toLowerCase()}.${element.className}`, ratio: ratio(parse(style.borderTopColor), parse(style.backgroundColor)) };
+    });
+    return { count: samples.length, minimum: Math.min(...samples.map((sample) => sample.ratio)), failures: samples.filter((sample) => sample.ratio < 3) };
+  });
+  expect(result.count).toBeGreaterThan(5);
+  expect(result.failures, `Non-text boundaries below 3:1: ${JSON.stringify(result.failures)}`).toEqual([]);
+  expect(result.minimum).toBeGreaterThanOrEqual(3);
+}
+
+async function expectNoRootOverflow(window: Page): Promise<void> {
+  const dimensions = await window.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth
+  }));
+  expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+  expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport);
+}
+
 test("persists a five-person household, correction, and divorce", async () => {
   test.setTimeout(60_000);
   const userData = await mkdtemp(join(tmpdir(), "family-agent-five-person-"));
@@ -137,6 +191,7 @@ test("persists a five-person household, correction, and divorce", async () => {
     expect(parentRelationIds.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
     expect(new Set(parentRelationIds).size).toBe(2);
     await expectCardAndFieldTextReadable(window);
+    await expectNonTextBoundariesReadable(window);
     await window.getByRole("button", { name: "编辑人物" }).click();
     await window.getByLabel("出生月份").fill("6");
     await window.getByLabel("来源说明").fill("核对出生证");
@@ -160,6 +215,48 @@ test("persists a five-person household, correction, and divorce", async () => {
     await window.getByRole("button", { name: "查看张国强" }).click();
     await expect(window.getByText("已离婚", { exact: true })).toBeVisible();
     await expect(window.getByText("公历 2001年3月", { exact: true })).toBeVisible();
+
+    await window.setViewportSize({ width: 320, height: 800 });
+    await expectNoRootOverflow(window);
+    await window.getByLabel("搜索当前谱册人物").fill("张敏");
+    await window.getByRole("button", { name: "搜索", exact: true }).click();
+    await expect(window.getByRole("button", { name: /张敏/u }).first()).toBeVisible();
+    await window.getByRole("button", { name: "关闭" }).click();
+    await window.getByRole("link", { name: "家谱树" }).click();
+    await expect(window.getByRole("heading", { name: "家谱树" })).toBeVisible();
+    await expectNoRootOverflow(window);
+    await expectNonTextBoundariesReadable(window);
+    await window.getByRole("link", { name: "设置与数据" }).click();
+    await expect(window.getByRole("heading", { name: "设置与数据" })).toBeVisible();
+    await window.getByLabel("恢复目标谱册").selectOption({ label: "示例谱册" });
+    await expectNoRootOverflow(window);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+  }
+});
+
+test("keeps People and Settings usable without root overflow at a real 320px viewport", async () => {
+  const userData = await mkdtemp(join(tmpdir(), "family-agent-narrow-"));
+  const app = await electron.launch({ args: [resolve("out/main/index.js"), `--user-data-dir=${userData}`] });
+  try {
+    const window = await app.firstWindow();
+    await window.setViewportSize({ width: 320, height: 800 });
+    await window.getByLabel("谱册名称").fill("窄屏谱册");
+    await window.getByRole("button", { name: "新建并打开谱册" }).click();
+    await expect(window.getByRole("heading", { name: "窄屏谱册" })).toBeVisible();
+    await expectNoRootOverflow(window);
+
+    await window.getByRole("link", { name: "人物库" }).click();
+    await window.getByRole("button", { name: "新增人物" }).click();
+    await window.getByLabel("姓名").fill("窄屏成员");
+    await expectNoRootOverflow(window);
+    await window.getByRole("button", { name: "取消" }).click();
+
+    await window.getByRole("link", { name: "设置与数据" }).click();
+    await expect(window.getByRole("heading", { name: "设置与数据" })).toBeVisible();
+    await window.getByLabel("恢复目标谱册").selectOption({ label: "窄屏谱册" });
+    await expectNoRootOverflow(window);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

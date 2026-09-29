@@ -7,6 +7,7 @@ import extract from "extract-zip";
 import yauzl from "yauzl";
 import { applyMigrations, LATEST_SCHEMA_VERSION, validateCurrentSchema, validateMigrationLedger } from "../../database/migrations/index.js";
 import { openDatabase } from "../../database/open-database.js";
+import { WorkspacePeopleLimitError, assertWorkspacePeopleWithinLimit } from "../../database/workspace-people-limit.js";
 import { canonicalPlainDirectory, normalizePathIdentity, pathContains } from "../../workspaces/workspace-path-security.js";
 import type { WorkspaceExclusiveLease } from "../../workspaces/workspace-mutation-gate.js";
 import { workspaceSummarySchema, type StrictWorkspaceSummary } from "../../workspaces/workspace-schema.js";
@@ -16,7 +17,7 @@ export type BackupValidationCode =
   | "ENTRY_PATH" | "ENTRY_COLLISION" | "ENTRY_TYPE" | "ARCHIVE_LIMIT" | "ENTRY_WHITELIST"
   | "HASH_MISMATCH" | "MANIFEST_INVALID" | "DATABASE_INVALID" | "SCHEMA_UNSUPPORTED"
   | "WORKSPACE_MISMATCH" | "MEDIA_INVALID" | "TOKEN_INVALID" | "TARGET_INVALID"
-  | "STAGING_INVALID" | "CONFIRMATION_REQUIRED" | "ACTIVATION_FAILED" | "ROLLBACK_FAILED";
+  | "STAGING_INVALID" | "PEOPLE_LIMIT_EXCEEDED" | "CONFIRMATION_REQUIRED" | "ACTIVATION_FAILED" | "ROLLBACK_FAILED";
 
 export class BackupValidationError extends Error {
   constructor(public readonly code: BackupValidationCode, message: string) {
@@ -237,6 +238,16 @@ const countRows = (database: Database.Database): BackupManifest["counts"] => ({
   mediaAssets: Number(database.prepare("SELECT COUNT(*) FROM media_asset").pluck().get())
 });
 
+function validatePeopleLimit(database: Database.Database, workspaceId: string): void {
+  try { assertWorkspacePeopleWithinLimit(database, workspaceId); }
+  catch (error) {
+    if (error instanceof WorkspacePeopleLimitError) {
+      throw new BackupValidationError("PEOPLE_LIMIT_EXCEEDED", error.message);
+    }
+    throw error;
+  }
+}
+
 function validateDatabase(stagingPath: string, manifest: BackupManifest, expectedOriginPersonId: string | null): number {
   const databasePath = join(stagingPath, "genealogy.sqlite");
   let database: Database.Database;
@@ -257,6 +268,7 @@ function validateDatabase(stagingPath: string, manifest: BackupManifest, expecte
     } catch {
       throw new BackupValidationError("DATABASE_INVALID", "Backup migration ledger or schema is inconsistent");
     }
+    validatePeopleLimit(database, manifest.workspaceId);
     const identity = database.prepare("SELECT workspace_id, name, origin_person_id FROM workspace_meta").all() as Array<{ workspace_id: string; name: string; origin_person_id: string | null }>;
     if (
       identity.length !== 1 || identity[0]?.workspace_id !== manifest.workspaceId || identity[0]?.name !== manifest.workspaceName ||
@@ -352,6 +364,7 @@ function validateStagedDatabase(stagingPath: string, expected: StrictWorkspaceSu
     if (Number(database.pragma("user_version", { simple: true })) !== LATEST_SCHEMA_VERSION) throw new BackupValidationError("STAGING_INVALID", "Restore staging schema is incomplete");
     try { validateCurrentSchema(database); }
     catch { throw new BackupValidationError("STAGING_INVALID", "Restore staging migration ledger or schema is inconsistent"); }
+    validatePeopleLimit(database, expected.id);
     const identity = database.prepare("SELECT workspace_id, name, origin_person_id FROM workspace_meta").all() as Array<{ workspace_id: string; name: string; origin_person_id: string | null }>;
     if (
       identity.length !== 1 || identity[0]?.workspace_id !== expected.id || identity[0]?.name !== expected.name ||

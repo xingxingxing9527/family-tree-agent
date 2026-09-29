@@ -4,7 +4,7 @@
 .workspace-identity { display: grid; color: var(--text-secondary); font-size: 0.8rem; }
 .workspace-identity strong { color: var(--text-primary); font-size: 1rem; }
 .global-search { display: flex; min-width: 0; }
-.global-search input, .global-search button, .viewpoint-control select, .tree-selectors select { min-height: 2.6rem; padding: 0.55rem 0.7rem; color: var(--text-primary); background: #fff; border: 1px solid #858f86; }
+.global-search input, .global-search button, .viewpoint-control select, .tree-selectors select { min-height: 2.6rem; padding: 0.55rem 0.7rem; color: var(--text-primary); background: #fff; border: 1px solid var(--control-border); }
 .global-search input { width: 100%; border-radius: 8px 0 0 8px; }
 .global-search button { color: #fff; background: var(--accent); border-color: var(--accent); border-radius: 0 8px 8px 0; font-weight: 700; }
 .viewpoint-control { display: flex; gap: 0.5rem; align-items: center; white-space: nowrap; }
@@ -22,9 +22,9 @@
 .chat-panel { display: grid; gap: 1rem; padding: 1rem; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
 .chat-panel h2, .chat-panel h3, .chat-panel p { margin-top: 0; }
 .chat-panel nav { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
-.chat-panel button { min-height: 2.55rem; padding: 0.5rem; color: var(--accent-strong); background: #eef5ef; border: 1px solid #8b9b8e; border-radius: 7px; font-weight: 700; }
+.chat-panel button { min-height: 2.55rem; padding: 0.5rem; color: var(--accent-strong); background: #eef5ef; border: 1px solid var(--control-border); border-radius: 7px; font-weight: 700; }
 .chat-panel form { display: grid; gap: 0.55rem; }
-.chat-panel input { min-height: 2.6rem; padding: 0.55rem; color: var(--text-primary); background: #fff; border: 1px solid #858f86; border-radius: 7px; }
+.chat-panel input { min-height: 2.6rem; padding: 0.55rem; color: var(--text-primary); background: #fff; border: 1px solid var(--control-border); border-radius: 7px; }
 .search-results { position: fixed; z-index: 30; top: 72px; left: 50%; width: min(620px, calc(100% - 2rem)); max-height: 50vh; padding: 1rem; overflow: auto; transform: translateX(-50%); background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; box-shadow: 0 18px 50px rgb(23 32 25 / 24%); }
 .search-results ul, .settings-list { display: grid; gap: 0.6rem; padding: 0; list-style: none; }
 .search-results li button, .list-row { display: grid; width: 100%; gap: 0.2rem; padding: 0.75rem; color: var(--text-primary); text-align: left; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
@@ -54,4 +54,14 @@
   .chat-panel { grid-column: 1; }
   .workspace-content { padding: 0.85rem; }
   .wiki-layout, .explanation-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) {
+  .top-bar { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; padding: 0.65rem; }
+  .top-bar > *, .brand, .workspace-identity, .global-search, .viewpoint-control { grid-column: 1; min-width: 0; }
+  .viewpoint-control { display: grid; white-space: normal; }
+  .viewpoint-control select { width: 100%; }
+  .shell-grid { width: 100%; padding: 0.45rem; }
+  .workspace-content, .feature-page, .settings-section, .chat-panel { min-width: 0; max-width: 100%; }
+  .workspace-content { padding: 0.65rem; }
+  .primary-nav { max-width: 100%; }
 }

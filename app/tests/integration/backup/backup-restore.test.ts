@@ -1,16 +1,17 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BackupService } from "../../../src/main/application/backup/backup-service";
-import { BackupValidationError, RestoreService } from "../../../src/main/application/backup/restore-service";
+import { BackupValidationError, RestoreService, inspectBackupArchive } from "../../../src/main/application/backup/restore-service";
 import { WorkspaceFactsGateway } from "../../../src/main/application/facts/facts-gateway";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { WorkspaceDataManagementGateway } from "../../../src/main/ipc/data-management-ipc";
 import { WorkspaceManager } from "../../../src/main/workspaces/workspace-manager";
 import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
 import { createBackupFixture, mediaBytes, originPersonId, workspaceDirectory, workspaceId } from "./backup-fixture";
-import { readZipEntries } from "./backup-test-support";
+import { readZipEntries, writeZip } from "./backup-test-support";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -110,6 +111,39 @@ describe("verified backup and staged restore", () => {
     expect((await stat(join(snapshots, "automatic.zip"))).isFile()).toBe(true);
     await expect(restore.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: workspaceId, confirmReplace: true }))
       .rejects.toThrowError(expect.objectContaining<Partial<BackupValidationError>>({ code: "TOKEN_INVALID" }));
+  });
+
+  it("rejects a hash-valid restore archive whose workspace exceeds the 1,000-person limit", async () => {
+    const value = await createBackupFixture(roots);
+    await new BackupService(value.workspace).createBackup(value.archivePath);
+    const entries = await readZipEntries(value.archivePath);
+    const forgedDatabasePath = join(value.root, "forged-over-cap.sqlite");
+    await writeFile(forgedDatabasePath, entries.get("genealogy.sqlite")!);
+    const forgedDatabase = openDatabase(forgedDatabasePath);
+    const now = new Date().toISOString();
+    const insert = forgedDatabase.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, ?, ?, 'unknown', ?, ?)");
+    forgedDatabase.transaction(() => {
+      for (let index = 1; index < 1_001; index += 1) insert.run(`forged-${index}`, workspaceId, `伪造成员 ${index}`, now, now);
+    })();
+    forgedDatabase.pragma("wal_checkpoint(TRUNCATE)");
+    forgedDatabase.pragma("journal_mode = DELETE");
+    forgedDatabase.close();
+    const forgedBytes = await readFile(forgedDatabasePath);
+    entries.set("genealogy.sqlite", forgedBytes);
+    const manifest = JSON.parse(entries.get("backup-manifest.json")!.toString("utf8")) as {
+      counts: { people: number };
+      files: Array<{ path: string; size: number; sha256: string }>;
+    };
+    manifest.counts.people = 1_001;
+    const databaseFile = manifest.files.find((file) => file.path === "genealogy.sqlite")!;
+    databaseFile.size = forgedBytes.length;
+    databaseFile.sha256 = createHash("sha256").update(forgedBytes).digest("hex");
+    entries.set("backup-manifest.json", Buffer.from(JSON.stringify(manifest)));
+    const forgedArchive = join(value.root, "archives", "over-cap.zip");
+    await writeZip(forgedArchive, [...entries].map(([name, data]) => ({ name, data, directory: name.endsWith("/") })));
+
+    await expect(inspectBackupArchive(forgedArchive, { stagingParent: dirname(value.target.rootPath) }))
+      .rejects.toThrowError(expect.objectContaining<Partial<BackupValidationError>>({ code: "PEOPLE_LIMIT_EXCEEDED" }));
   });
 
   it("refuses backup when a declared media object is missing or hash-mismatched", async () => {

@@ -1,7 +1,7 @@
 .family-tree-canvas {
   width: 100%;
   min-height: 620px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
   border-radius: 12px;
   background: #f8fafc;
 }
@@ -37,7 +37,7 @@
 .tree-view-button {
   color: #0f172a;
   background: #ffffff;
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--control-border);
 }
 
 .tree-view-button.active {
@@ -53,7 +53,7 @@
   display: grid;
   gap: 4px;
   padding: 14px;
-  border: 2px solid #94a3b8;
+  border: 2px solid var(--control-border);
   border-radius: 10px;
   box-shadow: 0 4px 12px rgb(15 23 42 / 12%);
   text-align: left;
@@ -106,7 +106,7 @@
   padding: 2rem;
   color: #0f172a;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
 }
 
 .sr-only {

@@ -68,6 +68,15 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
     if (await workspaceState.closeWorkspace()) navigate("/");
   };
 
+  const completeMutation = useCallback(async (targetWorkspaceId?: string): Promise<void> => {
+    const target = targetWorkspaceId ?? workspace.id;
+    const refreshed = await workspaceState.completeMutation(target);
+    if (!refreshed) throw new Error("无法刷新变更后的谱册");
+    if (targetWorkspaceId && targetWorkspaceId !== workspace.id) {
+      navigate(`/workspace/${refreshed.id}/settings`, { replace: true });
+    }
+  }, [navigate, workspace.id, workspaceState]);
+
   if (!activeArea) return <Navigate to={`/workspace/${workspace.id}/tree`} replace />;
   return <div className="app-shell">
     <header className="top-bar">
@@ -80,12 +89,12 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
     {searchResults && <section className="search-results" aria-label="人物搜索结果"><div className="section-heading-row"><strong>人物搜索结果</strong><button type="button" onClick={() => setSearchResults(null)}>关闭</button></div>{searchResults.length === 0 ? <p>没有匹配人物。</p> : <ul>{searchResults.map((person) => <li key={person.id}><button type="button" onClick={() => { setSelectedPersonId(person.id); setSearchResults(null); navigate(`/workspace/${workspace.id}/people`); }}>{person.displayName}<span>{person.aliases.join("、")}</span></button></li>)}</ul>}</section>}
     <div className="shell-grid">
       <nav className="primary-nav" aria-label="一级导航"><Link to="/">首页</Link>{areas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
-      <main className="workspace-content" key={`${workspace.id}:${activeArea}`}>
+      <main className="workspace-content" key={`${workspace.id}:${activeArea}:${activeArea === "settings" ? "persistent" : workspaceState.mutationEpoch}`}>
         {activeArea === "tree" && <FamilyTreePage api={api.query} people={snapshot.people} />}
-        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} onSelectedPersonChange={setSelectedPersonId} />}
+        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} onMutationComplete={completeMutation} onSelectedPersonChange={setSelectedPersonId} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
         {activeArea === "wiki" && <WikiPage api={api.wiki} query={api.query} people={snapshot.people.map((person) => ({ id: person.id, displayName: person.displayName }))} sources={snapshot.sources.map((source) => ({ id: source.id, title: source.title }))} />}
-        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} />}
+        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} onMutationComplete={completeMutation} />}
       </main>
       <ChatPanel onSend={ask} />
     </div>
@@ -94,6 +103,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
 
 export function AppShell({ workspace }: { workspace: WorkspaceSummary }): JSX.Element {
   const api = window.desktopApi;
+  const { mutationEpoch } = useWorkspace();
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshotDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -111,7 +121,7 @@ export function AppShell({ workspace }: { workspace: WorkspaceSummary }): JSX.El
       setSnapshot(result.value);
     }).catch(() => { if (activeRequest === requestId.current) setError("无法读取当前谱册"); });
     return () => { requestId.current += 1; };
-  }, [api, refreshVersion, workspace.id]);
+  }, [api, mutationEpoch, refreshVersion, workspace.id]);
 
   if (error) return <main className="state-page"><section className="state-card" role="alert"><h1>无法打开谱册</h1><p>{error}</p><Link className="button-link" to="/">返回首页</Link></section></main>;
   if (!snapshot) return <main className="state-page"><section className="state-card" role="status"><h1>正在打开谱册</h1><p>正在读取隔离后的谱册资料…</p></section></main>;

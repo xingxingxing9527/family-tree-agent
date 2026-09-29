@@ -31,9 +31,11 @@ describe("MergeHistory", () => {
   });
   it("shows a check error state without calling unmerge", async () => {
     const mergeApi = api(vi.fn().mockResolvedValue({ ok: false, error: { code: "INTERNAL", message: "检查失败" } }));
-    render(<MergeHistory api={mergeApi} />);
+    const onMutationComplete = vi.fn();
+    render(<MergeHistory api={mergeApi} onMutationComplete={onMutationComplete} />);
     expect(await screen.findByText(/检查失败/)).toBeVisible();
     await waitFor(() => expect(mergeApi.unmerge).not.toHaveBeenCalled());
+    expect(onMutationComplete).not.toHaveBeenCalled();
   });
   it("keeps exact blocked details when the click-time recheck changes from allowed", async () => {
     const check = vi.fn().mockResolvedValueOnce({ ok: true, value: { allowed: true, blockingEntityIds: [], reasons: [] } }).mockResolvedValueOnce({ ok: true, value: { allowed: false, blockingEntityIds: ["missing-link"], reasons: [{ entityId: "missing-link", entityType: "wiki_person", expectedVersion: 3, actualVersion: null }] } });
@@ -42,6 +44,16 @@ describe("MergeHistory", () => {
     fireEvent.click(await screen.findByRole("button", { name: "撤销合并" }));
     expect(await screen.findByText(/wiki_person:missing-link.*expected 3.*actual missing/)).toBeVisible();
     expect(mergeApi.unmerge).not.toHaveBeenCalled();
+  });
+
+  it("requests the authoritative workspace refresh after an allowed unmerge", async () => {
+    const mergeApi = api(vi.fn().mockResolvedValue({ ok: true, value: { allowed: true, blockingEntityIds: [], reasons: [] } }));
+    vi.mocked(mergeApi.unmerge).mockResolvedValue({ ok: true, value: { id: active.id, status: "reversed" } });
+    const onMutationComplete = vi.fn().mockResolvedValue(undefined);
+    render(<MergeHistory api={mergeApi} onMutationComplete={onMutationComplete} />);
+    fireEvent.click(await screen.findByRole("button", { name: "撤销合并" }));
+    await waitFor(() => expect(mergeApi.unmerge).toHaveBeenCalledWith({ mergeId: active.id }));
+    await waitFor(() => expect(onMutationComplete).toHaveBeenCalledWith());
   });
 
   it("actually requests duplicate candidates from the merge panel", async () => {

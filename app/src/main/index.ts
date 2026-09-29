@@ -111,7 +111,9 @@ app.whenReady().then(() => {
   };
   const backupPath = testFixturePath("FAMILY_AGENT_E2E_BACKUP_PATH");
   const dataDialogs: DataManagementDialogs | undefined = backupPath ? {
-    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+    showOpenDialog: async (options) => options.properties.includes("openFile")
+      ? ({ canceled: false, filePaths: [backupPath] })
+      : ({ canceled: true, filePaths: [] }),
     showSaveDialog: async () => ({ canceled: false, filePath: backupPath })
   } : undefined;
   const dataManagementGateway = new WorkspaceDataManagementGateway(workspaceManager, dataDialogs, {

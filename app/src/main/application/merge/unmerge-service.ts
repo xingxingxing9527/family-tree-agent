@@ -2,6 +2,7 @@ import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { MergeRepository, type MergeRecord } from "../../database/repositories/merge-repository.js";
 import { SqliteUnitOfWork, type TransactionContext } from "../../database/unit-of-work.js";
 import type { CanUnmergeResult } from "./merge-types.js";
+import { MAX_WORKSPACE_PEOPLE, WorkspacePeopleLimitError, countActiveWorkspacePeople } from "../../database/workspace-people-limit.js";
 
 type Raw = Record<string, unknown>;
 const tableFor = (entityType: string): string => entityType;
@@ -25,6 +26,14 @@ export class UnmergeService {
     return new SqliteUnitOfWork(this.database, this.workspaceId).run("person.unmerge", (ctx) => {
       const again = this.canUnmerge(mergeId);
       if (!again.allowed) throw new Error("Merge cannot be reversed because affected records changed");
+      const projectedPeople = countActiveWorkspacePeople(this.database, this.workspaceId) + (record.snapshot.rows.person ?? []).reduce((delta, snapshot) => {
+        const id = String(snapshot.id);
+        const current = this.current("person", id);
+        const restoredActive = snapshot.deleted_at === null ? 1 : 0;
+        const currentActive = current?.deleted_at === null ? 1 : 0;
+        return delta + restoredActive - currentActive;
+      }, 0);
+      if (projectedPeople > MAX_WORKSPACE_PEOPLE) throw new WorkspacePeopleLimitError(projectedPeople);
       for (const [table, rows] of Object.entries(record.snapshot.rows)) {
         for (const snapshot of rows) {
           const id = String(table === "workspace_meta" ? snapshot.workspace_id : snapshot.id);

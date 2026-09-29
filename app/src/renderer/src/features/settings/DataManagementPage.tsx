@@ -3,9 +3,13 @@ import type { BackupInspectionDto, DataManagementApi, WorkspaceSummary } from ".
 import { AuditHistory } from "./AuditHistory";
 import { PrivacyWarning } from "./PrivacyWarning";
 
-export interface DataManagementPageProps { api: DataManagementApi; }
+export interface DataManagementPageProps {
+  api: DataManagementApi;
+  refreshToken?: number;
+  onMutationComplete?(targetWorkspaceId?: string): void | Promise<void>;
+}
 
-export function DataManagementPage({ api }: DataManagementPageProps): JSX.Element {
+export function DataManagementPage({ api, refreshToken, onMutationComplete }: DataManagementPageProps): JSX.Element {
   const [targets, setTargets] = useState<WorkspaceSummary[]>([]);
   const [targetId, setTargetId] = useState("");
   const [fileToken, setFileToken] = useState("");
@@ -59,6 +63,7 @@ export function DataManagementPage({ api }: DataManagementPageProps): JSX.Elemen
     try {
       const result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
       if (!result.ok) { setError(result.error.message); return; }
+      await onMutationComplete?.(inspection.targetWorkspaceId);
       setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
     } catch { setError("无法恢复备份"); }
   };
@@ -94,6 +99,6 @@ export function DataManagementPage({ api }: DataManagementPageProps): JSX.Elemen
         <button type="button" disabled={!confirmed} onClick={() => void restore()}>替换目标谱册</button>
       </div>}
     </section>
-    <AuditHistory api={api} />
+    <AuditHistory api={api} refreshToken={refreshToken} onMutationComplete={() => onMutationComplete?.()} />
   </section>;
 }

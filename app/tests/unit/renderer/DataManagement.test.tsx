@@ -36,7 +36,8 @@ describe("data-management settings", () => {
 
   it("shows verified backup metadata, an explicit target, and requires a separate replacement confirmation", async () => {
     const value = api();
-    render(<DataManagementPage api={value} />);
+    const onMutationComplete = vi.fn().mockResolvedValue(undefined);
+    render(<DataManagementPage api={value} onMutationComplete={onMutationComplete} />);
     expect(screen.getByText("该文件未加密，包含家族隐私资料。")).toBeVisible();
     expect(await screen.findByRole("option", { name: "王氏家谱" })).toBeVisible();
 
@@ -55,6 +56,7 @@ describe("data-management settings", () => {
     fireEvent.click(screen.getByLabelText("我确认用已验证备份替换王氏家谱"));
     fireEvent.click(restore);
     await waitFor(() => expect(value.restoreBackup).toHaveBeenCalledWith({ restoreToken, targetWorkspaceId: workspaceId, confirmReplace: true }));
+    await waitFor(() => expect(onMutationComplete).toHaveBeenCalledWith(workspaceId));
   });
 
   it("keeps backup and export path selection entirely inside the API", async () => {
@@ -90,13 +92,30 @@ describe("data-management settings", () => {
     expect(await screen.findByText("恢复已提交，旧工作区清理待完成")).toBeVisible();
   });
 
+  it("does not refresh authoritative state when restore is rejected", async () => {
+    const value = api();
+    vi.mocked(value.restoreBackup).mockResolvedValue({ ok: false, error: { code: "VALIDATION", message: "备份不可用" } });
+    const onMutationComplete = vi.fn();
+    render(<DataManagementPage api={value} onMutationComplete={onMutationComplete} />);
+    await screen.findByRole("option", { name: "王氏家谱" });
+    fireEvent.click(screen.getByRole("button", { name: "选择备份文件" }));
+    await screen.findByText("family.zip");
+    fireEvent.click(screen.getByRole("button", { name: "验证备份" }));
+    await screen.findByText("验证通过");
+    fireEvent.click(screen.getByLabelText("我确认用已验证备份替换王氏家谱"));
+    fireEvent.click(screen.getByRole("button", { name: "替换目标谱册" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("备份不可用");
+    expect(onMutationComplete).not.toHaveBeenCalled();
+  });
+
   it("shows the reason a history group cannot be undone and refreshes after an allowed undo", async () => {
     const value = api();
     vi.mocked(value.listAudit).mockResolvedValue({ ok: true, value: [
       { id: groupId, kind: "manual.edit", createdAt: "2026-09-16T00:00:00.000Z", status: "available", affectedEntities: [{ entityType: "person", entityId: "person-one" }], undoable: true, reason: null, undoneAt: null },
       { id: workspaceId, kind: "person.merge", createdAt: "2026-09-15T00:00:00.000Z", status: "blocked", affectedEntities: [], undoable: false, reason: "Merge groups require the dedicated unmerge workflow", undoneAt: null }
     ] });
-    render(<AuditHistory api={value} />);
+    const onMutationComplete = vi.fn().mockResolvedValue(undefined);
+    render(<AuditHistory api={value} onMutationComplete={onMutationComplete} />);
     expect(await screen.findByText("Merge groups require the dedicated unmerge workflow")).toBeVisible();
     expect(screen.queryByRole("button", { name: `撤销 ${workspaceId}` })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `撤销 ${groupId}` }));
@@ -105,7 +124,8 @@ describe("data-management settings", () => {
     fireEvent.click(screen.getByLabelText("我确认撤销以上 1 个受影响实体"));
     fireEvent.click(screen.getByRole("button", { name: "确认撤销" }));
     await waitFor(() => expect(value.undoOperationGroup).toHaveBeenCalledWith({ operationGroupId: groupId }));
-    expect(value.listAudit).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onMutationComplete).toHaveBeenCalledWith());
+    expect(value.listAudit).toHaveBeenCalledTimes(1);
   });
 
   it("sanitizes a rejected audit-history request", async () => {
@@ -114,5 +134,21 @@ describe("data-management settings", () => {
     render(<AuditHistory api={value} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("无法读取操作历史");
     expect(screen.queryByText(/private|audit\.sqlite/u)).not.toBeInTheDocument();
+  });
+
+  it("does not refresh authoritative state when undo is rejected", async () => {
+    const value = api();
+    vi.mocked(value.listAudit).mockResolvedValue({ ok: true, value: [{
+      id: groupId, kind: "manual.edit", createdAt: "2026-09-16T00:00:00.000Z", status: "available",
+      affectedEntities: [{ entityType: "person", entityId: "person-one" }], undoable: true, reason: null, undoneAt: null
+    }] });
+    vi.mocked(value.undoOperationGroup).mockResolvedValue({ ok: false, error: { code: "CONFLICT", message: "撤销冲突" } });
+    const onMutationComplete = vi.fn();
+    render(<AuditHistory api={value} onMutationComplete={onMutationComplete} />);
+    fireEvent.click(await screen.findByRole("button", { name: `撤销 ${groupId}` }));
+    fireEvent.click(screen.getByLabelText("我确认撤销以上 1 个受影响实体"));
+    fireEvent.click(screen.getByRole("button", { name: "确认撤销" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("撤销冲突");
+    expect(onMutationComplete).not.toHaveBeenCalled();
   });
 });

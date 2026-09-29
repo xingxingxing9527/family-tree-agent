@@ -7,6 +7,7 @@ import type { BackupManifest } from "../application/backup/backup-manifest.js";
 import type { RestoreTarget } from "../application/backup/restore-service.js";
 import { applyMigrations, LATEST_SCHEMA_VERSION } from "../database/migrations/index.js";
 import { openDatabase, type WorkspaceDatabase } from "../database/open-database.js";
+import { WorkspacePeopleLimitError, WORKSPACE_PEOPLE_LIMIT_MESSAGE, assertWorkspacePeopleWithinLimit } from "../database/workspace-people-limit.js";
 import { WorkspaceIndex } from "./workspace-index.js";
 import { resolveWorkspacePaths } from "./workspace-paths.js";
 import { workspaceSummarySchema } from "./workspace-schema.js";
@@ -173,6 +174,9 @@ export class WorkspaceManager {
         this.openWorkspaceContext = this.context(updated, paths);
         return { ok: true, value: updated };
       } catch (error) {
+        if (error instanceof WorkspacePeopleLimitError) {
+          return failure("VALIDATION", WORKSPACE_PEOPLE_LIMIT_MESSAGE, { code: error.code, maximum: error.maximum });
+        }
         return failure(error instanceof ZodError || error instanceof WorkspaceIdentityError ? "PATH_DENIED" : "INTERNAL", "Unable to open workspace", { id: input.id });
       }
     });
@@ -388,6 +392,7 @@ export class WorkspaceManager {
   }
 
   private validateOrigin(database: WorkspaceDatabase, workspaceId: string, originPersonId: string | null): void {
+    assertWorkspacePeopleWithinLimit(database, workspaceId);
     if (originPersonId === null) {
       const activePeople = Number(database.prepare("SELECT COUNT(*) FROM person WHERE workspace_id=? AND deleted_at IS NULL").pluck().get(workspaceId));
       if (activePeople !== 0) throw new WorkspaceIdentityError("A non-empty workspace must have an origin person");

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { parsePartialDate, type PartialDate } from "../../../shared/domain.js";
 import type { TransactionContext } from "../unit-of-work.js";
 import type { WorkspaceDatabase } from "../open-database.js";
+import { assertCanActivateWorkspacePeople } from "../workspace-people-limit.js";
 
 export type Gender = "male" | "female" | "unknown";
 
@@ -149,6 +150,7 @@ export class PersonRepository {
   }
 
   create(ctx: TransactionContext, input: CreatePersonInput): PersonRecord {
+    assertCanActivateWorkspacePeople(this.database, this.workspaceId);
     const id = input.id ?? randomUUID();
     const now = new Date().toISOString();
     this.database.prepare(`
@@ -194,6 +196,7 @@ export class PersonRepository {
   restore(ctx: TransactionContext, id: string): PersonRecord {
     const before = this.require(id, true);
     if (before.deletedAt === null) throw new Error(`Person is not archived: ${id}`);
+    assertCanActivateWorkspacePeople(this.database, this.workspaceId);
     const now = new Date().toISOString();
     this.database.prepare("UPDATE person SET deleted_at = NULL, updated_at = ?, row_version = row_version + 1 WHERE workspace_id = ? AND id = ? AND deleted_at IS NOT NULL").run(now, this.workspaceId, id);
     const after = this.require(id, false);

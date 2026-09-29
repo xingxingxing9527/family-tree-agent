@@ -61,6 +61,7 @@ function safeError<T>(error: unknown, fallback: string): AppResult<T> {
     if (error.code === "TOKEN_INVALID") return failure("PATH_DENIED", "Backup selection expired or was already used");
     if (error.code === "TARGET_INVALID") return failure("NOT_FOUND", "Restore target is unavailable");
     if (error.code === "CONFIRMATION_REQUIRED") return failure("VALIDATION", "Replacement confirmation is required");
+    if (error.code === "PEOPLE_LIMIT_EXCEEDED") return failure("VALIDATION", "Backup exceeds the 1,000-person limit");
     if (error.code === "ROLLBACK_FAILED") return failure("CONFLICT", "Restore failed and automatic rollback could not be confirmed");
     if (error.code === "ACTIVATION_FAILED") return failure("CONFLICT", "Restore activation failed; the original workspace was preserved");
     return failure("VALIDATION", "Backup could not be verified");

@@ -118,4 +118,44 @@ describe("complete application shell", () => {
     await waitFor(() => expect(api.chat.authorize).toHaveBeenCalled());
     expect(vi.mocked(api.chat.authorize).mock.calls[0]?.[0]).toMatchObject({ payload: { viewpointId: person.id, selectedPersonId: person.id } });
   });
+
+  it("opens and navigates to a different restore target before showing its refreshed shell", async () => {
+    const { api, open } = desktopApi([workspaceA, workspaceB]);
+    vi.mocked(api.dataManagement.selectRestoreFile).mockResolvedValue({ ok: true, value: {
+      selected: true,
+      fileToken: "33333333-3333-4333-8333-333333333333",
+      fileName: "other-workspace.zip"
+    } });
+    vi.mocked(api.dataManagement.inspectBackup).mockResolvedValue({ ok: true, value: {
+      restoreToken: "44444444-4444-4444-8444-444444444444",
+      targetWorkspaceId: workspaceB.id,
+      verified: true,
+      expiresAt: "2026-09-15T02:00:00.000Z",
+      manifest: {
+        formatVersion: 1,
+        workspaceId: workspaceB.id,
+        workspaceName: workspaceB.name,
+        schemaVersion: 4,
+        createdAt: "2026-09-15T01:30:00.000Z",
+        counts: { people: 1, parentChild: 0, marriages: 0, wikiEntries: 0, auditRows: 1, mediaAssets: 0 }
+      }
+    } });
+    vi.mocked(api.dataManagement.restoreBackup).mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: false } });
+    window.desktopApi = api;
+    window.location.hash = `#/workspace/${workspaceA.id}/settings`;
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "设置与数据" });
+    fireEvent.click(screen.getByRole("button", { name: "选择备份文件" }));
+    await screen.findByText("other-workspace.zip");
+    fireEvent.change(screen.getByLabelText("恢复目标谱册"), { target: { value: workspaceB.id } });
+    fireEvent.click(screen.getByRole("button", { name: "验证备份" }));
+    await screen.findByText("验证通过");
+    fireEvent.click(screen.getByLabelText("我确认用已验证备份替换乙谱"));
+    fireEvent.click(screen.getByRole("button", { name: "替换目标谱册" }));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith({ id: workspaceB.id }));
+    await waitFor(() => expect(window.location.hash).toBe(`#/workspace/${workspaceB.id}/settings`));
+    expect((await screen.findAllByText("乙谱")).some((element) => element.isConnected)).toBe(true);
+  });
 });

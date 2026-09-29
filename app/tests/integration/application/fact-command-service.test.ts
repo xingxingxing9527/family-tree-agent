@@ -6,6 +6,7 @@ import { FactCommandError, FactCommandService } from "../../../src/main/applicat
 import { FactQueries } from "../../../src/main/application/facts/fact-queries";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
 
 const workspaceId = "workspace-1";
 const otherWorkspaceId = "workspace-2";
@@ -59,6 +60,34 @@ describe("FactCommandService", () => {
     expect(database.prepare("SELECT COUNT(*) FROM source").pluck().get()).toBe(1);
     expect(database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()).toBe(1);
     expect(database.prepare("SELECT COUNT(*) FROM audit_log").pluck().get()).toBe(2);
+  });
+
+  it("keeps a multi-create transaction atomic at the 1,000-person boundary", () => {
+    const now = new Date().toISOString();
+    const insert = database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, ?, ?, 'unknown', ?, ?)");
+    const seed = database.transaction(() => {
+      for (let index = 0; index < 999; index += 1) insert.run(`seed-${index}`, workspaceId, `成员 ${index}`, now, now);
+    });
+    seed();
+
+    expect(() => createUnitOfWork(database, workspaceId).run("limit-batch", (ctx) => {
+      service.executeInTransaction(ctx, {
+        type: "person.create",
+        draft: { id: "boundary-1000", workspaceId, displayName: "第一千人", gender: "unknown" },
+        source: source("boundary-1000")
+      });
+      service.executeInTransaction(ctx, {
+        type: "person.create",
+        draft: { id: "overflow-1001", workspaceId, displayName: "第一千零一人", gender: "unknown" },
+        source: source("overflow-1001")
+      });
+    })).toThrowError(expect.objectContaining({
+      issues: expect.arrayContaining([expect.objectContaining({ code: "WORKSPACE_PERSON_LIMIT" })])
+    }));
+
+    expect(database.prepare("SELECT COUNT(*) FROM person WHERE workspace_id = ? AND deleted_at IS NULL").pluck().get(workspaceId)).toBe(999);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind = 'limit-batch'").pluck().get()).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) FROM source WHERE source_key IN ('boundary-1000', 'overflow-1001')").pluck().get()).toBe(0);
   });
 
   it("rejects self-parenting and self-marriage without partial writes", () => {

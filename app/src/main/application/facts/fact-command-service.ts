@@ -2,6 +2,7 @@ import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { PersonRepository, type PersonRecord } from "../../database/repositories/person-repository.js";
 import { RelationRepository, type MarriageRecord, type ParentChildRecord } from "../../database/repositories/relation-repository.js";
 import { createUnitOfWork, type TransactionContext, type UnitOfWork } from "../../database/unit-of-work.js";
+import { MAX_WORKSPACE_PEOPLE, WORKSPACE_PEOPLE_LIMIT_MESSAGE, countActiveWorkspacePeople } from "../../database/workspace-people-limit.js";
 import { validateMarriageFact, validateParentChildFact } from "../../domain/validation/fact-validator.js";
 import { validatePartialDate, type DomainIssue } from "../../domain/validation/partial-date-validator.js";
 import type { ExecuteFactCommandOptions, FactCommand, MutationResult } from "./fact-commands.js";
@@ -69,6 +70,9 @@ export class FactCommandService {
     switch (command.type) {
       case "person.create": {
         this.requireOpenWorkspace(command.draft.workspaceId, errors);
+        if (countActiveWorkspacePeople(this.database, this.workspaceId) >= MAX_WORKSPACE_PEOPLE) {
+          errors.push(issue("WORKSPACE_PERSON_LIMIT", WORKSPACE_PEOPLE_LIMIT_MESSAGE, { maximum: MAX_WORKSPACE_PEOPLE }));
+        }
         this.validateOptionalDate(command.draft.birth, errors);
         this.validateOptionalDate(command.draft.death, errors);
         break;

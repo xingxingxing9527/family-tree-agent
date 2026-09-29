@@ -65,10 +65,55 @@ test("completes the confirmed genealogy core loop without a live model call", as
     await expect(window.getByText("备份已创建并验证", { exact: true })).toBeVisible();
     expect((await stat(backupPath)).size).toBeGreaterThan(0);
 
-    await window.reload();
+    await openArea(window, "人物库");
+    await window.getByRole("button", { name: "查看张敏" }).click();
+    await window.getByRole("button", { name: "编辑人物" }).click();
+    await window.getByLabel("出生月份").fill("7");
+    await window.getByLabel("来源说明").fill("待撤销的更正");
+    await window.getByRole("button", { name: "保存人物" }).click();
+    await expect(window.getByText("公历 1988年7月", { exact: true })).toBeVisible();
+
+    await openArea(window, "设置与数据");
+    const audit = window.getByRole("heading", { name: "操作历史" }).locator("..");
+    await expect(audit.getByText(/person\.update ·/u).first()).toBeVisible();
+    await audit.getByRole("button", { name: /^撤销 /u }).first().click();
+    await window.getByLabel(/我确认撤销以上/u).check();
+    await window.getByRole("button", { name: "确认撤销" }).click();
+    await expect(window.getByRole("heading", { name: "设置与数据" })).toBeVisible();
+
     await openArea(window, "人物库");
     await window.getByRole("button", { name: "查看张敏" }).click();
     await expect(window.getByText("公历 1988年6月", { exact: true })).toBeVisible();
+
+    await addPerson(window, { name: "临时成员", gender: "男", year: "2000", month: "1" });
+    await window.getByLabel("共享当前视角").selectOption({ label: "临时成员" });
+    const temporaryViewpointId = await window.getByLabel("共享当前视角").inputValue();
+    expect(temporaryViewpointId).not.toBe("");
+
+    await openArea(window, "设置与数据");
+    await window.getByRole("button", { name: "选择备份文件" }).click();
+    await expect(window.getByText("verified-family.zip", { exact: true })).toBeVisible();
+    await window.getByLabel("恢复目标谱册").selectOption({ label: "核心环谱册" });
+    await window.getByRole("button", { name: "验证备份" }).click();
+    await expect(window.getByText("验证通过", { exact: true })).toBeVisible();
+    await window.getByLabel("我确认用已验证备份替换核心环谱册").check();
+    await window.getByRole("button", { name: "替换目标谱册" }).click();
+
+    await expect(window.getByRole("heading", { name: "设置与数据" })).toBeVisible();
+    await expect(window.getByText("恢复完成，自动快照已验证", { exact: true })).toBeVisible();
+    await expect(window.getByText("核心环谱册").first()).toBeVisible();
+    await expect(window.getByLabel("共享当前视角")).not.toHaveValue(temporaryViewpointId);
+    await expect(window.getByLabel("共享当前视角")).toHaveValue(/.+/u);
+    await expect(window.getByLabel("共享当前视角").getByRole("option", { name: "临时成员" })).toHaveCount(0);
+    await expect(window.getByRole("heading", { name: "操作历史" }).locator("..").getByText(/person\.update ·.*available/u).first()).toBeVisible();
+
+    await openArea(window, "人物库");
+    await expect(window.getByRole("button", { name: "查看临时成员" })).toHaveCount(0);
+    await window.getByRole("button", { name: "查看张敏" }).click();
+    await expect(window.getByText("公历 1988年6月", { exact: true })).toBeVisible();
+    await openArea(window, "家谱树");
+    await expect(window.locator(".tree-person-node")).toHaveCount(5);
+    await expect(window.locator(".tree-person-node").filter({ hasText: "张敏" })).toContainText("女儿");
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

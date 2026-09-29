@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { WikiService } from "../../../src/main/application/wiki/wiki-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
@@ -41,5 +42,32 @@ describe("wiki FTS search", () => {
       expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(0);
       expect(database.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()).toBe(0);
     } finally { database.close(); }
+  });
+
+  it("loads a full 100-entry Wiki page and all ordered links in at most three statements", () => {
+    let statements = 0;
+    const database = new Database(":memory:", { verbose: () => { statements += 1; } });
+    database.pragma("foreign_keys = ON");
+    applyMigrations(database);
+    const now = new Date().toISOString();
+    database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES ('person-a', 'workspace-1', '甲', 'unknown', ?, ?)").run(now, now);
+    database.prepare("INSERT INTO source (id, workspace_id, source_key, title, created_at, updated_at) VALUES ('source-a', 'workspace-1', 'a', '来源甲', ?, ?)").run(now, now);
+    const wiki = new WikiService(database, "workspace-1");
+    for (let index = 0; index < 100; index += 1) {
+      wiki.create({
+        title: `词条 ${index.toString().padStart(3, "0")}`,
+        body: `正文 ${index}`,
+        personIds: ["person-a"],
+        sourceIds: ["source-a"]
+      });
+    }
+
+    statements = 0;
+    const page = wiki.list({ limit: 100, offset: 0 });
+    expect(page).toHaveLength(100);
+    expect(page[0]).toMatchObject({ title: "词条 000", personIds: ["person-a"], sourceIds: ["source-a"] });
+    expect(page.at(-1)).toMatchObject({ title: "词条 099", personIds: ["person-a"], sourceIds: ["source-a"] });
+    expect(statements).toBeLessThanOrEqual(3);
+    database.close();
   });
 });

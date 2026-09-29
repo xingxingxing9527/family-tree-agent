@@ -20,6 +20,8 @@ export interface WikiDraft {
 }
 
 interface WikiRow { id: string; slug: string; title: string; content: string; row_version: number; }
+interface WikiPersonLinkRow { wiki_entry_id: string; person_id: string; }
+interface WikiSourceLinkRow { wiki_entry_id: string; source_id: string; }
 
 const uniqueIds = (ids: string[]): string[] => [...new Set(ids)];
 const slugFor = (title: string): string => {
@@ -74,12 +76,45 @@ export class WikiService {
   get(wikiEntryId: string): WikiEntryDto { return this.read(wikiEntryId); }
 
   list(input: { limit: number; offset: number }): WikiEntryDto[] {
-    const ids = this.database.prepare(`
-      SELECT id FROM wiki_entry
+    const rows = this.database.prepare(`
+      SELECT id, slug, title, content, row_version FROM wiki_entry
       WHERE workspace_id = ? AND deleted_at IS NULL
       ORDER BY title, id LIMIT ? OFFSET ?
-    `).pluck().all(this.workspaceId, input.limit, input.offset) as string[];
-    return ids.map((id) => this.read(id));
+    `).all(this.workspaceId, input.limit, input.offset) as WikiRow[];
+    if (rows.length === 0) return [];
+    const placeholders = rows.map(() => "?").join(", ");
+    const ids = rows.map((row) => row.id);
+    const personLinks = this.database.prepare(`
+      SELECT wiki_entry_id, person_id FROM wiki_person
+      WHERE workspace_id = ? AND deleted_at IS NULL AND wiki_entry_id IN (${placeholders})
+      ORDER BY wiki_entry_id, sort_order, id
+    `).all(this.workspaceId, ...ids) as WikiPersonLinkRow[];
+    const sourceLinks = this.database.prepare(`
+      SELECT wiki_entry_id, source_id FROM wiki_source
+      WHERE workspace_id = ? AND deleted_at IS NULL AND wiki_entry_id IN (${placeholders})
+      ORDER BY wiki_entry_id, sort_order, id
+    `).all(this.workspaceId, ...ids) as WikiSourceLinkRow[];
+    const peopleByEntry = new Map<string, string[]>();
+    for (const link of personLinks) {
+      const linked = peopleByEntry.get(link.wiki_entry_id) ?? [];
+      linked.push(link.person_id);
+      peopleByEntry.set(link.wiki_entry_id, linked);
+    }
+    const sourcesByEntry = new Map<string, string[]>();
+    for (const link of sourceLinks) {
+      const linked = sourcesByEntry.get(link.wiki_entry_id) ?? [];
+      linked.push(link.source_id);
+      sourcesByEntry.set(link.wiki_entry_id, linked);
+    }
+    return rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      body: row.content,
+      personIds: peopleByEntry.get(row.id) ?? [],
+      sourceIds: sourcesByEntry.get(row.id) ?? [],
+      rowVersion: row.row_version
+    }));
   }
 
   private read(id: string): WikiEntryDto {

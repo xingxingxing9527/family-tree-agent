@@ -38,7 +38,7 @@ label {
   padding: 0.65rem 0.75rem;
   color: var(--text-primary);
   background: var(--surface);
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--control-border);
   border-radius: 0.45rem;
   font: inherit;
 }
@@ -78,7 +78,7 @@ textarea.field-control { min-height: 6rem; resize: vertical; }
 
 .primary-button { color: #ffffff; background: var(--accent); }
 .secondary-button { color: var(--accent); background: var(--surface); }
-.button:disabled { cursor: wait; opacity: 0.75; }
+.button:disabled { cursor: wait; opacity: 1; }
 
 .error-banner,
 .warning-banner {
@@ -210,4 +210,11 @@ dd { margin: 0.25rem 0 0; color: var(--text-primary); }
   .people-list { position: static; }
   .detail-wide { grid-column: auto; }
   .workspace-create { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .people-shell { min-width: 0; margin: 0; padding: 0; }
+  .page-header, .section-heading-row { align-items: stretch; }
+  .page-header > *, .section-heading-row > * { min-width: 0; }
+  .date-grid { grid-template-columns: minmax(0, 1fr); }
 }

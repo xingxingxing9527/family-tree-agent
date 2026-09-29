@@ -10,14 +10,17 @@
   --accent: #1f6848;
   --accent-strong: #174d37;
   --warm: #9a4f24;
-  --border: #b8b5a9;
+  --border: #85877f;
+  --control-border: #737d74;
   --focus-ring: 0 0 0 3px #f4f1e8, 0 0 0 6px #1f6848;
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; }
-body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--text-primary); background: #f4f1e8; }
-button, input, select, textarea { font: inherit; }
+html { min-width: 0; }
+body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text-primary); background: #f4f1e8; }
+button, input, select, textarea { max-width: 100%; font: inherit; border-color: var(--control-border); }
+button:disabled, input:disabled, select:disabled, textarea:disabled { color: var(--text-secondary); background-color: #e5e4de; border-color: var(--control-border); opacity: 1; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 button, a { touch-action: manipulation; }
 a { color: #175b42; }
 h1, h2, h3 { line-height: 1.2; color: var(--text-primary); }
@@ -37,6 +40,11 @@ p { color: var(--text-secondary); line-height: 1.6; }
 .danger-button { color: #fff; background: #a12a2a; border-color: #a12a2a; }
 .modal-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgb(23 32 25 / 68%); }
 .confirmation-dialog { width: min(560px, 100%); max-height: calc(100vh - 2rem); overflow: auto; padding: 1.5rem; color: var(--text-primary); background: var(--surface); border-radius: 14px; }
+
+@media (max-width: 420px) {
+  .home-page, .state-page, .fatal-error { width: min(100% - 1rem, 1120px); padding-top: 0.75rem; }
+  p, li, code, output, strong, span { overflow-wrap: anywhere; }
+}
 
 @media (prefers-reduced-motion: no-preference) {
   button, a { transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, transform 120ms ease; }

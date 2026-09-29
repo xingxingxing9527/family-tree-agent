@@ -20,6 +20,7 @@ import type { OpenWorkspaceContextProvider } from "../application/facts/facts-ga
 import { QUERY_TOOL_SCHEMAS, QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 import { projectWorkspaceTree, readWorkspaceSnapshot } from "../application/query/workspace-projection.js";
+import { WorkspacePeopleLimitError, WORKSPACE_PEOPLE_LIMIT_MESSAGE } from "../database/workspace-people-limit.js";
 
 export const QUERY_CHANNELS = {
   workspaceSnapshot: "query:workspace-snapshot",
@@ -97,6 +98,7 @@ export class WorkspaceQueryGateway implements QueryGateway {
       return { ok: true, value: operation(database, context.workspaceId) };
     } catch (error) {
       if (error instanceof QueryNotFoundError) return failure("NOT_FOUND", "Requested record was not found");
+      if (error instanceof WorkspacePeopleLimitError) return failure("VALIDATION", WORKSPACE_PEOPLE_LIMIT_MESSAGE, { code: error.code });
       if (error instanceof ZodError) return failure("VALIDATION", "Invalid request");
       return failure("INTERNAL", "Unable to complete query request");
     } finally {

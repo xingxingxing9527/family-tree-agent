@@ -1,9 +1,13 @@
 import React, { useCallback, useEffect, useState, type JSX } from "react";
 import type { AuditOperationGroupDto, DataManagementApi } from "../../../../shared/contracts";
 
-export interface AuditHistoryProps { api: DataManagementApi; }
+export interface AuditHistoryProps {
+  api: DataManagementApi;
+  refreshToken?: number;
+  onMutationComplete?(): void | Promise<void>;
+}
 
-export function AuditHistory({ api }: AuditHistoryProps): JSX.Element {
+export function AuditHistory({ api, refreshToken, onMutationComplete }: AuditHistoryProps): JSX.Element {
   const [groups, setGroups] = useState<AuditOperationGroupDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -17,13 +21,18 @@ export function AuditHistory({ api }: AuditHistoryProps): JSX.Element {
     } catch { setError("无法读取操作历史"); }
   }, [api]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshToken]);
   const undo = async (operationGroupId: string): Promise<void> => {
     setBusyId(operationGroupId);
     try {
       const result = await api.undoOperationGroup({ operationGroupId });
       if (!result.ok) setError(result.error.message);
-      else { setPendingUndo(null); setConfirmed(false); await load(); }
+      else {
+        setPendingUndo(null);
+        setConfirmed(false);
+        if (onMutationComplete) await onMutationComplete();
+        else await load();
+      }
     } catch { setError("无法撤销操作，请稍后重试。"); }
     finally { setBusyId(null); }
   };

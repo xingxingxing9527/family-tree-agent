@@ -12,6 +12,7 @@ interface PeoplePageProps {
   api: DesktopApi;
   initialSelectedPersonId?: string | null;
   onDataChanged?(): void;
+  onMutationComplete?(): void | Promise<void>;
   onSelectedPersonChange?(personId: string | null): void;
 }
 
@@ -29,7 +30,7 @@ function draftFromDetail(detail: PersonDetailReadModel): PersonDraft {
   };
 }
 
-export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onDataChanged = noop, onSelectedPersonChange = noop }: PeoplePageProps): JSX.Element {
+export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onDataChanged = noop, onMutationComplete, onSelectedPersonChange = noop }: PeoplePageProps): JSX.Element {
   const [people, setPeople] = useState<PersonListItem[]>([]);
   const [selected, setSelected] = useState<PersonDetailReadModel | null>(null);
   const [editing, setEditing] = useState(false);
@@ -129,7 +130,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
           {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} onSaved={relationsChanged} />}
-          <MergeHistory api={api.merges} />
+          <MergeHistory api={api.merges} onMutationComplete={onMutationComplete} />
         </div>
       </div>
     </section>
