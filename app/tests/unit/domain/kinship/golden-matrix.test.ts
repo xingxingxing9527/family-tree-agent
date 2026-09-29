@@ -153,20 +153,16 @@ function dateRange(date: GoldenCase["people"][number]["birth"]): { start: number
 function semanticAgeOrder(
   left: GoldenCase["people"][number]["birth"],
   right: GoldenCase["people"][number]["birth"]
-): "older" | "younger" | "equal" | "unknown" {
+): "older" | "younger" | "unknown" {
   const leftRange = dateRange(left);
   const rightRange = dateRange(right);
   if (!leftRange || !rightRange) return "unknown";
-  if (leftRange.end < rightRange.start) return "older";
-  if (leftRange.start > rightRange.end) return "younger";
-  if (leftRange.start === rightRange.start && leftRange.end === rightRange.end) return "equal";
+  if (rightRange.end < leftRange.start) return "older";
+  if (rightRange.start > leftRange.end) return "younger";
   return "unknown";
 }
 
-function selectedCorePaths(
-  testCase: GoldenCase,
-  allowBlockedFormerMarriage = false
-): Array<{ people: string[]; edges: CoreEdge[] }> {
+function selectedCorePaths(testCase: GoldenCase): Array<{ people: string[]; edges: CoreEdge[] }> {
   const edges: CoreEdge[] = [
     ...testCase.parentChild.map((fact, index) => ({
       key: `p${index}`,
@@ -204,8 +200,7 @@ function selectedCorePaths(
       const next = edge.left === personId ? edge.right : edge.left;
       if (visitedPeople.has(next)) continue;
       if (
-        !allowBlockedFormerMarriage
-        && edge.kind === "marriage"
+        edge.kind === "marriage"
         && edge.status === "divorced"
         && (path.length > 0 || next !== testCase.target)
       ) continue;
@@ -223,42 +218,173 @@ function selectedCorePaths(
   return shortest.filter((path) => rank(path) === bestRank);
 }
 
-function canonicalCaseKey(testCase: GoldenCase): string {
-  const byId = new Map(testCase.people.map((person) => [person.id, person]));
-  const describePerson = (id: string, pathPeople: readonly string[]) => {
-      const person = byId.get(id)!;
-      return {
-        gender: person.gender,
-        marriageStatuses: testCase.marriages
-          .filter((fact) => fact.spouseAId === id || fact.spouseBId === id)
-          .map((fact) => fact.status)
-          .sort(),
-        birth: person.birth ? {
-          calendar: person.birth.calendar,
-          precision: person.birth.precision,
-          ...(person.birth.calendar === "lunar" ? { leapMonth: person.birth.leapMonth } : {}),
-          relativeTo: pathPeople.map((otherId) => semanticAgeOrder(person.birth, byId.get(otherId)!.birth))
-        } : null
-      };
-  };
-  const validPaths = selectedCorePaths(testCase);
-  const selectedPaths = validPaths.length > 0 ? validPaths : selectedCorePaths(testCase, true);
-  if (selectedPaths.length === 0) {
-    const endpoints = [testCase.viewpoint, testCase.target];
-    return JSON.stringify({ noPath: endpoints.map((id) => describePerson(id, endpoints)) });
+type CoreStep =
+  | "father" | "mother" | "son" | "daughter" | "child"
+  | "olderBrother" | "youngerBrother" | "brother"
+  | "olderSister" | "youngerSister" | "sister"
+  | "husband" | "wife" | "spouse"
+  | "formerHusband" | "formerWife" | "formerSpouse";
+
+function directedCoreStep(testCase: GoldenCase, edge: CoreEdge, fromId: string, toId: string): CoreStep {
+  const targetGender = testCase.people.find(({ id }) => id === toId)!.gender;
+  if (edge.kind === "parentChild") {
+    if (fromId === edge.childId) return edge.parentRole!;
+    if (targetGender === "male") return "son";
+    if (targetGender === "female") return "daughter";
+    return "child";
   }
-  const descriptors = selectedPaths.map((path) => ({
-    people: path.people.map((id) => describePerson(id, path.people)),
-    relations: path.edges.map((edge, index) => edge.kind === "parentChild" ? {
-      kind: edge.kind,
-      direction: path.people[index] === edge.parentId ? "parentToChild" : "childToParent",
-      parentRole: edge.parentRole
-    } : {
-      kind: edge.kind,
-      status: edge.status
-    })
-  })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
-  return JSON.stringify(descriptors);
+  const former = edge.status === "divorced";
+  if (targetGender === "male") return former ? "formerHusband" : "husband";
+  if (targetGender === "female") return former ? "formerWife" : "wife";
+  return former ? "formerSpouse" : "spouse";
+}
+
+const coreParentSteps = new Set<CoreStep>(["father", "mother"]);
+const coreChildSteps = new Set<CoreStep>(["son", "daughter", "child"]);
+const coreSpouseSteps = new Set<CoreStep>([
+  "husband", "wife", "spouse", "formerHusband", "formerWife", "formerSpouse"
+]);
+
+function normalizedCoreSteps(
+  testCase: GoldenCase,
+  path: { people: string[]; edges: CoreEdge[] }
+): CoreStep[] {
+  const byId = new Map(testCase.people.map((person) => [person.id, person]));
+  const directed = path.edges.map((edge, index) => directedCoreStep(
+    testCase,
+    edge,
+    path.people[index]!,
+    path.people[index + 1]!
+  ));
+  const output: CoreStep[] = [];
+  let index = 0;
+  while (index < path.edges.length) {
+    const edge = path.edges[index]!;
+    const next = path.edges[index + 1];
+    if (
+      next
+      && edge.kind === "parentChild"
+      && next.kind === "parentChild"
+      && coreParentSteps.has(directed[index]!)
+      && coreChildSteps.has(directed[index + 1]!)
+    ) {
+      const siblingSource = byId.get(path.people[index]!)!;
+      const siblingTarget = byId.get(path.people[index + 2]!)!;
+      const hasDescendantStepAfterSibling = index > 0 && index + 2 < path.edges.length;
+      const age = hasDescendantStepAfterSibling
+        ? "unknown"
+        : semanticAgeOrder(siblingSource.birth, siblingTarget.birth);
+      if (siblingTarget.gender === "female") {
+        output.push(age === "older" ? "olderSister" : age === "younger" ? "youngerSister" : "sister");
+      } else {
+        output.push(age === "older" ? "olderBrother" : age === "younger" ? "youngerBrother" : "brother");
+      }
+      index += 2;
+      continue;
+    }
+    output.push(directed[index]!);
+    index += 1;
+  }
+  return output;
+}
+
+function independentSignature(
+  testCase: GoldenCase,
+  path: { people: string[]; edges: CoreEdge[] }
+) {
+  const byId = new Map(testCase.people.map((person) => [person.id, person]));
+  const steps = normalizedCoreSteps(testCase, path);
+  const generationDelta = steps.reduce((total, step) => {
+    if (coreParentSteps.has(step)) return total - 1;
+    if (coreChildSteps.has(step)) return total + 1;
+    return total;
+  }, 0);
+  const firstAncestor = steps.find((step) => coreParentSteps.has(step));
+  const lineageSide = steps.some((step) => coreSpouseSteps.has(step))
+    ? "affinity"
+    : firstAncestor === "father"
+      ? "paternal"
+      : firstAncestor === "mother"
+        ? "maternal"
+        : steps.length === 0 || steps.some((step) => (
+          coreChildSteps.has(step)
+          || step.includes("Brother")
+          || step.includes("Sister")
+          || step === "brother"
+          || step === "sister"
+        )) ? "self" : "unknown";
+  const viewpoint = byId.get(testCase.viewpoint)!;
+  const target = byId.get(testCase.target)!;
+  return {
+    steps,
+    generationDelta,
+    lineageSide,
+    bloodAffinity: path.edges.some((edge) => edge.status === "divorced")
+      ? "directFormerSpouse"
+      : path.edges.some((edge) => edge.kind === "marriage")
+        ? "currentAffinity"
+        : "blood",
+    viewpointGender: viewpoint.gender,
+    targetGender: target.gender,
+    relativeAgeOrder: semanticAgeOrder(viewpoint.birth, target.birth)
+  };
+}
+
+function canonicalCaseKey(testCase: GoldenCase): string {
+  const selectedPaths = selectedCorePaths(testCase);
+  if (selectedPaths.length === 0) {
+    const byId = new Map(testCase.people.map((person) => [person.id, person]));
+    return JSON.stringify({
+      signatures: [{
+        steps: [],
+        generationDelta: 0,
+        lineageSide: "unknown",
+        bloodAffinity: "blood",
+        viewpointGender: byId.get(testCase.viewpoint)!.gender,
+        targetGender: byId.get(testCase.target)!.gender,
+        relativeAgeOrder: "unknown"
+      }]
+    });
+  }
+  const signatures = selectedPaths
+    .map((path) => independentSignature(testCase, path))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return JSON.stringify({ signatures });
+}
+
+function productionInputSignatureKey(testCase: GoldenCase): string {
+  const result = calculateRelationship({
+    people: testCase.people,
+    parentChild: testCase.parentChild,
+    marriages: testCase.marriages
+  }, testCase.viewpoint, testCase.target);
+  const project = (signature: typeof result.signature) => ({
+    steps: signature.steps,
+    generationDelta: signature.generationDelta,
+    lineageSide: signature.lineageSide,
+    bloodAffinity: signature.bloodAffinity,
+    viewpointGender: signature.viewpointGender,
+    targetGender: signature.targetGender,
+    relativeAgeOrder: signature.relativeAgeOrder
+  });
+  const signatures = [result.signature, ...result.alternatives.map((alternative) => alternative.signature)]
+    .map(project)
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return JSON.stringify({
+    signatures
+  });
+}
+
+function duplicateKeyGroups(keyOf: (testCase: GoldenCase) => string): string {
+  const byKey = new Map<string, string[]>();
+  for (const testCase of fixture.cases) {
+    const key = keyOf(testCase);
+    byKey.set(key, [...(byKey.get(key) ?? []), testCase.id]);
+  }
+  return [...byKey.values()]
+    .filter((ids) => ids.length > 1)
+    .map((ids) => ids.join(" / "))
+    .join("\n");
 }
 
 function applyCompletion(testCase: GoldenCase): GoldenCase {
@@ -310,6 +436,16 @@ describe("kinship golden matrix v1", () => {
       new Set(fixture.cases.map(canonicalCaseKey)).size,
       "all input-only relationship cores remain unique after ID/order/date-marker/conflict/oracle normalization"
     ).toBe(300);
+    expect(
+      new Set(fixture.cases.map(productionInputSignatureKey)).size,
+      `production input signatures must be unique:\n${duplicateKeyGroups(productionInputSignatureKey)}`
+    ).toBe(300);
+    for (const testCase of fixture.cases) {
+      expect(
+        canonicalCaseKey(testCase),
+        `${testCase.id}: independent canonicalizer must exactly match the production-consumed signature input`
+      ).toBe(productionInputSignatureKey(testCase));
+    }
 
     for (const [category, count] of Object.entries(categoryCounts)) {
       const cases = fixture.cases.filter((testCase) => testCase.category === category);
@@ -319,17 +455,41 @@ describe("kinship golden matrix v1", () => {
       );
     }
 
-    for (const testCase of fixture.cases.filter((entry) => entry.coverage === "missingInformation")) {
+    const missingInformationCases = fixture.cases.filter((entry) => entry.coverage === "missingInformation");
+    expect(missingInformationCases, "one explicit completed counterpart per missing-information case").toHaveLength(100);
+    for (const testCase of missingInformationCases) {
       expect(testCase.missingInformation?.missingFact, `${testCase.id}: missing fact`).toBeTruthy();
       expect(testCase.missingInformation?.conservativeResult, `${testCase.id}: conservative result`).toBeTruthy();
       expect(testCase.missingInformation?.completion, `${testCase.id}: static one-fact completed counterpart`).toBeDefined();
     }
     for (const testCase of fixture.cases) {
+      const personIds = new Set(testCase.people.map((person) => person.id));
+      const endpointPairs = [
+        ...testCase.parentChild.map((fact) => `parentChild:${[fact.parentId, fact.childId].sort().join(":")}`),
+        ...testCase.marriages.map((fact) => `marriage:${[fact.spouseAId, fact.spouseBId].sort().join(":")}`)
+      ];
       const semanticEdges = [
         ...testCase.parentChild.map((fact) => `parentChild:${fact.parentId}:${fact.childId}:${fact.parentRole}`),
         ...testCase.marriages.map((fact) => `marriage:${[fact.spouseAId, fact.spouseBId].sort().join(":")}:${fact.status}`)
       ];
       expect(new Set(semanticEdges).size, `${testCase.id}: no duplicate relationship edges`).toBe(semanticEdges.length);
+      expect(new Set(endpointPairs).size, `${testCase.id}: no duplicate endpoint-pair relationships`).toBe(endpointPairs.length);
+      for (const fact of testCase.parentChild) {
+        expect(personIds.has(fact.parentId), `${testCase.id}: parent endpoint exists`).toBe(true);
+        expect(personIds.has(fact.childId), `${testCase.id}: child endpoint exists`).toBe(true);
+        expect(fact.parentId, `${testCase.id}: parent-child edge is not a self-loop`).not.toBe(fact.childId);
+        const parentGender = testCase.people.find(({ id }) => id === fact.parentId)!.gender;
+        if (parentGender !== "unknown") {
+          expect(parentGender, `${testCase.id}: known parent gender agrees with parent role`).toBe(
+            fact.parentRole === "father" ? "male" : "female"
+          );
+        }
+      }
+      for (const fact of testCase.marriages) {
+        expect(personIds.has(fact.spouseAId), `${testCase.id}: spouse A endpoint exists`).toBe(true);
+        expect(personIds.has(fact.spouseBId), `${testCase.id}: spouse B endpoint exists`).toBe(true);
+        expect(fact.spouseAId, `${testCase.id}: marriage edge is not a self-loop`).not.toBe(fact.spouseBId);
+      }
     }
   });
 
@@ -374,9 +534,93 @@ describe("kinship golden matrix v1", () => {
       parentRole: "mother"
     });
 
+    expect(productionInputSignatureKey(renamed)).toBe(productionInputSignatureKey(original));
     expect(canonicalCaseKey(renamed)).toBe(canonicalCaseKey(original));
     renamed.people.find(({ id }) => id === personIds.get(original.target))!.gender = "female";
+    expect(productionInputSignatureKey(renamed)).not.toBe(productionInputSignatureKey(original));
     expect(canonicalCaseKey(renamed)).not.toBe(canonicalCaseKey(original));
+  });
+
+  it("normalizes every date and off-path marriage detail ignored by production signatures", () => {
+    const original = fixture.cases.find(({ id }) => id === "direct-forward-01")!;
+    const lunarMetadata = structuredClone(original);
+    const lunarTarget = lunarMetadata.people.find(({ id }) => id === lunarMetadata.target)!;
+    lunarTarget.birth = {
+      calendar: "lunar",
+      year: 2099,
+      month: 12,
+      day: 8,
+      leapMonth: false,
+      precision: "day"
+    };
+    const nullBirth = structuredClone(original);
+    nullBirth.people.find(({ id }) => id === nullBirth.target)!.birth = null;
+
+    expect(productionInputSignatureKey(lunarMetadata)).toBe(productionInputSignatureKey(nullBirth));
+    expect(canonicalCaseKey(lunarMetadata)).toBe(canonicalCaseKey(nullBirth));
+
+    const changedLunarMarkers = structuredClone(lunarMetadata);
+    changedLunarMarkers.people.find(({ id }) => id === changedLunarMarkers.target)!.birth = {
+      calendar: "lunar",
+      year: 1800,
+      month: 1,
+      day: null,
+      leapMonth: true,
+      precision: "month"
+    };
+    expect(productionInputSignatureKey(changedLunarMarkers)).toBe(productionInputSignatureKey(lunarMetadata));
+    expect(canonicalCaseKey(changedLunarMarkers)).toBe(canonicalCaseKey(lunarMetadata));
+
+    const equalSolar = structuredClone(nullBirth);
+    equalSolar.people.find(({ id }) => id === equalSolar.viewpoint)!.birth = {
+      calendar: "solar", year: 2000, month: 6, day: 15, leapMonth: false, precision: "day"
+    };
+    equalSolar.people.find(({ id }) => id === equalSolar.target)!.birth = {
+      calendar: "solar", year: 2000, month: 6, day: 15, leapMonth: false, precision: "day"
+    };
+    const overlappingSolar = structuredClone(equalSolar);
+    overlappingSolar.people.find(({ id }) => id === overlappingSolar.viewpoint)!.birth = {
+      calendar: "solar", year: 2000, month: 6, day: null, leapMonth: true, precision: "month"
+    };
+
+    expect(productionInputSignatureKey(equalSolar)).toBe(productionInputSignatureKey(overlappingSolar));
+    expect(canonicalCaseKey(equalSolar)).toBe(canonicalCaseKey(overlappingSolar));
+
+    const changedSolarMarkers = structuredClone(overlappingSolar);
+    changedSolarMarkers.people.find(({ id }) => id === changedSolarMarkers.viewpoint)!.birth = {
+      calendar: "solar", year: 2000, month: 6, day: 15, leapMonth: true, precision: "month"
+    };
+    expect(productionInputSignatureKey(changedSolarMarkers)).toBe(productionInputSignatureKey(equalSolar));
+    expect(canonicalCaseKey(changedSolarMarkers)).toBe(canonicalCaseKey(equalSolar));
+
+    const withOffPathMarriage = (status: "active" | "divorced"): GoldenCase => {
+      const changed = structuredClone(nullBirth);
+      changed.people.push({ id: `off-path-${status}`, gender: "female", birth: null });
+      changed.marriages.push({
+        id: `off-path-marriage-${status}`,
+        spouseAId: changed.target,
+        spouseBId: `off-path-${status}`,
+        status
+      });
+      return changed;
+    };
+    for (const changed of [withOffPathMarriage("active"), withOffPathMarriage("divorced")]) {
+      expect(productionInputSignatureKey(changed)).toBe(productionInputSignatureKey(nullBirth));
+      expect(canonicalCaseKey(changed)).toBe(canonicalCaseKey(nullBirth));
+    }
+    expect(productionInputSignatureKey(withOffPathMarriage("active"))).toBe(
+      productionInputSignatureKey(withOffPathMarriage("divorced"))
+    );
+    expect(canonicalCaseKey(withOffPathMarriage("active"))).toBe(
+      canonicalCaseKey(withOffPathMarriage("divorced"))
+    );
+
+    const nonOverlappingSolar = structuredClone(equalSolar);
+    nonOverlappingSolar.people.find(({ id }) => id === nonOverlappingSolar.target)!.birth = {
+      calendar: "solar", year: 1990, month: 6, day: 15, leapMonth: false, precision: "day"
+    };
+    expect(productionInputSignatureKey(nonOverlappingSolar)).not.toBe(productionInputSignatureKey(equalSolar));
+    expect(canonicalCaseKey(nonOverlappingSolar)).not.toBe(canonicalCaseKey(equalSolar));
   });
 
   it("proves every missing-information oracle with an exact one-fact completed counterpart", () => {

@@ -249,19 +249,26 @@
       "people": [
         {
           "id": "direct-forward-06-person-child",
-          "gender": "unknown",
-          "birth": null
+          "gender": "female",
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-forward-06-person-parent",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1605,
+            "calendar": "solar",
+            "year": 1970,
             "month": 6,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
@@ -278,7 +285,7 @@
       "target": "direct-forward-06-person-parent",
       "expected": {
         "primaryTerm": "母亲",
-        "reverseTerm": "子女",
+        "reverseTerm": "女儿",
         "uncertainty": [],
         "pathPersonIds": [
           "direct-forward-06-person-child",
@@ -442,18 +449,25 @@
         {
           "id": "direct-forward-10-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-forward-10-person-b",
           "gender": "unknown",
           "birth": {
-            "calendar": "lunar",
-            "year": 1609,
-            "month": 10,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -729,19 +743,26 @@
       "people": [
         {
           "id": "direct-reverse-06-person-child",
-          "gender": "unknown",
-          "birth": null
+          "gender": "female",
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-reverse-06-person-parent",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1615,
-            "month": 4,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
@@ -757,7 +778,7 @@
       "viewpoint": "direct-reverse-06-person-parent",
       "target": "direct-reverse-06-person-child",
       "expected": {
-        "primaryTerm": "子女",
+        "primaryTerm": "女儿",
         "reverseTerm": "母亲",
         "uncertainty": [],
         "pathPersonIds": [
@@ -778,18 +799,25 @@
         {
           "id": "direct-reverse-07-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-reverse-07-person-b",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1616,
-            "month": 5,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -826,18 +854,25 @@
         {
           "id": "direct-reverse-08-person-a",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-reverse-08-person-b",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1617,
+            "calendar": "solar",
+            "year": 2000,
             "month": 6,
-            "day": null,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -970,12 +1005,26 @@
         {
           "id": "direct-missing-01-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-01-person-target",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -1035,12 +1084,26 @@
         {
           "id": "direct-missing-02-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-02-person-target",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -1100,12 +1163,26 @@
         {
           "id": "direct-missing-03-person-source",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-03-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -1165,12 +1242,26 @@
         {
           "id": "direct-missing-04-person-source",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-04-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -1230,12 +1321,26 @@
         {
           "id": "direct-missing-05-person-source",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-05-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [],
@@ -1295,12 +1400,26 @@
         {
           "id": "direct-missing-06-person-source",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-06-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [],
@@ -1360,12 +1479,26 @@
         {
           "id": "direct-missing-07-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-07-person-target",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [],
@@ -1425,12 +1558,26 @@
         {
           "id": "direct-missing-08-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-08-person-target",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [],
@@ -1490,12 +1637,26 @@
         {
           "id": "direct-missing-09-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "direct-missing-09-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [],
@@ -2840,7 +3001,14 @@
         {
           "id": "ancestor-descendant-missing-01-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "ancestor-descendant-missing-01-person-middle",
@@ -2850,7 +3018,14 @@
         {
           "id": "ancestor-descendant-missing-01-person-target",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -3080,7 +3255,14 @@
         {
           "id": "ancestor-descendant-missing-04-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "ancestor-descendant-missing-04-person-middle",
@@ -3090,7 +3272,14 @@
         {
           "id": "ancestor-descendant-missing-04-person-target",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -3160,7 +3349,14 @@
         {
           "id": "ancestor-descendant-missing-05-person-source",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "ancestor-descendant-missing-05-person-middle",
@@ -3170,7 +3366,14 @@
         {
           "id": "ancestor-descendant-missing-05-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -3400,7 +3603,14 @@
         {
           "id": "ancestor-descendant-missing-08-person-source",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "ancestor-descendant-missing-08-person-middle",
@@ -3410,7 +3620,14 @@
         {
           "id": "ancestor-descendant-missing-08-person-target",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -4191,7 +4408,7 @@
         },
         {
           "id": "siblings-forward-07-person-b",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -4266,7 +4483,7 @@
         },
         {
           "id": "siblings-forward-08-person-b",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -4307,7 +4524,7 @@
       "viewpoint": "siblings-forward-08-person-a",
       "target": "siblings-forward-08-person-b",
       "expected": {
-        "primaryTerm": "妹妹",
+        "primaryTerm": "弟弟",
         "reverseTerm": "姐姐",
         "uncertainty": [],
         "pathPersonIds": [
@@ -4407,9 +4624,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -4419,9 +4636,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -4457,8 +4674,8 @@
       "viewpoint": "siblings-reverse-02-person-b",
       "target": "siblings-reverse-02-person-a",
       "expected": {
-        "primaryTerm": "哥哥",
-        "reverseTerm": "妹妹",
+        "primaryTerm": "弟弟",
+        "reverseTerm": "姐姐",
         "uncertainty": [],
         "pathPersonIds": [
           "siblings-reverse-02-person-b",
@@ -4482,9 +4699,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -4494,9 +4711,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -4532,8 +4749,8 @@
       "viewpoint": "siblings-reverse-03-person-b",
       "target": "siblings-reverse-03-person-a",
       "expected": {
-        "primaryTerm": "妹妹",
-        "reverseTerm": "哥哥",
+        "primaryTerm": "姐姐",
+        "reverseTerm": "弟弟",
         "uncertainty": [],
         "pathPersonIds": [
           "siblings-reverse-03-person-b",
@@ -4791,7 +5008,7 @@
         },
         {
           "id": "siblings-reverse-07-person-b",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -4833,7 +5050,7 @@
       "target": "siblings-reverse-07-person-a",
       "expected": {
         "primaryTerm": "弟弟",
-        "reverseTerm": "哥哥",
+        "reverseTerm": "兄姐",
         "uncertainty": [],
         "pathPersonIds": [
           "siblings-reverse-07-person-b",
@@ -4866,7 +5083,7 @@
         },
         {
           "id": "siblings-reverse-08-person-b",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -4908,7 +5125,7 @@
       "target": "siblings-reverse-08-person-a",
       "expected": {
         "primaryTerm": "姐姐",
-        "reverseTerm": "妹妹",
+        "reverseTerm": "弟妹",
         "uncertainty": [],
         "pathPersonIds": [
           "siblings-reverse-08-person-b",
@@ -5559,7 +5776,7 @@
         },
         {
           "id": "siblings-missing-07-person-b",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -5593,8 +5810,8 @@
       "viewpoint": "siblings-missing-07-person-a",
       "target": "siblings-missing-07-person-b",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": "兄弟姐妹",
+        "reverseTerm": "兄弟姐妹",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -5611,7 +5828,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 siblings-missing-07-person-b 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "兄弟 / 兄弟；保留长幼不确定性",
+        "conservativeResult": "兄弟姐妹 / 兄弟姐妹（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -5662,7 +5879,7 @@
         },
         {
           "id": "siblings-missing-08-person-b",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -5696,8 +5913,8 @@
       "viewpoint": "siblings-missing-08-person-a",
       "target": "siblings-missing-08-person-b",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": "兄弟姐妹",
+        "reverseTerm": "兄弟姐妹",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -5714,7 +5931,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 siblings-missing-08-person-b 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姐妹 / 姐妹；保留长幼不确定性",
+        "conservativeResult": "兄弟姐妹 / 兄弟姐妹（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -5729,7 +5946,7 @@
             }
           },
           "expected": {
-            "primaryTerm": "姐姐",
+            "primaryTerm": "哥哥",
             "reverseTerm": "妹妹",
             "uncertainty": [],
             "pathPersonIds": [
@@ -6347,7 +6564,7 @@
         },
         {
           "id": "paternal-collateral-forward-07-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -6442,7 +6659,7 @@
         },
         {
           "id": "paternal-collateral-forward-08-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -6513,7 +6730,7 @@
       "people": [
         {
           "id": "paternal-collateral-forward-09-person-child",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1995,
@@ -6585,7 +6802,7 @@
       "target": "paternal-collateral-forward-09-person-relative",
       "expected": {
         "primaryTerm": "姑母",
-        "reverseTerm": "侄子",
+        "reverseTerm": "侄辈",
         "uncertainty": [],
         "pathPersonIds": [
           "paternal-collateral-forward-09-person-child",
@@ -6632,7 +6849,7 @@
         },
         {
           "id": "paternal-collateral-forward-10-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -6727,7 +6944,7 @@
         },
         {
           "id": "paternal-collateral-forward-11-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -6798,7 +7015,7 @@
       "people": [
         {
           "id": "paternal-collateral-forward-12-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1996,
@@ -6822,7 +7039,7 @@
         },
         {
           "id": "paternal-collateral-forward-12-person-relative",
-          "gender": "female",
+          "gender": "male",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -6869,8 +7086,8 @@
       "viewpoint": "paternal-collateral-forward-12-person-child",
       "target": "paternal-collateral-forward-12-person-relative",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄女",
+        "primaryTerm": "叔父",
+        "reverseTerm": "侄辈",
         "uncertainty": [],
         "pathPersonIds": [
           "paternal-collateral-forward-12-person-child",
@@ -7396,7 +7613,7 @@
         },
         {
           "id": "paternal-collateral-reverse-07-person-relative",
-          "gender": "male",
+          "gender": "female",
           "birth": {
             "calendar": "solar",
             "year": 1960,
@@ -7437,7 +7654,7 @@
       "target": "paternal-collateral-reverse-07-person-child",
       "expected": {
         "primaryTerm": "侄子",
-        "reverseTerm": "伯父",
+        "reverseTerm": "姑母",
         "uncertainty": [],
         "pathPersonIds": [
           "paternal-collateral-reverse-07-person-relative",
@@ -7460,7 +7677,7 @@
       "people": [
         {
           "id": "paternal-collateral-reverse-08-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -7517,9 +7734,11 @@
       "viewpoint": "paternal-collateral-reverse-08-person-relative",
       "target": "paternal-collateral-reverse-08-person-child",
       "expected": {
-        "primaryTerm": "侄女",
-        "reverseTerm": "叔叔",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "称谓规则尚未覆盖"
+        ],
         "pathPersonIds": [
           "paternal-collateral-reverse-08-person-relative",
           "paternal-collateral-reverse-08-person-grand",
@@ -7542,7 +7761,14 @@
         {
           "id": "paternal-collateral-reverse-09-person-child",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-reverse-09-person-father",
@@ -7561,9 +7787,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -7623,7 +7849,14 @@
         {
           "id": "paternal-collateral-reverse-10-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-reverse-10-person-father",
@@ -7642,9 +7875,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1960,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -7704,7 +7937,14 @@
         {
           "id": "paternal-collateral-reverse-11-person-child",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-reverse-11-person-father",
@@ -7723,9 +7963,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -7785,7 +8025,14 @@
         {
           "id": "paternal-collateral-reverse-12-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-reverse-12-person-father",
@@ -7804,9 +8051,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -8236,7 +8483,7 @@
         },
         {
           "id": "paternal-collateral-missing-04-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -8354,7 +8601,7 @@
         },
         {
           "id": "paternal-collateral-missing-05-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -8574,7 +8821,14 @@
         {
           "id": "paternal-collateral-missing-07-person-child",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-missing-07-person-father",
@@ -8586,11 +8840,11 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": null,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         },
         {
@@ -8632,9 +8886,7 @@
       "expected": {
         "primaryTerm": "伯叔父",
         "reverseTerm": "侄子",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "uncertainty": [],
         "pathPersonIds": [
           "paternal-collateral-missing-07-person-child",
           "paternal-collateral-missing-07-person-father",
@@ -8650,7 +8902,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-07-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "伯叔父 / 侄子；保留长幼不确定性",
+        "conservativeResult": "伯叔父 / 侄子",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -8692,7 +8944,14 @@
         {
           "id": "paternal-collateral-missing-08-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-missing-08-person-father",
@@ -8704,9 +8963,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -8750,9 +9009,7 @@
       "expected": {
         "primaryTerm": "伯叔父",
         "reverseTerm": "侄女",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "uncertainty": [],
         "pathPersonIds": [
           "paternal-collateral-missing-08-person-child",
           "paternal-collateral-missing-08-person-father",
@@ -8768,7 +9025,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-08-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "伯叔父 / 侄女；保留长幼不确定性",
+        "conservativeResult": "伯叔父 / 侄女",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -8809,7 +9066,7 @@
       "people": [
         {
           "id": "paternal-collateral-missing-09-person-child",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -8867,7 +9124,7 @@
       "target": "paternal-collateral-missing-09-person-relative",
       "expected": {
         "primaryTerm": "姑母",
-        "reverseTerm": "侄子",
+        "reverseTerm": "侄辈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -8886,7 +9143,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-09-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姑母 / 侄子；保留长幼不确定性",
+        "conservativeResult": "姑母 / 侄辈（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -8902,7 +9159,7 @@
           },
           "expected": {
             "primaryTerm": "姑母",
-            "reverseTerm": "侄子",
+            "reverseTerm": "侄辈",
             "uncertainty": [],
             "pathPersonIds": [
               "paternal-collateral-missing-09-person-child",
@@ -8928,7 +9185,14 @@
         {
           "id": "paternal-collateral-missing-10-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-missing-10-person-father",
@@ -8940,9 +9204,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -8981,30 +9245,28 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "paternal-collateral-missing-10-person-child",
-      "target": "paternal-collateral-missing-10-person-relative",
+      "viewpoint": "paternal-collateral-missing-10-person-relative",
+      "target": "paternal-collateral-missing-10-person-child",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄女",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "primaryTerm": "侄女",
+        "reverseTerm": "伯叔父",
+        "uncertainty": [],
         "pathPersonIds": [
-          "paternal-collateral-missing-10-person-child",
-          "paternal-collateral-missing-10-person-father",
+          "paternal-collateral-missing-10-person-relative",
           "paternal-collateral-missing-10-person-grand",
-          "paternal-collateral-missing-10-person-relative"
+          "paternal-collateral-missing-10-person-father",
+          "paternal-collateral-missing-10-person-child"
         ],
         "pathRelationIds": [
-          "paternal-collateral-missing-10-relation-r1",
+          "paternal-collateral-missing-10-relation-r3",
           "paternal-collateral-missing-10-relation-r2",
-          "paternal-collateral-missing-10-relation-r3"
+          "paternal-collateral-missing-10-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-10-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "伯叔父 / 侄女；保留长幼不确定性",
+        "conservativeResult": "侄女 / 伯叔父",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -9019,19 +9281,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "伯父",
-            "reverseTerm": "侄女",
+            "primaryTerm": "侄女",
+            "reverseTerm": "伯父",
             "uncertainty": [],
             "pathPersonIds": [
-              "paternal-collateral-missing-10-person-child",
-              "paternal-collateral-missing-10-person-father",
+              "paternal-collateral-missing-10-person-relative",
               "paternal-collateral-missing-10-person-grand",
-              "paternal-collateral-missing-10-person-relative"
+              "paternal-collateral-missing-10-person-father",
+              "paternal-collateral-missing-10-person-child"
             ],
             "pathRelationIds": [
-              "paternal-collateral-missing-10-relation-r1",
+              "paternal-collateral-missing-10-relation-r3",
               "paternal-collateral-missing-10-relation-r2",
-              "paternal-collateral-missing-10-relation-r3"
+              "paternal-collateral-missing-10-relation-r1"
             ],
             "alternatives": []
           }
@@ -9046,7 +9308,14 @@
         {
           "id": "paternal-collateral-missing-11-person-child",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "paternal-collateral-missing-11-person-father",
@@ -9058,9 +9327,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -9099,30 +9368,28 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "paternal-collateral-missing-11-person-child",
-      "target": "paternal-collateral-missing-11-person-relative",
+      "viewpoint": "paternal-collateral-missing-11-person-relative",
+      "target": "paternal-collateral-missing-11-person-child",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "primaryTerm": "侄子",
+        "reverseTerm": "伯叔父",
+        "uncertainty": [],
         "pathPersonIds": [
-          "paternal-collateral-missing-11-person-child",
-          "paternal-collateral-missing-11-person-father",
+          "paternal-collateral-missing-11-person-relative",
           "paternal-collateral-missing-11-person-grand",
-          "paternal-collateral-missing-11-person-relative"
+          "paternal-collateral-missing-11-person-father",
+          "paternal-collateral-missing-11-person-child"
         ],
         "pathRelationIds": [
-          "paternal-collateral-missing-11-relation-r1",
+          "paternal-collateral-missing-11-relation-r3",
           "paternal-collateral-missing-11-relation-r2",
-          "paternal-collateral-missing-11-relation-r3"
+          "paternal-collateral-missing-11-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-11-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "伯叔父 / 侄子；保留长幼不确定性",
+        "conservativeResult": "侄子 / 伯叔父",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -9137,19 +9404,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "伯父",
-            "reverseTerm": "侄子",
+            "primaryTerm": "侄子",
+            "reverseTerm": "伯父",
             "uncertainty": [],
             "pathPersonIds": [
-              "paternal-collateral-missing-11-person-child",
-              "paternal-collateral-missing-11-person-father",
+              "paternal-collateral-missing-11-person-relative",
               "paternal-collateral-missing-11-person-grand",
-              "paternal-collateral-missing-11-person-relative"
+              "paternal-collateral-missing-11-person-father",
+              "paternal-collateral-missing-11-person-child"
             ],
             "pathRelationIds": [
-              "paternal-collateral-missing-11-relation-r1",
+              "paternal-collateral-missing-11-relation-r3",
               "paternal-collateral-missing-11-relation-r2",
-              "paternal-collateral-missing-11-relation-r3"
+              "paternal-collateral-missing-11-relation-r1"
             ],
             "alternatives": []
           }
@@ -9217,30 +9484,30 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "paternal-collateral-missing-12-person-child",
-      "target": "paternal-collateral-missing-12-person-relative",
+      "viewpoint": "paternal-collateral-missing-12-person-relative",
+      "target": "paternal-collateral-missing-12-person-child",
       "expected": {
-        "primaryTerm": "姑母",
-        "reverseTerm": "侄女",
+        "primaryTerm": "侄女",
+        "reverseTerm": "姑母",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
-          "paternal-collateral-missing-12-person-child",
-          "paternal-collateral-missing-12-person-father",
+          "paternal-collateral-missing-12-person-relative",
           "paternal-collateral-missing-12-person-grand",
-          "paternal-collateral-missing-12-person-relative"
+          "paternal-collateral-missing-12-person-father",
+          "paternal-collateral-missing-12-person-child"
         ],
         "pathRelationIds": [
-          "paternal-collateral-missing-12-relation-r1",
+          "paternal-collateral-missing-12-relation-r3",
           "paternal-collateral-missing-12-relation-r2",
-          "paternal-collateral-missing-12-relation-r3"
+          "paternal-collateral-missing-12-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 paternal-collateral-missing-12-person-father 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姑母 / 侄女；保留长幼不确定性",
+        "conservativeResult": "侄女 / 姑母（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -9255,19 +9522,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "姑母",
-            "reverseTerm": "侄女",
+            "primaryTerm": "侄女",
+            "reverseTerm": "姑母",
             "uncertainty": [],
             "pathPersonIds": [
-              "paternal-collateral-missing-12-person-child",
-              "paternal-collateral-missing-12-person-father",
+              "paternal-collateral-missing-12-person-relative",
               "paternal-collateral-missing-12-person-grand",
-              "paternal-collateral-missing-12-person-relative"
+              "paternal-collateral-missing-12-person-father",
+              "paternal-collateral-missing-12-person-child"
             ],
             "pathRelationIds": [
-              "paternal-collateral-missing-12-relation-r1",
+              "paternal-collateral-missing-12-relation-r3",
               "paternal-collateral-missing-12-relation-r2",
-              "paternal-collateral-missing-12-relation-r3"
+              "paternal-collateral-missing-12-relation-r1"
             ],
             "alternatives": []
           }
@@ -9756,7 +10023,7 @@
       "people": [
         {
           "id": "maternal-collateral-forward-06-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1996,
@@ -9828,7 +10095,7 @@
       "target": "maternal-collateral-forward-06-person-relative",
       "expected": {
         "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "reverseTerm": "外甥辈",
         "uncertainty": [],
         "pathPersonIds": [
           "maternal-collateral-forward-06-person-child",
@@ -10065,7 +10332,7 @@
         },
         {
           "id": "maternal-collateral-forward-09-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -10255,7 +10522,7 @@
         },
         {
           "id": "maternal-collateral-forward-11-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -10326,7 +10593,7 @@
       "people": [
         {
           "id": "maternal-collateral-forward-12-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1996,
@@ -10398,7 +10665,7 @@
       "target": "maternal-collateral-forward-12-person-relative",
       "expected": {
         "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "reverseTerm": "外甥辈",
         "uncertainty": [],
         "pathPersonIds": [
           "maternal-collateral-forward-12-person-child",
@@ -10827,7 +11094,14 @@
         {
           "id": "maternal-collateral-reverse-06-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "maternal-collateral-reverse-06-person-mother",
@@ -10846,9 +11120,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1960,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -11077,7 +11351,14 @@
         {
           "id": "maternal-collateral-reverse-09-person-child",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "maternal-collateral-reverse-09-person-mother",
@@ -11096,9 +11377,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1960,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -11245,7 +11526,7 @@
       "people": [
         {
           "id": "maternal-collateral-reverse-11-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -11309,9 +11590,11 @@
       "viewpoint": "maternal-collateral-reverse-11-person-relative",
       "target": "maternal-collateral-reverse-11-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "舅舅",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "称谓规则尚未覆盖"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-11-person-relative",
           "maternal-collateral-reverse-11-person-grand",
@@ -11333,7 +11616,7 @@
       "people": [
         {
           "id": "maternal-collateral-reverse-12-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -11397,9 +11680,11 @@
       "viewpoint": "maternal-collateral-reverse-12-person-relative",
       "target": "maternal-collateral-reverse-12-person-child",
       "expected": {
-        "primaryTerm": "外甥女",
-        "reverseTerm": "姨妈",
-        "uncertainty": [],
+        "primaryTerm": null,
+        "reverseTerm": null,
+        "uncertainty": [
+          "称谓规则尚未覆盖"
+        ],
         "pathPersonIds": [
           "maternal-collateral-reverse-12-person-relative",
           "maternal-collateral-reverse-12-person-grand",
@@ -11910,7 +12195,7 @@
         },
         {
           "id": "maternal-collateral-missing-05-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -12011,7 +12296,7 @@
       "people": [
         {
           "id": "maternal-collateral-missing-06-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -12069,7 +12354,7 @@
       "target": "maternal-collateral-missing-06-person-relative",
       "expected": {
         "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "reverseTerm": "外甥辈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -12088,7 +12373,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-06-person-relative 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姨妈 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "姨妈 / 外甥辈（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12104,7 +12389,7 @@
           },
           "expected": {
             "primaryTerm": "姨妈",
-            "reverseTerm": "外甥女",
+            "reverseTerm": "外甥辈",
             "uncertainty": [],
             "pathPersonIds": [
               "maternal-collateral-missing-06-person-child",
@@ -12139,7 +12424,7 @@
         },
         {
           "id": "maternal-collateral-missing-07-person-relative",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -12247,7 +12532,7 @@
       "people": [
         {
           "id": "maternal-collateral-missing-08-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -12257,7 +12542,7 @@
         },
         {
           "id": "maternal-collateral-missing-08-person-relative",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -12304,8 +12589,8 @@
       "viewpoint": "maternal-collateral-missing-08-person-child",
       "target": "maternal-collateral-missing-08-person-relative",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": "舅舅",
+        "reverseTerm": "外甥辈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -12324,7 +12609,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-08-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姨妈 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "舅舅 / 外甥辈（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12339,8 +12624,8 @@
             }
           },
           "expected": {
-            "primaryTerm": "姨妈",
-            "reverseTerm": "外甥女",
+            "primaryTerm": "舅舅",
+            "reverseTerm": "外甥辈",
             "uncertainty": [],
             "pathPersonIds": [
               "maternal-collateral-missing-08-person-child",
@@ -12365,7 +12650,7 @@
       "people": [
         {
           "id": "maternal-collateral-missing-09-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -12423,7 +12708,7 @@
       "target": "maternal-collateral-missing-09-person-relative",
       "expected": {
         "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
+        "reverseTerm": "外甥辈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -12442,7 +12727,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-09-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "舅舅 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "舅舅 / 外甥辈（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12458,7 +12743,7 @@
           },
           "expected": {
             "primaryTerm": "舅舅",
-            "reverseTerm": "外甥女",
+            "reverseTerm": "外甥辈",
             "uncertainty": [],
             "pathPersonIds": [
               "maternal-collateral-missing-09-person-child",
@@ -12493,7 +12778,7 @@
         },
         {
           "id": "maternal-collateral-missing-10-person-relative",
-          "gender": "female",
+          "gender": "male",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -12537,30 +12822,30 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "maternal-collateral-missing-10-person-child",
-      "target": "maternal-collateral-missing-10-person-relative",
+      "viewpoint": "maternal-collateral-missing-10-person-relative",
+      "target": "maternal-collateral-missing-10-person-child",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥",
+        "primaryTerm": "外甥",
+        "reverseTerm": "舅舅",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
-          "maternal-collateral-missing-10-person-child",
-          "maternal-collateral-missing-10-person-mother",
+          "maternal-collateral-missing-10-person-relative",
           "maternal-collateral-missing-10-person-grand",
-          "maternal-collateral-missing-10-person-relative"
+          "maternal-collateral-missing-10-person-mother",
+          "maternal-collateral-missing-10-person-child"
         ],
         "pathRelationIds": [
-          "maternal-collateral-missing-10-relation-r1",
+          "maternal-collateral-missing-10-relation-r3",
           "maternal-collateral-missing-10-relation-r2",
-          "maternal-collateral-missing-10-relation-r3"
+          "maternal-collateral-missing-10-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-10-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姨妈 / 外甥；保留长幼不确定性",
+        "conservativeResult": "外甥 / 舅舅（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12575,19 +12860,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "姨妈",
-            "reverseTerm": "外甥",
+            "primaryTerm": "外甥",
+            "reverseTerm": "舅舅",
             "uncertainty": [],
             "pathPersonIds": [
-              "maternal-collateral-missing-10-person-child",
-              "maternal-collateral-missing-10-person-mother",
+              "maternal-collateral-missing-10-person-relative",
               "maternal-collateral-missing-10-person-grand",
-              "maternal-collateral-missing-10-person-relative"
+              "maternal-collateral-missing-10-person-mother",
+              "maternal-collateral-missing-10-person-child"
             ],
             "pathRelationIds": [
-              "maternal-collateral-missing-10-relation-r1",
+              "maternal-collateral-missing-10-relation-r3",
               "maternal-collateral-missing-10-relation-r2",
-              "maternal-collateral-missing-10-relation-r3"
+              "maternal-collateral-missing-10-relation-r1"
             ],
             "alternatives": []
           }
@@ -12655,30 +12940,30 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "maternal-collateral-missing-11-person-child",
-      "target": "maternal-collateral-missing-11-person-relative",
+      "viewpoint": "maternal-collateral-missing-11-person-relative",
+      "target": "maternal-collateral-missing-11-person-child",
       "expected": {
-        "primaryTerm": "舅舅",
-        "reverseTerm": "外甥女",
+        "primaryTerm": "外甥女",
+        "reverseTerm": "舅舅",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
-          "maternal-collateral-missing-11-person-child",
-          "maternal-collateral-missing-11-person-mother",
+          "maternal-collateral-missing-11-person-relative",
           "maternal-collateral-missing-11-person-grand",
-          "maternal-collateral-missing-11-person-relative"
+          "maternal-collateral-missing-11-person-mother",
+          "maternal-collateral-missing-11-person-child"
         ],
         "pathRelationIds": [
-          "maternal-collateral-missing-11-relation-r1",
+          "maternal-collateral-missing-11-relation-r3",
           "maternal-collateral-missing-11-relation-r2",
-          "maternal-collateral-missing-11-relation-r3"
+          "maternal-collateral-missing-11-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-11-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "舅舅 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "外甥女 / 舅舅（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12693,19 +12978,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "舅舅",
-            "reverseTerm": "外甥女",
+            "primaryTerm": "外甥女",
+            "reverseTerm": "舅舅",
             "uncertainty": [],
             "pathPersonIds": [
-              "maternal-collateral-missing-11-person-child",
-              "maternal-collateral-missing-11-person-mother",
+              "maternal-collateral-missing-11-person-relative",
               "maternal-collateral-missing-11-person-grand",
-              "maternal-collateral-missing-11-person-relative"
+              "maternal-collateral-missing-11-person-mother",
+              "maternal-collateral-missing-11-person-child"
             ],
             "pathRelationIds": [
-              "maternal-collateral-missing-11-relation-r1",
+              "maternal-collateral-missing-11-relation-r3",
               "maternal-collateral-missing-11-relation-r2",
-              "maternal-collateral-missing-11-relation-r3"
+              "maternal-collateral-missing-11-relation-r1"
             ],
             "alternatives": []
           }
@@ -12719,7 +13004,7 @@
       "people": [
         {
           "id": "maternal-collateral-missing-12-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -12729,7 +13014,7 @@
         },
         {
           "id": "maternal-collateral-missing-12-person-relative",
-          "gender": "female",
+          "gender": "male",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -12773,30 +13058,31 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "maternal-collateral-missing-12-person-child",
-      "target": "maternal-collateral-missing-12-person-relative",
+      "viewpoint": "maternal-collateral-missing-12-person-relative",
+      "target": "maternal-collateral-missing-12-person-child",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "缺少可靠出生日期，未推断长幼顺序",
+          "称谓规则尚未覆盖"
         ],
         "pathPersonIds": [
-          "maternal-collateral-missing-12-person-child",
-          "maternal-collateral-missing-12-person-mother",
+          "maternal-collateral-missing-12-person-relative",
           "maternal-collateral-missing-12-person-grand",
-          "maternal-collateral-missing-12-person-relative"
+          "maternal-collateral-missing-12-person-mother",
+          "maternal-collateral-missing-12-person-child"
         ],
         "pathRelationIds": [
-          "maternal-collateral-missing-12-relation-r1",
+          "maternal-collateral-missing-12-relation-r3",
           "maternal-collateral-missing-12-relation-r2",
-          "maternal-collateral-missing-12-relation-r3"
+          "maternal-collateral-missing-12-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-12-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姨妈 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -12811,19 +13097,21 @@
             }
           },
           "expected": {
-            "primaryTerm": "姨妈",
-            "reverseTerm": "外甥女",
-            "uncertainty": [],
+            "primaryTerm": null,
+            "reverseTerm": null,
+            "uncertainty": [
+              "称谓规则尚未覆盖"
+            ],
             "pathPersonIds": [
-              "maternal-collateral-missing-12-person-child",
-              "maternal-collateral-missing-12-person-mother",
+              "maternal-collateral-missing-12-person-relative",
               "maternal-collateral-missing-12-person-grand",
-              "maternal-collateral-missing-12-person-relative"
+              "maternal-collateral-missing-12-person-mother",
+              "maternal-collateral-missing-12-person-child"
             ],
             "pathRelationIds": [
-              "maternal-collateral-missing-12-relation-r1",
+              "maternal-collateral-missing-12-relation-r3",
               "maternal-collateral-missing-12-relation-r2",
-              "maternal-collateral-missing-12-relation-r3"
+              "maternal-collateral-missing-12-relation-r1"
             ],
             "alternatives": []
           }
@@ -14229,7 +14517,7 @@
         },
         {
           "id": "cousins-forward-13-person-b",
-          "gender": "male",
+          "gender": "female",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -14306,7 +14594,7 @@
       "viewpoint": "cousins-forward-13-person-a",
       "target": "cousins-forward-13-person-b",
       "expected": {
-        "primaryTerm": "堂哥",
+        "primaryTerm": "堂姐",
         "reverseTerm": "堂弟",
         "uncertainty": [],
         "pathPersonIds": [
@@ -14335,9 +14623,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -14347,9 +14635,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -14421,8 +14709,8 @@
       "viewpoint": "cousins-forward-14-person-a",
       "target": "cousins-forward-14-person-b",
       "expected": {
-        "primaryTerm": "表妹",
-        "reverseTerm": "表姐",
+        "primaryTerm": "表姐",
+        "reverseTerm": "表妹",
         "uncertainty": [],
         "pathPersonIds": [
           "cousins-forward-14-person-a",
@@ -15485,9 +15773,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -15497,9 +15785,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -15571,8 +15859,8 @@
       "viewpoint": "cousins-reverse-10-person-b",
       "target": "cousins-reverse-10-person-a",
       "expected": {
-        "primaryTerm": "表哥",
-        "reverseTerm": "表妹",
+        "primaryTerm": "表弟",
+        "reverseTerm": "表姐",
         "uncertainty": [],
         "pathPersonIds": [
           "cousins-reverse-10-person-b",
@@ -15600,9 +15888,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -15612,9 +15900,9 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -15686,8 +15974,8 @@
       "viewpoint": "cousins-reverse-11-person-b",
       "target": "cousins-reverse-11-person-a",
       "expected": {
-        "primaryTerm": "表妹",
-        "reverseTerm": "表哥",
+        "primaryTerm": "表姐",
+        "reverseTerm": "表弟",
         "uncertainty": [],
         "pathPersonIds": [
           "cousins-reverse-11-person-b",
@@ -15839,7 +16127,7 @@
         },
         {
           "id": "cousins-reverse-13-person-b",
-          "gender": "male",
+          "gender": "female",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -15917,7 +16205,7 @@
       "target": "cousins-reverse-13-person-a",
       "expected": {
         "primaryTerm": "堂弟",
-        "reverseTerm": "堂哥",
+        "reverseTerm": "堂姐",
         "uncertainty": [],
         "pathPersonIds": [
           "cousins-reverse-13-person-b",
@@ -15943,26 +16231,12 @@
         {
           "id": "cousins-reverse-14-person-a",
           "gender": "female",
-          "birth": {
-            "calendar": "solar",
-            "year": 1970,
-            "month": 1,
-            "day": 1,
-            "leapMonth": false,
-            "precision": "day"
-          }
+          "birth": null
         },
         {
           "id": "cousins-reverse-14-person-b",
           "gender": "female",
-          "birth": {
-            "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
-            "leapMonth": false,
-            "precision": "day"
-          }
+          "birth": null
         },
         {
           "id": "cousins-reverse-14-person-p",
@@ -16031,9 +16305,11 @@
       "viewpoint": "cousins-reverse-14-person-b",
       "target": "cousins-reverse-14-person-a",
       "expected": {
-        "primaryTerm": "表姐",
-        "reverseTerm": "表妹",
-        "uncertainty": [],
+        "primaryTerm": "表姐妹",
+        "reverseTerm": "表姐妹",
+        "uncertainty": [
+          "缺少可靠出生日期，未推断长幼顺序"
+        ],
         "pathPersonIds": [
           "cousins-reverse-14-person-b",
           "cousins-reverse-14-person-u",
@@ -17821,7 +18097,7 @@
       "people": [
         {
           "id": "cousins-missing-13-person-a",
-          "gender": "male",
+          "gender": "female",
           "birth": null
         },
         {
@@ -17980,7 +18256,7 @@
         },
         {
           "id": "cousins-missing-14-person-b",
-          "gender": "female",
+          "gender": "male",
           "birth": null
         },
         {
@@ -18050,7 +18326,7 @@
       "viewpoint": "cousins-missing-14-person-a",
       "target": "cousins-missing-14-person-b",
       "expected": {
-        "primaryTerm": "表姐妹",
+        "primaryTerm": "表兄弟",
         "reverseTerm": "表姐妹",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
@@ -18072,7 +18348,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 cousins-missing-14-person-b 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "表姐妹 / 表姐妹；保留长幼不确定性",
+        "conservativeResult": "表兄弟 / 表姐妹（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -18087,7 +18363,7 @@
             }
           },
           "expected": {
-            "primaryTerm": "表姐",
+            "primaryTerm": "表哥",
             "reverseTerm": "表妹",
             "uncertainty": [],
             "pathPersonIds": [
@@ -18968,7 +19244,14 @@
         {
           "id": "current-affinity-reverse-01-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-01-person-spouse",
@@ -18979,12 +19262,12 @@
           "id": "current-affinity-reverse-01-person-parent",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1810,
-            "month": 7,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
@@ -19154,7 +19437,14 @@
         {
           "id": "current-affinity-reverse-04-person-a",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-04-person-spouse",
@@ -19165,12 +19455,12 @@
           "id": "current-affinity-reverse-04-person-parent",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1813,
-            "month": 10,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -19278,7 +19568,14 @@
         {
           "id": "current-affinity-reverse-06-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-06-person-spouse",
@@ -19289,12 +19586,12 @@
           "id": "current-affinity-reverse-06-person-parent",
           "gender": "unknown",
           "birth": {
-            "calendar": "lunar",
-            "year": 1815,
-            "month": 12,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
@@ -19402,7 +19699,14 @@
         {
           "id": "current-affinity-reverse-08-person-a",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-08-person-spouse",
@@ -19413,12 +19717,12 @@
           "id": "current-affinity-reverse-08-person-parent",
           "gender": "unknown",
           "birth": {
-            "calendar": "lunar",
-            "year": 1817,
-            "month": 2,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -19464,7 +19768,14 @@
         {
           "id": "current-affinity-reverse-09-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-09-person-child",
@@ -19475,12 +19786,12 @@
           "id": "current-affinity-reverse-09-person-spouse",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1818,
-            "month": 3,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -19526,7 +19837,14 @@
         {
           "id": "current-affinity-reverse-10-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-reverse-10-person-child",
@@ -19537,12 +19855,12 @@
           "id": "current-affinity-reverse-10-person-spouse",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1819,
-            "month": 4,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -19793,7 +20111,14 @@
         {
           "id": "current-affinity-missing-02-person-source",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-missing-02-person-spouse",
@@ -19803,7 +20128,14 @@
         {
           "id": "current-affinity-missing-02-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -19874,7 +20206,14 @@
         {
           "id": "current-affinity-missing-03-person-source",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-missing-03-person-spouse",
@@ -19884,7 +20223,14 @@
         {
           "id": "current-affinity-missing-03-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -20036,7 +20382,14 @@
         {
           "id": "current-affinity-missing-05-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-missing-05-person-spouse",
@@ -20046,7 +20399,14 @@
         {
           "id": "current-affinity-missing-05-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -20117,7 +20477,14 @@
         {
           "id": "current-affinity-missing-06-person-source",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "current-affinity-missing-06-person-spouse",
@@ -20127,7 +20494,14 @@
         {
           "id": "current-affinity-missing-06-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         }
       ],
       "parentChild": [
@@ -20851,7 +21225,14 @@
         {
           "id": "divorce-remarriage-forward-04-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-forward-04-person-former",
@@ -20862,12 +21243,12 @@
           "id": "divorce-remarriage-forward-04-person-current",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1837,
-            "month": 10,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -20916,48 +21297,29 @@
           "id": "divorce-remarriage-forward-05-person-parent",
           "gender": "male",
           "birth": null
-        },
-        {
-          "id": "divorce-remarriage-forward-05-person-other",
-          "gender": "female",
-          "birth": {
-            "calendar": "lunar",
-            "year": 1838,
-            "month": 11,
-            "day": null,
-            "leapMonth": false,
-            "precision": "month"
-          }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-forward-05-relation-r1",
-          "parentId": "divorce-remarriage-forward-05-person-parent",
-          "childId": "divorce-remarriage-forward-05-person-child",
-          "parentRole": "father"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-forward-05-relation-m1",
-          "spouseAId": "divorce-remarriage-forward-05-person-parent",
-          "spouseBId": "divorce-remarriage-forward-05-person-other",
+          "spouseAId": "divorce-remarriage-forward-05-person-child",
+          "spouseBId": "divorce-remarriage-forward-05-person-parent",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-forward-05-person-child",
       "target": "divorce-remarriage-forward-05-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "儿子",
+        "primaryTerm": "前夫",
+        "reverseTerm": "前夫",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-forward-05-person-child",
           "divorce-remarriage-forward-05-person-parent"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-forward-05-relation-r1"
+          "divorce-remarriage-forward-05-relation-m1"
         ],
         "alternatives": []
       }
@@ -20976,48 +21338,29 @@
           "id": "divorce-remarriage-forward-06-person-parent",
           "gender": "female",
           "birth": null
-        },
-        {
-          "id": "divorce-remarriage-forward-06-person-other",
-          "gender": "male",
-          "birth": {
-            "calendar": "lunar",
-            "year": 1839,
-            "month": 12,
-            "day": null,
-            "leapMonth": false,
-            "precision": "month"
-          }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-forward-06-relation-r1",
-          "parentId": "divorce-remarriage-forward-06-person-parent",
-          "childId": "divorce-remarriage-forward-06-person-child",
-          "parentRole": "mother"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-forward-06-relation-m1",
-          "spouseAId": "divorce-remarriage-forward-06-person-parent",
-          "spouseBId": "divorce-remarriage-forward-06-person-other",
+          "spouseAId": "divorce-remarriage-forward-06-person-child",
+          "spouseBId": "divorce-remarriage-forward-06-person-parent",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-forward-06-person-child",
       "target": "divorce-remarriage-forward-06-person-parent",
       "expected": {
-        "primaryTerm": "母亲",
-        "reverseTerm": "女儿",
+        "primaryTerm": "前妻",
+        "reverseTerm": "前妻",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-forward-06-person-child",
           "divorce-remarriage-forward-06-person-parent"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-forward-06-relation-r1"
+          "divorce-remarriage-forward-06-relation-m1"
         ],
         "alternatives": []
       }
@@ -21030,18 +21373,25 @@
         {
           "id": "divorce-remarriage-reverse-01-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-reverse-01-person-b",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1840,
-            "month": 1,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
@@ -21078,18 +21428,25 @@
         {
           "id": "divorce-remarriage-reverse-02-person-a",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-reverse-02-person-b",
           "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1841,
-            "month": 2,
-            "day": null,
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -21185,7 +21542,14 @@
         {
           "id": "divorce-remarriage-reverse-04-person-a",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-reverse-04-person-former",
@@ -21196,12 +21560,12 @@
           "id": "divorce-remarriage-reverse-04-person-current",
           "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1843,
-            "month": 4,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -21242,56 +21606,51 @@
       "coverage": "reverse",
       "people": [
         {
-          "id": "divorce-remarriage-reverse-05-person-child",
-          "gender": "male",
-          "birth": null
-        },
-        {
           "id": "divorce-remarriage-reverse-05-person-parent",
           "gender": "male",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
-          "id": "divorce-remarriage-reverse-05-person-other",
-          "gender": "female",
+          "id": "divorce-remarriage-reverse-05-person-child",
+          "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1844,
-            "month": 5,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-reverse-05-relation-r1",
-          "parentId": "divorce-remarriage-reverse-05-person-parent",
-          "childId": "divorce-remarriage-reverse-05-person-child",
-          "parentRole": "father"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-reverse-05-relation-m1",
           "spouseAId": "divorce-remarriage-reverse-05-person-parent",
-          "spouseBId": "divorce-remarriage-reverse-05-person-other",
+          "spouseBId": "divorce-remarriage-reverse-05-person-child",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-reverse-05-person-parent",
       "target": "divorce-remarriage-reverse-05-person-child",
       "expected": {
-        "primaryTerm": "儿子",
-        "reverseTerm": "父亲",
+        "primaryTerm": "前夫",
+        "reverseTerm": "前夫",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-reverse-05-person-parent",
           "divorce-remarriage-reverse-05-person-child"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-reverse-05-relation-r1"
+          "divorce-remarriage-reverse-05-relation-m1"
         ],
         "alternatives": []
       }
@@ -21302,56 +21661,51 @@
       "coverage": "reverse",
       "people": [
         {
-          "id": "divorce-remarriage-reverse-06-person-child",
-          "gender": "female",
-          "birth": null
-        },
-        {
           "id": "divorce-remarriage-reverse-06-person-parent",
           "gender": "female",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
-          "id": "divorce-remarriage-reverse-06-person-other",
-          "gender": "male",
+          "id": "divorce-remarriage-reverse-06-person-child",
+          "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1845,
+            "calendar": "solar",
+            "year": 1970,
             "month": 6,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-reverse-06-relation-r1",
-          "parentId": "divorce-remarriage-reverse-06-person-parent",
-          "childId": "divorce-remarriage-reverse-06-person-child",
-          "parentRole": "mother"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-reverse-06-relation-m1",
           "spouseAId": "divorce-remarriage-reverse-06-person-parent",
-          "spouseBId": "divorce-remarriage-reverse-06-person-other",
+          "spouseBId": "divorce-remarriage-reverse-06-person-child",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-reverse-06-person-parent",
       "target": "divorce-remarriage-reverse-06-person-child",
       "expected": {
-        "primaryTerm": "女儿",
-        "reverseTerm": "母亲",
+        "primaryTerm": "前妻",
+        "reverseTerm": "前妻",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-reverse-06-person-parent",
           "divorce-remarriage-reverse-06-person-child"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-reverse-06-relation-r1"
+          "divorce-remarriage-reverse-06-relation-m1"
         ],
         "alternatives": []
       }
@@ -21573,7 +21927,14 @@
         {
           "id": "divorce-remarriage-missing-04-person-a",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-missing-04-person-former",
@@ -21584,12 +21945,12 @@
           "id": "divorce-remarriage-missing-04-person-current",
           "gender": "unknown",
           "birth": {
-            "calendar": "lunar",
-            "year": 1849,
-            "month": 10,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
@@ -21656,60 +22017,55 @@
         {
           "id": "divorce-remarriage-missing-05-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-missing-05-person-parent",
           "gender": "male",
-          "birth": null
-        },
-        {
-          "id": "divorce-remarriage-missing-05-person-other",
-          "gender": "female",
           "birth": {
-            "calendar": "lunar",
-            "year": 1850,
-            "month": 11,
-            "day": null,
-            "leapMonth": true,
-            "precision": "month"
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
           }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-missing-05-relation-r1",
-          "parentId": "divorce-remarriage-missing-05-person-parent",
-          "childId": "divorce-remarriage-missing-05-person-child",
-          "parentRole": "father"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-missing-05-relation-m1",
-          "spouseAId": "divorce-remarriage-missing-05-person-parent",
-          "spouseBId": "divorce-remarriage-missing-05-person-other",
+          "spouseAId": "divorce-remarriage-missing-05-person-child",
+          "spouseBId": "divorce-remarriage-missing-05-person-parent",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-missing-05-person-child",
       "target": "divorce-remarriage-missing-05-person-parent",
       "expected": {
-        "primaryTerm": "父亲",
-        "reverseTerm": "子女",
+        "primaryTerm": "前夫",
+        "reverseTerm": "前配偶",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-missing-05-person-child",
           "divorce-remarriage-missing-05-person-parent"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-missing-05-relation-r1"
+          "divorce-remarriage-missing-05-relation-m1"
         ],
         "alternatives": []
       },
       "missingInformation": {
-        "missingFact": "人物 divorce-remarriage-missing-05-person-child 缺少性别事实",
-        "conservativeResult": "父亲 / 子女",
+        "missingFact": "人物 divorce-remarriage-missing-05-person-child 缺少前配偶反向称谓所需的性别事实",
+        "conservativeResult": "前夫 / 前配偶",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -21717,15 +22073,15 @@
             "value": "male"
           },
           "expected": {
-            "primaryTerm": "父亲",
-            "reverseTerm": "儿子",
+            "primaryTerm": "前夫",
+            "reverseTerm": "前夫",
             "uncertainty": [],
             "pathPersonIds": [
               "divorce-remarriage-missing-05-person-child",
               "divorce-remarriage-missing-05-person-parent"
             ],
             "pathRelationIds": [
-              "divorce-remarriage-missing-05-relation-r1"
+              "divorce-remarriage-missing-05-relation-m1"
             ],
             "alternatives": []
           }
@@ -21740,60 +22096,55 @@
         {
           "id": "divorce-remarriage-missing-06-person-child",
           "gender": "unknown",
-          "birth": null
+          "birth": {
+            "calendar": "solar",
+            "year": 2000,
+            "month": 6,
+            "day": 15,
+            "leapMonth": false,
+            "precision": "day"
+          }
         },
         {
           "id": "divorce-remarriage-missing-06-person-parent",
           "gender": "female",
-          "birth": null
-        },
-        {
-          "id": "divorce-remarriage-missing-06-person-other",
-          "gender": "male",
           "birth": {
-            "calendar": "lunar",
-            "year": 1851,
-            "month": 12,
-            "day": null,
+            "calendar": "solar",
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         }
       ],
-      "parentChild": [
-        {
-          "id": "divorce-remarriage-missing-06-relation-r1",
-          "parentId": "divorce-remarriage-missing-06-person-parent",
-          "childId": "divorce-remarriage-missing-06-person-child",
-          "parentRole": "mother"
-        }
-      ],
+      "parentChild": [],
       "marriages": [
         {
           "id": "divorce-remarriage-missing-06-relation-m1",
-          "spouseAId": "divorce-remarriage-missing-06-person-parent",
-          "spouseBId": "divorce-remarriage-missing-06-person-other",
+          "spouseAId": "divorce-remarriage-missing-06-person-child",
+          "spouseBId": "divorce-remarriage-missing-06-person-parent",
           "status": "divorced"
         }
       ],
       "viewpoint": "divorce-remarriage-missing-06-person-child",
       "target": "divorce-remarriage-missing-06-person-parent",
       "expected": {
-        "primaryTerm": "母亲",
-        "reverseTerm": "子女",
+        "primaryTerm": "前妻",
+        "reverseTerm": "前配偶",
         "uncertainty": [],
         "pathPersonIds": [
           "divorce-remarriage-missing-06-person-child",
           "divorce-remarriage-missing-06-person-parent"
         ],
         "pathRelationIds": [
-          "divorce-remarriage-missing-06-relation-r1"
+          "divorce-remarriage-missing-06-relation-m1"
         ],
         "alternatives": []
       },
       "missingInformation": {
-        "missingFact": "人物 divorce-remarriage-missing-06-person-child 缺少性别事实",
-        "conservativeResult": "母亲 / 子女",
+        "missingFact": "人物 divorce-remarriage-missing-06-person-child 缺少前配偶反向称谓所需的性别事实",
+        "conservativeResult": "前妻 / 前配偶",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -21801,15 +22152,15 @@
             "value": "female"
           },
           "expected": {
-            "primaryTerm": "母亲",
-            "reverseTerm": "女儿",
+            "primaryTerm": "前妻",
+            "reverseTerm": "前妻",
             "uncertainty": [],
             "pathPersonIds": [
               "divorce-remarriage-missing-06-person-child",
               "divorce-remarriage-missing-06-person-parent"
             ],
             "pathRelationIds": [
-              "divorce-remarriage-missing-06-relation-r1"
+              "divorce-remarriage-missing-06-relation-m1"
             ],
             "alternatives": []
           }
@@ -21849,6 +22200,11 @@
             "leapMonth": false,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-forward-01-person-descendant",
+          "gender": "unknown",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -21863,25 +22219,34 @@
           "parentId": "unknown-age-order-forward-01-person-father",
           "childId": "unknown-age-order-forward-01-person-b",
           "parentRole": "father"
+        },
+        {
+          "id": "unknown-age-order-forward-01-relation-r3",
+          "parentId": "unknown-age-order-forward-01-person-b",
+          "childId": "unknown-age-order-forward-01-person-descendant",
+          "parentRole": "father"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-forward-01-person-a",
-      "target": "unknown-age-order-forward-01-person-b",
+      "target": "unknown-age-order-forward-01-person-descendant",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "缺少可靠出生日期，未推断长幼顺序",
+          "称谓规则尚未覆盖"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-01-person-a",
           "unknown-age-order-forward-01-person-father",
-          "unknown-age-order-forward-01-person-b"
+          "unknown-age-order-forward-01-person-b",
+          "unknown-age-order-forward-01-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-forward-01-relation-r1",
-          "unknown-age-order-forward-01-relation-r2"
+          "unknown-age-order-forward-01-relation-r2",
+          "unknown-age-order-forward-01-relation-r3"
         ],
         "alternatives": []
       }
@@ -21919,6 +22284,11 @@
             "leapMonth": false,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-forward-02-person-descendant",
+          "gender": "male",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -21933,25 +22303,33 @@
           "parentId": "unknown-age-order-forward-02-person-father",
           "childId": "unknown-age-order-forward-02-person-b",
           "parentRole": "father"
+        },
+        {
+          "id": "unknown-age-order-forward-02-relation-r3",
+          "parentId": "unknown-age-order-forward-02-person-b",
+          "childId": "unknown-age-order-forward-02-person-descendant",
+          "parentRole": "mother"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-forward-02-person-a",
-      "target": "unknown-age-order-forward-02-person-b",
+      "target": "unknown-age-order-forward-02-person-descendant",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": "外甥",
+        "reverseTerm": "姨妈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-02-person-a",
           "unknown-age-order-forward-02-person-father",
-          "unknown-age-order-forward-02-person-b"
+          "unknown-age-order-forward-02-person-b",
+          "unknown-age-order-forward-02-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-forward-02-relation-r1",
-          "unknown-age-order-forward-02-relation-r2"
+          "unknown-age-order-forward-02-relation-r2",
+          "unknown-age-order-forward-02-relation-r3"
         ],
         "alternatives": []
       }
@@ -21973,7 +22351,7 @@
         },
         {
           "id": "unknown-age-order-forward-03-person-relative",
-          "gender": "male",
+          "gender": "female",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -22017,24 +22395,24 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-age-order-forward-03-person-child",
-      "target": "unknown-age-order-forward-03-person-relative",
+      "viewpoint": "unknown-age-order-forward-03-person-relative",
+      "target": "unknown-age-order-forward-03-person-child",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": "侄子",
+        "reverseTerm": "姑母",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
-          "unknown-age-order-forward-03-person-child",
-          "unknown-age-order-forward-03-person-father",
+          "unknown-age-order-forward-03-person-relative",
           "unknown-age-order-forward-03-person-grand",
-          "unknown-age-order-forward-03-person-relative"
+          "unknown-age-order-forward-03-person-father",
+          "unknown-age-order-forward-03-person-child"
         ],
         "pathRelationIds": [
-          "unknown-age-order-forward-03-relation-r1",
+          "unknown-age-order-forward-03-relation-r3",
           "unknown-age-order-forward-03-relation-r2",
-          "unknown-age-order-forward-03-relation-r3"
+          "unknown-age-order-forward-03-relation-r1"
         ],
         "alternatives": []
       }
@@ -22046,7 +22424,7 @@
       "people": [
         {
           "id": "unknown-age-order-forward-04-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -22107,24 +22485,25 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-age-order-forward-04-person-child",
-      "target": "unknown-age-order-forward-04-person-relative",
+      "viewpoint": "unknown-age-order-forward-04-person-relative",
+      "target": "unknown-age-order-forward-04-person-child",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "缺少可靠出生日期，未推断长幼顺序",
+          "称谓规则尚未覆盖"
         ],
         "pathPersonIds": [
-          "unknown-age-order-forward-04-person-child",
-          "unknown-age-order-forward-04-person-mother",
+          "unknown-age-order-forward-04-person-relative",
           "unknown-age-order-forward-04-person-grand",
-          "unknown-age-order-forward-04-person-relative"
+          "unknown-age-order-forward-04-person-mother",
+          "unknown-age-order-forward-04-person-child"
         ],
         "pathRelationIds": [
-          "unknown-age-order-forward-04-relation-r1",
+          "unknown-age-order-forward-04-relation-r3",
           "unknown-age-order-forward-04-relation-r2",
-          "unknown-age-order-forward-04-relation-r3"
+          "unknown-age-order-forward-04-relation-r1"
         ],
         "alternatives": []
       }
@@ -22136,12 +22515,12 @@
       "people": [
         {
           "id": "unknown-age-order-forward-05-person-a",
-          "gender": "male",
+          "gender": "female",
           "birth": null
         },
         {
           "id": "unknown-age-order-forward-05-person-b",
-          "gender": "male",
+          "gender": "female",
           "birth": null
         },
         {
@@ -22211,8 +22590,8 @@
       "viewpoint": "unknown-age-order-forward-05-person-a",
       "target": "unknown-age-order-forward-05-person-b",
       "expected": {
-        "primaryTerm": "堂兄弟",
-        "reverseTerm": "堂兄弟",
+        "primaryTerm": "堂姐妹",
+        "reverseTerm": "堂姐妹",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -22244,7 +22623,7 @@
         },
         {
           "id": "unknown-age-order-forward-06-person-b",
-          "gender": "female",
+          "gender": "male",
           "birth": null
         },
         {
@@ -22314,7 +22693,7 @@
       "viewpoint": "unknown-age-order-forward-06-person-a",
       "target": "unknown-age-order-forward-06-person-b",
       "expected": {
-        "primaryTerm": "表姐妹",
+        "primaryTerm": "表兄弟",
         "reverseTerm": "表姐妹",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
@@ -22368,6 +22747,11 @@
             "leapMonth": false,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-reverse-01-person-descendant",
+          "gender": "female",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -22382,25 +22766,33 @@
           "parentId": "unknown-age-order-reverse-01-person-father",
           "childId": "unknown-age-order-reverse-01-person-b",
           "parentRole": "mother"
+        },
+        {
+          "id": "unknown-age-order-reverse-01-relation-r3",
+          "parentId": "unknown-age-order-reverse-01-person-a",
+          "childId": "unknown-age-order-reverse-01-person-descendant",
+          "parentRole": "father"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-reverse-01-person-b",
-      "target": "unknown-age-order-reverse-01-person-a",
+      "target": "unknown-age-order-reverse-01-person-descendant",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": "侄女",
+        "reverseTerm": "伯叔父",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
           "unknown-age-order-reverse-01-person-b",
           "unknown-age-order-reverse-01-person-father",
-          "unknown-age-order-reverse-01-person-a"
+          "unknown-age-order-reverse-01-person-a",
+          "unknown-age-order-reverse-01-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-reverse-01-relation-r2",
-          "unknown-age-order-reverse-01-relation-r1"
+          "unknown-age-order-reverse-01-relation-r1",
+          "unknown-age-order-reverse-01-relation-r3"
         ],
         "alternatives": []
       }
@@ -22417,7 +22809,7 @@
         },
         {
           "id": "unknown-age-order-reverse-02-person-b",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1980,
@@ -22438,6 +22830,11 @@
             "leapMonth": false,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-reverse-02-person-descendant",
+          "gender": "female",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -22452,25 +22849,33 @@
           "parentId": "unknown-age-order-reverse-02-person-father",
           "childId": "unknown-age-order-reverse-02-person-b",
           "parentRole": "mother"
+        },
+        {
+          "id": "unknown-age-order-reverse-02-relation-r3",
+          "parentId": "unknown-age-order-reverse-02-person-a",
+          "childId": "unknown-age-order-reverse-02-person-descendant",
+          "parentRole": "mother"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-reverse-02-person-b",
-      "target": "unknown-age-order-reverse-02-person-a",
+      "target": "unknown-age-order-reverse-02-person-descendant",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": "外甥女",
+        "reverseTerm": "舅姨",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
           "unknown-age-order-reverse-02-person-b",
           "unknown-age-order-reverse-02-person-father",
-          "unknown-age-order-reverse-02-person-a"
+          "unknown-age-order-reverse-02-person-a",
+          "unknown-age-order-reverse-02-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-reverse-02-relation-r2",
-          "unknown-age-order-reverse-02-relation-r1"
+          "unknown-age-order-reverse-02-relation-r1",
+          "unknown-age-order-reverse-02-relation-r3"
         ],
         "alternatives": []
       }
@@ -22627,7 +23032,7 @@
       "people": [
         {
           "id": "unknown-age-order-reverse-05-person-a",
-          "gender": "male",
+          "gender": "female",
           "birth": null
         },
         {
@@ -22702,7 +23107,7 @@
       "viewpoint": "unknown-age-order-reverse-05-person-b",
       "target": "unknown-age-order-reverse-05-person-a",
       "expected": {
-        "primaryTerm": "堂兄弟",
+        "primaryTerm": "堂姐妹",
         "reverseTerm": "堂兄弟",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
@@ -22730,7 +23135,7 @@
       "people": [
         {
           "id": "unknown-age-order-reverse-06-person-a",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -22812,8 +23217,8 @@
       "viewpoint": "unknown-age-order-reverse-06-person-b",
       "target": "unknown-age-order-reverse-06-person-a",
       "expected": {
-        "primaryTerm": "表姐妹",
-        "reverseTerm": "表姐妹",
+        "primaryTerm": "表亲",
+        "reverseTerm": "表亲",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -22840,7 +23245,7 @@
       "people": [
         {
           "id": "unknown-age-order-missing-01-person-a",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -22866,6 +23271,11 @@
             "leapMonth": false,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-missing-01-person-descendant",
+          "gender": "male",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -22880,31 +23290,39 @@
           "parentId": "unknown-age-order-missing-01-person-father",
           "childId": "unknown-age-order-missing-01-person-b",
           "parentRole": "mother"
+        },
+        {
+          "id": "unknown-age-order-missing-01-relation-r3",
+          "parentId": "unknown-age-order-missing-01-person-b",
+          "childId": "unknown-age-order-missing-01-person-descendant",
+          "parentRole": "father"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-missing-01-person-a",
-      "target": "unknown-age-order-missing-01-person-b",
+      "target": "unknown-age-order-missing-01-person-descendant",
       "expected": {
-        "primaryTerm": "兄弟",
-        "reverseTerm": "兄弟",
+        "primaryTerm": "侄子",
+        "reverseTerm": "叔姑",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-01-person-a",
           "unknown-age-order-missing-01-person-father",
-          "unknown-age-order-missing-01-person-b"
+          "unknown-age-order-missing-01-person-b",
+          "unknown-age-order-missing-01-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-missing-01-relation-r1",
-          "unknown-age-order-missing-01-relation-r2"
+          "unknown-age-order-missing-01-relation-r2",
+          "unknown-age-order-missing-01-relation-r3"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-01-person-a 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "兄弟 / 兄弟；保留长幼不确定性",
+        "conservativeResult": "侄子 / 叔姑（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -22919,17 +23337,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "哥哥",
-            "reverseTerm": "弟弟",
+            "primaryTerm": "侄子",
+            "reverseTerm": "叔姑",
             "uncertainty": [],
             "pathPersonIds": [
               "unknown-age-order-missing-01-person-a",
               "unknown-age-order-missing-01-person-father",
-              "unknown-age-order-missing-01-person-b"
+              "unknown-age-order-missing-01-person-b",
+              "unknown-age-order-missing-01-person-descendant"
             ],
             "pathRelationIds": [
               "unknown-age-order-missing-01-relation-r1",
-              "unknown-age-order-missing-01-relation-r2"
+              "unknown-age-order-missing-01-relation-r2",
+              "unknown-age-order-missing-01-relation-r3"
             ],
             "alternatives": []
           }
@@ -22943,7 +23363,7 @@
       "people": [
         {
           "id": "unknown-age-order-missing-02-person-a",
-          "gender": "female",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1990,
@@ -22969,6 +23389,11 @@
             "leapMonth": true,
             "precision": "month"
           }
+        },
+        {
+          "id": "unknown-age-order-missing-02-person-descendant",
+          "gender": "male",
+          "birth": null
         }
       ],
       "parentChild": [
@@ -22983,31 +23408,39 @@
           "parentId": "unknown-age-order-missing-02-person-father",
           "childId": "unknown-age-order-missing-02-person-b",
           "parentRole": "father"
+        },
+        {
+          "id": "unknown-age-order-missing-02-relation-r3",
+          "parentId": "unknown-age-order-missing-02-person-b",
+          "childId": "unknown-age-order-missing-02-person-descendant",
+          "parentRole": "mother"
         }
       ],
       "marriages": [],
       "viewpoint": "unknown-age-order-missing-02-person-a",
-      "target": "unknown-age-order-missing-02-person-b",
+      "target": "unknown-age-order-missing-02-person-descendant",
       "expected": {
-        "primaryTerm": "姐妹",
-        "reverseTerm": "姐妹",
+        "primaryTerm": "外甥",
+        "reverseTerm": "舅姨",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-02-person-a",
           "unknown-age-order-missing-02-person-father",
-          "unknown-age-order-missing-02-person-b"
+          "unknown-age-order-missing-02-person-b",
+          "unknown-age-order-missing-02-person-descendant"
         ],
         "pathRelationIds": [
           "unknown-age-order-missing-02-relation-r1",
-          "unknown-age-order-missing-02-relation-r2"
+          "unknown-age-order-missing-02-relation-r2",
+          "unknown-age-order-missing-02-relation-r3"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-02-person-b 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姐妹 / 姐妹；保留长幼不确定性",
+        "conservativeResult": "外甥 / 舅姨（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23022,17 +23455,19 @@
             }
           },
           "expected": {
-            "primaryTerm": "姐姐",
-            "reverseTerm": "妹妹",
+            "primaryTerm": "外甥",
+            "reverseTerm": "舅姨",
             "uncertainty": [],
             "pathPersonIds": [
               "unknown-age-order-missing-02-person-a",
               "unknown-age-order-missing-02-person-father",
-              "unknown-age-order-missing-02-person-b"
+              "unknown-age-order-missing-02-person-b",
+              "unknown-age-order-missing-02-person-descendant"
             ],
             "pathRelationIds": [
               "unknown-age-order-missing-02-relation-r1",
-              "unknown-age-order-missing-02-relation-r2"
+              "unknown-age-order-missing-02-relation-r2",
+              "unknown-age-order-missing-02-relation-r3"
             ],
             "alternatives": []
           }
@@ -23046,7 +23481,7 @@
       "people": [
         {
           "id": "unknown-age-order-missing-03-person-child",
-          "gender": "male",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -23063,7 +23498,7 @@
         },
         {
           "id": "unknown-age-order-missing-03-person-relative",
-          "gender": "male",
+          "gender": "female",
           "birth": null
         },
         {
@@ -23100,30 +23535,31 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-age-order-missing-03-person-child",
-      "target": "unknown-age-order-missing-03-person-relative",
+      "viewpoint": "unknown-age-order-missing-03-person-relative",
+      "target": "unknown-age-order-missing-03-person-child",
       "expected": {
-        "primaryTerm": "伯叔父",
-        "reverseTerm": "侄子",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "缺少可靠出生日期，未推断长幼顺序",
+          "称谓规则尚未覆盖"
         ],
         "pathPersonIds": [
-          "unknown-age-order-missing-03-person-child",
-          "unknown-age-order-missing-03-person-father",
+          "unknown-age-order-missing-03-person-relative",
           "unknown-age-order-missing-03-person-grand",
-          "unknown-age-order-missing-03-person-relative"
+          "unknown-age-order-missing-03-person-father",
+          "unknown-age-order-missing-03-person-child"
         ],
         "pathRelationIds": [
-          "unknown-age-order-missing-03-relation-r1",
+          "unknown-age-order-missing-03-relation-r3",
           "unknown-age-order-missing-03-relation-r2",
-          "unknown-age-order-missing-03-relation-r3"
+          "unknown-age-order-missing-03-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-03-person-relative 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "伯叔父 / 侄子；保留长幼不确定性",
+        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23138,19 +23574,21 @@
             }
           },
           "expected": {
-            "primaryTerm": "伯父",
-            "reverseTerm": "侄子",
-            "uncertainty": [],
+            "primaryTerm": null,
+            "reverseTerm": null,
+            "uncertainty": [
+              "称谓规则尚未覆盖"
+            ],
             "pathPersonIds": [
-              "unknown-age-order-missing-03-person-child",
-              "unknown-age-order-missing-03-person-father",
+              "unknown-age-order-missing-03-person-relative",
               "unknown-age-order-missing-03-person-grand",
-              "unknown-age-order-missing-03-person-relative"
+              "unknown-age-order-missing-03-person-father",
+              "unknown-age-order-missing-03-person-child"
             ],
             "pathRelationIds": [
-              "unknown-age-order-missing-03-relation-r1",
+              "unknown-age-order-missing-03-relation-r3",
               "unknown-age-order-missing-03-relation-r2",
-              "unknown-age-order-missing-03-relation-r3"
+              "unknown-age-order-missing-03-relation-r1"
             ],
             "alternatives": []
           }
@@ -23164,7 +23602,7 @@
       "people": [
         {
           "id": "unknown-age-order-missing-04-person-child",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -23181,7 +23619,7 @@
         },
         {
           "id": "unknown-age-order-missing-04-person-relative",
-          "gender": "female",
+          "gender": "unknown",
           "birth": null
         },
         {
@@ -23218,30 +23656,31 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-age-order-missing-04-person-child",
-      "target": "unknown-age-order-missing-04-person-relative",
+      "viewpoint": "unknown-age-order-missing-04-person-relative",
+      "target": "unknown-age-order-missing-04-person-child",
       "expected": {
-        "primaryTerm": "姨妈",
-        "reverseTerm": "外甥女",
+        "primaryTerm": null,
+        "reverseTerm": null,
         "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
+          "缺少可靠出生日期，未推断长幼顺序",
+          "称谓规则尚未覆盖"
         ],
         "pathPersonIds": [
-          "unknown-age-order-missing-04-person-child",
-          "unknown-age-order-missing-04-person-mother",
+          "unknown-age-order-missing-04-person-relative",
           "unknown-age-order-missing-04-person-grand",
-          "unknown-age-order-missing-04-person-relative"
+          "unknown-age-order-missing-04-person-mother",
+          "unknown-age-order-missing-04-person-child"
         ],
         "pathRelationIds": [
-          "unknown-age-order-missing-04-relation-r1",
+          "unknown-age-order-missing-04-relation-r3",
           "unknown-age-order-missing-04-relation-r2",
-          "unknown-age-order-missing-04-relation-r3"
+          "unknown-age-order-missing-04-relation-r1"
         ],
         "alternatives": []
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-04-person-relative 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "姨妈 / 外甥女；保留长幼不确定性",
+        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23256,19 +23695,21 @@
             }
           },
           "expected": {
-            "primaryTerm": "姨妈",
-            "reverseTerm": "外甥女",
-            "uncertainty": [],
+            "primaryTerm": null,
+            "reverseTerm": null,
+            "uncertainty": [
+              "称谓规则尚未覆盖"
+            ],
             "pathPersonIds": [
-              "unknown-age-order-missing-04-person-child",
-              "unknown-age-order-missing-04-person-mother",
+              "unknown-age-order-missing-04-person-relative",
               "unknown-age-order-missing-04-person-grand",
-              "unknown-age-order-missing-04-person-relative"
+              "unknown-age-order-missing-04-person-mother",
+              "unknown-age-order-missing-04-person-child"
             ],
             "pathRelationIds": [
-              "unknown-age-order-missing-04-relation-r1",
+              "unknown-age-order-missing-04-relation-r3",
               "unknown-age-order-missing-04-relation-r2",
-              "unknown-age-order-missing-04-relation-r3"
+              "unknown-age-order-missing-04-relation-r1"
             ],
             "alternatives": []
           }
@@ -23429,7 +23870,7 @@
       "people": [
         {
           "id": "unknown-age-order-missing-06-person-a",
-          "gender": "female",
+          "gender": "male",
           "birth": null
         },
         {
@@ -23512,7 +23953,7 @@
       "target": "unknown-age-order-missing-06-person-b",
       "expected": {
         "primaryTerm": "表姐妹",
-        "reverseTerm": "表姐妹",
+        "reverseTerm": "表兄弟",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序"
         ],
@@ -23533,7 +23974,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-06-person-a 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "表姐妹 / 表姐妹；保留长幼不确定性",
+        "conservativeResult": "表姐妹 / 表兄弟（长幼不确定）",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23549,7 +23990,7 @@
           },
           "expected": {
             "primaryTerm": "表姐",
-            "reverseTerm": "表妹",
+            "reverseTerm": "表弟",
             "uncertainty": [],
             "pathPersonIds": [
               "unknown-age-order-missing-06-person-a",
@@ -23943,7 +24384,7 @@
         },
         {
           "id": "unknown-gender-reverse-02-person-b",
-          "gender": "unknown",
+          "gender": "female",
           "birth": {
             "calendar": "lunar",
             "year": 1876,
@@ -23967,7 +24408,7 @@
       "target": "unknown-gender-reverse-02-person-a",
       "expected": {
         "primaryTerm": "配偶",
-        "reverseTerm": "配偶",
+        "reverseTerm": "妻子",
         "uncertainty": [],
         "pathPersonIds": [
           "unknown-gender-reverse-02-person-b",
@@ -24022,21 +24463,17 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-gender-reverse-03-person-b",
-      "target": "unknown-gender-reverse-03-person-a",
+      "viewpoint": "unknown-gender-reverse-03-person-a",
+      "target": "unknown-gender-reverse-03-person-father",
       "expected": {
-        "primaryTerm": "兄弟姐妹",
-        "reverseTerm": "兄弟姐妹",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "primaryTerm": "母亲",
+        "reverseTerm": "子女",
+        "uncertainty": [],
         "pathPersonIds": [
-          "unknown-gender-reverse-03-person-b",
-          "unknown-gender-reverse-03-person-father",
-          "unknown-gender-reverse-03-person-a"
+          "unknown-gender-reverse-03-person-a",
+          "unknown-gender-reverse-03-person-father"
         ],
         "pathRelationIds": [
-          "unknown-gender-reverse-03-relation-r2",
           "unknown-gender-reverse-03-relation-r1"
         ],
         "alternatives": []
@@ -24377,11 +24814,11 @@
         }
       ],
       "marriages": [],
-      "viewpoint": "unknown-gender-missing-03-person-source",
+      "viewpoint": "unknown-gender-missing-03-person-parent",
       "target": "unknown-gender-missing-03-person-target",
       "missingInformation": {
         "missingFact": "人物 unknown-gender-missing-03-person-target 缺少性别事实",
-        "conservativeResult": "兄弟姐妹；长幼仍未知",
+        "conservativeResult": "子女 / 母亲",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -24389,18 +24826,14 @@
             "value": "male"
           },
           "expected": {
-            "primaryTerm": "兄弟",
-            "reverseTerm": "兄弟姐妹",
-            "uncertainty": [
-              "缺少可靠出生日期，未推断长幼顺序"
-            ],
+            "primaryTerm": "儿子",
+            "reverseTerm": "母亲",
+            "uncertainty": [],
             "pathPersonIds": [
-              "unknown-gender-missing-03-person-source",
               "unknown-gender-missing-03-person-parent",
               "unknown-gender-missing-03-person-target"
             ],
             "pathRelationIds": [
-              "unknown-gender-missing-03-relation-r1",
               "unknown-gender-missing-03-relation-r2"
             ],
             "alternatives": []
@@ -24408,18 +24841,14 @@
         }
       },
       "expected": {
-        "primaryTerm": "兄弟姐妹",
-        "reverseTerm": "兄弟姐妹",
-        "uncertainty": [
-          "缺少可靠出生日期，未推断长幼顺序"
-        ],
+        "primaryTerm": "子女",
+        "reverseTerm": "母亲",
+        "uncertainty": [],
         "pathPersonIds": [
-          "unknown-gender-missing-03-person-source",
           "unknown-gender-missing-03-person-parent",
           "unknown-gender-missing-03-person-target"
         ],
         "pathRelationIds": [
-          "unknown-gender-missing-03-relation-r1",
           "unknown-gender-missing-03-relation-r2"
         ],
         "alternatives": []
@@ -25283,7 +25712,7 @@
       "people": [
         {
           "id": "multi-path-reverse-02-person-a",
-          "gender": "male",
+          "gender": "unknown",
           "birth": {
             "calendar": "solar",
             "year": 1970,
@@ -25392,9 +25821,9 @@
           "gender": "female",
           "birth": {
             "calendar": "solar",
-            "year": 1990,
-            "month": 1,
-            "day": 1,
+            "year": 1970,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
             "precision": "day"
           }
@@ -25404,11 +25833,11 @@
           "gender": "male",
           "birth": {
             "calendar": "solar",
-            "year": 1980,
-            "month": 1,
-            "day": null,
+            "year": 2000,
+            "month": 6,
+            "day": 15,
             "leapMonth": false,
-            "precision": "month"
+            "precision": "day"
           }
         },
         {
@@ -25459,8 +25888,8 @@
       "viewpoint": "multi-path-reverse-03-person-b",
       "target": "multi-path-reverse-03-person-a",
       "expected": {
-        "primaryTerm": "妹妹",
-        "reverseTerm": "哥哥",
+        "primaryTerm": "姐姐",
+        "reverseTerm": "弟弟",
         "uncertainty": [],
         "pathPersonIds": [
           "multi-path-reverse-03-person-b",
@@ -25473,8 +25902,8 @@
         ],
         "alternatives": [
           {
-            "primaryTerm": "妹妹",
-            "reverseTerm": "哥哥",
+            "primaryTerm": "姐姐",
+            "reverseTerm": "弟弟",
             "pathPersonIds": [
               "multi-path-reverse-03-person-b",
               "multi-path-reverse-03-person-mother",
