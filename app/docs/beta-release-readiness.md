@@ -18,11 +18,11 @@
 
 NSIS 身份锁定为当前 `appId` 已派生并经实际注册信息复核的 GUID `d1a51a1d-1566-5e0e-9cfa-31a4c775b234`。发布包不创建桌面或开始菜单快捷方式。安装烟测在执行前和卸载后都检查 HKCU/HKLM 的 32/64 位 install/uninstall 注册键；安装后还必须实际观察预期 HKCU install/uninstall 键，并验证 `InstallLocation`、`UninstallString` 与 `QuietUninstallString` 精确指向受控临时安装根。发现已有同身份安装即停止，禁止覆盖真实安装。
 
-安装烟测在隔离 APPDATA/LOCALAPPDATA/USERPROFILE 的同时，对隔离目录、真实用户桌面/开始菜单、公共桌面和机器开始菜单做安装前后只读差分；脚本不删除任何快捷方式。清理状态机只有在 exact uninstaller 成功、临时 install root 消失、全部预期注册键清零后才删除总临时目录。安装器、应用或卸载器超时/非零退出时保留可恢复现场，并把 exact uninstaller、注册键和恢复顺序写入 `packaged-smoke-recovery-report.json`。
+安装烟测在隔离 APPDATA/LOCALAPPDATA/USERPROFILE 的同时，对隔离目录、真实用户桌面/开始菜单、公共桌面和机器开始菜单做安装前、安装后、卸载后的只读快照；两个检查点都分别计算新增与删除，任一方向不为空即失败，脚本自身不删除任何快捷方式。清理状态机只有在 exact uninstaller 成功、临时 install root 消失、全部预期注册键清零后才删除总临时目录。安装器、应用或卸载器超时/非零退出时保留可恢复现场，并把 exact uninstaller、注册键和恢复顺序写入 `packaged-smoke-recovery-report.json`。
 
 安全 E2E 对备份 ZIP 的每个 entry 在 entry 数量、单项/总解压大小、压缩比、路径和加密状态边界内实际解压，再分别扫描 UTF-8/UTF-16 明文 sentinel；扫描压缩容器的原始字节不能替代此项。
 
-性能发布证据必须在 Windows 上运行 `npm run performance:constrained`。该运行器把 Node 进程固定到 affinity mask `0x0000000f`（4 个逻辑核），用 `--max-old-space-size=6144` 将堆限制在 8GB 以下，并在报告中记录约束声明与 V8 实测堆上限。200 次关系样本必须走生产 `QueryToolRegistry`，且覆盖 direct 30、ancestor 25、collateral 30、cousin 25、affinity 30、multipath 25、conflict 15、missing 20；3 次导入样本分别对真实落盘的 1000 行 CSV、XLSX、CSV 执行生产解析器和计划预览。不得改小样本数或放宽既有阈值。
+性能发布证据必须在 Windows 上运行 `npm run performance:constrained`。该运行器把 Node 进程固定到 affinity mask `0x0000000f`（4 个逻辑核），并创建 Windows Job Object，以 `JOB_OBJECT_LIMIT_JOB_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 对进程、原生分配和子进程施加 8 GiB 内核边界；`--max-old-space-size=6144` 仅是内层保护。运行器必须用 `QueryInformationJobObject` 回读 flags/limit、验证进程已加入 Job，并在结束后记录 `PeakJobMemoryUsed`、`PeakProcessMemoryUsed` 和 child exit code；峰值超过 cap 即失败。报告还绑定 exact Git commit 与性能路径逐文件 SHA-256 tree digest，wrapper 重新哈希并核对 freshness、固定样本数及 workload 分布。200 次关系样本必须从 SQLite 物化后逐对走生产 `QueryToolRegistry`，并按最终选中结果覆盖 direct 30、ancestor 25、collateral 30、cousin 25、affinity 30、multipath 25、conflict 15、missing 20；3 次导入样本分别对真实落盘的 1000 行 CSV、XLSX、CSV 执行生产解析器和计划预览。不得改小样本数或放宽既有阈值。
 
 ## 发布证据与判定
 

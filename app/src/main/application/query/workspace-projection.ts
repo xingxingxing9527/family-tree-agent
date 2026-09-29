@@ -12,6 +12,7 @@ import { FactQueries } from "../facts/fact-queries.js";
 import { FamilyUnionProjector } from "../../domain/projection/family-union-projector.js";
 import { TreeProjectionService } from "../../domain/projection/tree-projection-service.js";
 import { RelationshipCalculator } from "../../domain/kinship/relationship-calculator.js";
+import { loadPersistedKinshipFacts } from "./persisted-kinship-facts.js";
 
 interface AliasRow { person_id: string; name: string; }
 interface SourceRow { id: string; source_key: string; title: string; kind: string | null; uri: string | null; citation: string | null; }
@@ -107,11 +108,11 @@ export function projectWorkspaceTree(
       relationshipType: fact.relationshipType
     }))
   });
-  const calculator = new RelationshipCalculator({
-    people: people.map((person) => ({ id: person.id, gender: person.gender, birth: person.birth })),
-    parentChild: parentChild.map((fact) => ({ id: fact.id, parentId: fact.parentId, childId: fact.childId, parentRole: fact.parentRole })),
-    marriages: marriages.map((marriage) => ({ id: marriage.id, spouseAId: marriage.spouseAId, spouseBId: marriage.spouseBId, status: marriage.status }))
-  });
+  const calculator = new RelationshipCalculator(loadPersistedKinshipFacts(queries, {
+    people,
+    parentChild,
+    marriages
+  }));
   const lineages = database.prepare(`
     SELECT id, founder_person_id FROM lineage
     WHERE workspace_id = ? AND deleted_at IS NULL

@@ -3,6 +3,9 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyMigrations } from "../src/main/database/migrations/index.js";
 import { openDatabase, type WorkspaceDatabase } from "../src/main/database/open-database.js";
+import { annotateIncompatibleDirectRoles } from "../src/main/domain/kinship/conflict-annotation.js";
+import { RelationshipCalculator } from "../src/main/domain/kinship/relationship-calculator.js";
+import { classifyProductionRelationship } from "./performance-relationship-classification.js";
 
 export const BENCHMARK_SEED = 20260916;
 export const BENCHMARK_WORKSPACE_ID = "b0000000-0000-4000-8000-000020260916";
@@ -214,102 +217,201 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
     });
   });
 
-  // Add a deterministic, internally contained probe topology. Each lineage gets
-  // two sibling parent couples with five children apiece, providing real cousin
-  // and multipath paths without changing the required single-parent or unmarried
-  // co-parent counts.
+  // Dedicated cross-lineage probes make every timed category a real graph
+  // shape. Probe children already have a normal married-parent family, so the
+  // extra facts do not change the required single/unmarried-family invariants.
+  // Lineages 7 and 8 remain disconnected and are reserved for missing paths.
+  const personAt = (lineage: number, generation: number, position: number): BenchmarkPerson =>
+    people[lineage * PEOPLE_PER_LINEAGE + (generation - 1) * GENERATION_SIZE + position]!;
+  const addParent = (
+    parent: BenchmarkPerson,
+    child: BenchmarkPerson,
+    parentRole: "father" | "mother"
+  ): void => {
+    parentChild.push({
+      id: stableId(0x44000000, ++relationIndex),
+      parentId: parent.id,
+      childId: child.id,
+      parentRole,
+      familyShape: "marriedParents"
+    });
+  };
+  const occupiedMarriagePairs = new Set(marriages.map((entry) => pairKey(entry.spouseAId, entry.spouseBId)));
+  const ensureActiveMarriage = (left: BenchmarkPerson, right: BenchmarkPerson): void => {
+    const key = pairKey(left.id, right.id);
+    if (occupiedMarriagePairs.has(key)) return;
+    occupiedMarriagePairs.add(key);
+    marriages.push({
+      id: stableId(0x55000000, ++marriageIndex),
+      spouseAId: left.id,
+      spouseBId: right.id,
+      status: "active",
+      remarriageAnchorId: null
+    });
+  };
+  const setParents = (child: BenchmarkPerson, father: BenchmarkPerson, mother: BenchmarkPerson): void => {
+    if (new Set([child.id, father.id, mother.id]).size !== 3) {
+      throw new Error(`Invalid benchmark parent probe for ${child.id}`);
+    }
+    for (let index = parentChild.length - 1; index >= 0; index -= 1) {
+      if (parentChild[index]!.childId === child.id) parentChild.splice(index, 1);
+    }
+    addParent(father, child, "father");
+    addParent(mother, child, "mother");
+    ensureActiveMarriage(father, mother);
+  };
+
+  const ancestorCandidates: Array<readonly [string, string]> = [];
+  for (let position = 0; position < GENERATION_SIZE; position += 1) {
+    const grandparent = personAt(2, 3, position);
+    const otherGrandparent = personAt(5, 3, position);
+    const parent = personAt(1, 5, position);
+    const child = personAt(0, 7, position);
+    setParents(parent, grandparent, otherGrandparent);
+    setParents(child, parent, personAt(3, 5, position));
+    ancestorCandidates.push([child.id, grandparent.id], [child.id, otherGrandparent.id]);
+  }
+
+  const collateralCandidates: Array<readonly [string, string]> = [];
+  const collateralParent = personAt(2, 4, 0);
+  const collateralLeft = Array.from({ length: GENERATION_SIZE }, (_, position) => personAt(0, 8, position));
+  const collateralRight = Array.from({ length: 3 }, (_, position) => personAt(1, 8, position));
+  collateralLeft.forEach((child, position) => setParents(child, collateralParent, personAt(3, 6, position)));
+  collateralRight.forEach((child, position) => setParents(child, collateralParent, personAt(4, 6, position + 1)));
+  for (const left of collateralLeft) {
+    for (const right of collateralRight) {
+      collateralCandidates.push([left.id, right.id], [right.id, left.id]);
+    }
+  }
+
   const cousinCandidates: Array<readonly [string, string]> = [];
-  for (let lineageIndex = 0; lineageIndex < LINEAGE_COUNT; lineageIndex += 1) {
-    const start = lineageIndex * PEOPLE_PER_LINEAGE;
-    const branchAFather = people[start + 26]!;
-    const branchAMother = people[start + 27]!;
-    const branchBFather = people[start + 28]!;
-    const branchBMother = people[start + 29]!;
-    for (const [spouseAId, spouseBId] of [
-      [branchAFather.id, branchAMother.id],
-      [branchBFather.id, branchBMother.id]
-    ] as const) {
-      if (marriages.some((entry) => pairKey(entry.spouseAId, entry.spouseBId) === pairKey(spouseAId, spouseBId))) continue;
-      marriages.push({
-        id: stableId(0x55000000, ++marriageIndex),
-        spouseAId,
-        spouseBId,
-        status: "active",
-        remarriageAnchorId: null
-      });
-    }
-    const branchAChildren = people.slice(start + 2, start + 7);
-    const branchBChildren = people.slice(start + 7, start + 12);
-    for (const child of branchAChildren) {
-      parentChild.push({
-        id: stableId(0x44000000, ++relationIndex),
-        parentId: branchAFather.id,
-        childId: child.id,
-        parentRole: "father",
-        familyShape: "marriedParents"
-      }, {
-        id: stableId(0x44000000, ++relationIndex),
-        parentId: branchAMother.id,
-        childId: child.id,
-        parentRole: "mother",
-        familyShape: "marriedParents"
-      });
-    }
-    for (const child of branchBChildren) {
-      parentChild.push({
-        id: stableId(0x44000000, ++relationIndex),
-        parentId: branchBFather.id,
-        childId: child.id,
-        parentRole: "father",
-        familyShape: "marriedParents"
-      }, {
-        id: stableId(0x44000000, ++relationIndex),
-        parentId: branchBMother.id,
-        childId: child.id,
-        parentRole: "mother",
-        familyShape: "marriedParents"
-      });
-    }
-    for (const left of branchAChildren) {
-      for (const right of branchBChildren) cousinCandidates.push([left.id, right.id]);
+  const cousinGrandparent = personAt(3, 3, 0);
+  const cousinBranchA = personAt(4, 5, 0);
+  const cousinBranchB = personAt(5, 5, 0);
+  setParents(cousinBranchA, cousinGrandparent, personAt(0, 3, 0));
+  setParents(cousinBranchB, cousinGrandparent, personAt(1, 3, 0));
+  const cousinLeft = Array.from({ length: 6 }, (_, position) => personAt(4, 8, position));
+  const cousinRight = Array.from({ length: 6 }, (_, position) => personAt(5, 8, position));
+  cousinLeft.forEach((child, position) => setParents(child, cousinBranchA, personAt(2, 6, position)));
+  cousinRight.forEach((child, position) => setParents(child, cousinBranchB, personAt(0, 6, position + 7)));
+  for (const left of cousinLeft) {
+    for (const right of cousinRight) cousinCandidates.push([left.id, right.id], [right.id, left.id]);
+  }
+
+  const affinityCandidates: Array<readonly [string, string]> = [];
+  const addAffinityProbe = (
+    left: BenchmarkPerson,
+    spouse: BenchmarkPerson,
+    spouseParent: BenchmarkPerson,
+    otherSpouseParent: BenchmarkPerson
+  ): void => {
+    setParents(spouse, spouseParent, otherSpouseParent);
+    ensureActiveMarriage(left, spouse);
+    affinityCandidates.push([left.id, spouseParent.id]);
+  };
+  for (let position = 0; position < GENERATION_SIZE; position += 1) {
+    addAffinityProbe(
+      personAt(0, 9, position),
+      personAt(1, 9, position),
+      personAt(2, 7, position),
+      personAt(3, 7, position)
+    );
+  }
+  for (let position = 0; position < GENERATION_SIZE; position += 1) {
+    addAffinityProbe(
+      personAt(0, 6, position),
+      personAt(1, 6, position),
+      personAt(2, 4, position),
+      personAt(3, 4, position)
+    );
+  }
+  for (let position = 0; position < 4; position += 1) {
+    addAffinityProbe(
+      personAt(4, 6, position + 5),
+      personAt(5, 6, position + 5),
+      personAt(2, 4, position + 5),
+      personAt(3, 4, position + 5)
+    );
+  }
+
+  const multipathCandidates: Array<readonly [string, string]> = [];
+  const multipathParentA = personAt(3, 6, 0);
+  const multipathParentB = personAt(4, 6, 0);
+  const multipathLeft = Array.from({ length: 8 }, (_, position) => personAt(0, 10, position));
+  const multipathRight = Array.from({ length: 8 }, (_, position) => personAt(1, 10, position));
+  for (const child of [...multipathLeft, ...multipathRight]) {
+    setParents(child, multipathParentA, multipathParentB);
+  }
+  for (const left of multipathLeft) {
+    for (const right of multipathRight) {
+      multipathCandidates.push([left.id, right.id], [right.id, left.id]);
     }
   }
 
   // These pairs deliberately carry incompatible direct facts (parent/child and
-  // active spouses) so the production query path is timed against conflict-shaped
-  // data instead of a synthetic calculator-only fixture.
+  // active spouses) so the production query path observes the same conservative
+  // null/conflict result as workspace projection for corrupted persisted data.
   const conflictCandidates: Array<readonly [string, string]> = [];
-  const occupiedMarriagePairs = new Set(marriages.map((entry) => pairKey(entry.spouseAId, entry.spouseBId)));
-  for (const relation of parentChild) {
-    if (conflictCandidates.length >= 16) break;
-    const key = pairKey(relation.parentId, relation.childId);
-    if (occupiedMarriagePairs.has(key)) continue;
-    occupiedMarriagePairs.add(key);
-    marriages.push({
-      id: stableId(0x55000000, ++marriageIndex),
-      spouseAId: relation.parentId,
-      spouseBId: relation.childId,
-      status: "active",
-      remarriageAnchorId: null
-    });
-    conflictCandidates.push([relation.parentId, relation.childId], [relation.childId, relation.parentId]);
+  for (let position = 5; position < GENERATION_SIZE; position += 1) {
+    const child = personAt(4, 9, position);
+    const parentAndSpouse = personAt(5, 7, position);
+    setParents(child, parentAndSpouse, personAt(3, 7, position));
+    ensureActiveMarriage(parentAndSpouse, child);
+    conflictCandidates.push([parentAndSpouse.id, child.id], [child.id, parentAndSpouse.id]);
   }
 
   const usedRelationshipPairs = new Set<string>();
   const relationshipPairs: BenchmarkRelationshipPair[] = [];
+  const classifiedFacts = annotateIncompatibleDirectRoles({
+    people: people.map((entry) => ({
+      id: entry.id,
+      gender: entry.gender,
+      birth: {
+        calendar: "solar",
+        year: entry.birthYear,
+        month: entry.birthMonth,
+        day: null,
+        leapMonth: false,
+        precision: "month"
+      }
+    })),
+    parentChild: parentChild.map((entry) => ({
+      id: entry.id,
+      parentId: entry.parentId,
+      childId: entry.childId,
+      parentRole: entry.parentRole
+    })),
+    marriages: marriages.map((entry) => ({
+      id: entry.id,
+      spouseAId: entry.spouseAId,
+      spouseBId: entry.spouseBId,
+      status: entry.status
+    }))
+  });
+  const relationshipClassifier = new RelationshipCalculator(classifiedFacts);
   const select = (
     category: BenchmarkRelationshipCategory,
     candidates: ReadonlyArray<readonly [string, string]>,
     count: number
   ): void => {
+    let matchingCandidates = 0;
+    const actualCounts = new Map<string, number>();
     for (const [viewpointId, targetId] of candidates) {
       const key = `${viewpointId}:${targetId}`;
       if (viewpointId === targetId || usedRelationshipPairs.has(key)) continue;
+      const actualCategory = classifyProductionRelationship(
+        relationshipClassifier.calculateRelationship(viewpointId, targetId)
+      );
+      actualCounts.set(actualCategory, (actualCounts.get(actualCategory) ?? 0) + 1);
+      if (actualCategory !== category) continue;
+      matchingCandidates += 1;
       usedRelationshipPairs.add(key);
       relationshipPairs.push({ category, viewpointId, targetId });
       if (relationshipPairs.filter((entry) => entry.category === category).length === count) return;
     }
-    throw new Error(`Benchmark relationship category ${category} has fewer than ${count} candidates`);
+    throw new Error(
+      `Benchmark relationship category ${category} has only ${matchingCandidates} of ${count} required production-classified candidates; actual=${JSON.stringify(Object.fromEntries([...actualCounts].sort()))}`
+    );
   };
   const orderedPairs = (pairs: ReadonlyArray<readonly [string, string]>): Array<readonly [string, string]> =>
     [...pairs].sort(([leftA, leftB], [rightA, rightB]) => leftA.localeCompare(rightA) || leftB.localeCompare(rightB));
@@ -325,50 +427,6 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
     ])
   ].filter(([left, right]) => !conflictKeys.has(`${left}:${right}`)));
 
-  const parentsByChild = new Map<string, string[]>();
-  const childrenByParent = new Map<string, string[]>();
-  for (const relation of parentChild) {
-    parentsByChild.set(relation.childId, [...(parentsByChild.get(relation.childId) ?? []), relation.parentId]);
-    childrenByParent.set(relation.parentId, [...(childrenByParent.get(relation.parentId) ?? []), relation.childId]);
-  }
-  const ancestorCandidates: Array<readonly [string, string]> = [];
-  for (const [childId, parentIds] of parentsByChild) {
-    for (const parentId of parentIds) {
-      for (const grandparentId of parentsByChild.get(parentId) ?? []) ancestorCandidates.push([childId, grandparentId]);
-    }
-  }
-  const collateralCandidates: Array<readonly [string, string]> = [];
-  for (const childIds of childrenByParent.values()) {
-    for (let left = 0; left < childIds.length; left += 1) {
-      for (let right = left + 1; right < childIds.length; right += 1) {
-        const shared = (parentsByChild.get(childIds[left]!) ?? []).filter((id) => parentsByChild.get(childIds[right]!)?.includes(id));
-        if (shared.length !== 1) continue;
-        collateralCandidates.push([childIds[left]!, childIds[right]!], [childIds[right]!, childIds[left]!]);
-      }
-    }
-  }
-  const multipathCandidates: Array<readonly [string, string]> = [];
-  const allPeopleIds = [...parentsByChild.keys()].sort();
-  for (let left = 0; left < allPeopleIds.length; left += 1) {
-    for (let right = left + 1; right < allPeopleIds.length; right += 1) {
-      const shared = (parentsByChild.get(allPeopleIds[left]!) ?? []).filter((id) => parentsByChild.get(allPeopleIds[right]!)?.includes(id));
-      if (shared.length < 2) continue;
-      multipathCandidates.push(
-        [allPeopleIds[left]!, allPeopleIds[right]!],
-        [allPeopleIds[right]!, allPeopleIds[left]!]
-      );
-    }
-  }
-  const adjacencyByPerson = new Map<string, string[]>();
-  for (const relation of parentChild) {
-    adjacencyByPerson.set(relation.parentId, [...(adjacencyByPerson.get(relation.parentId) ?? []), relation.childId]);
-    adjacencyByPerson.set(relation.childId, [...(adjacencyByPerson.get(relation.childId) ?? []), relation.parentId]);
-  }
-  const affinityCandidates: Array<readonly [string, string]> = [];
-  for (const marriage of marriages.filter((entry) => entry.status === "active")) {
-    for (const targetId of adjacencyByPerson.get(marriage.spouseBId) ?? []) affinityCandidates.push([marriage.spouseAId, targetId]);
-    for (const targetId of adjacencyByPerson.get(marriage.spouseAId) ?? []) affinityCandidates.push([marriage.spouseBId, targetId]);
-  }
   const missingCandidates: Array<readonly [string, string]> = [];
   const missingLeft = people.slice(6 * PEOPLE_PER_LINEAGE, 7 * PEOPLE_PER_LINEAGE);
   const missingRight = people.slice(7 * PEOPLE_PER_LINEAGE, 8 * PEOPLE_PER_LINEAGE);

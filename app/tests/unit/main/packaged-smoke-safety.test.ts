@@ -12,6 +12,7 @@ import {
   resolveExecutableWorkingDirectory,
   runExecutable,
   selectInstallerName,
+  shortcutSnapshotDiff,
   shortcutLocations,
   validateInstalledRegistrySnapshots
 } from "../../../scripts/smoke-packaged-app";
@@ -126,6 +127,17 @@ describe("packaged smoke destructive-operation guards", () => {
       ["C:\\Users\\test\\Desktop\\preexisting.lnk", "C:\\Users\\test\\Desktop\\家谱智能体.lnk"],
       ["C:\\Users\\test\\Desktop\\preexisting.lnk", "C:\\Users\\test\\Desktop\\家谱智能体.lnk", "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\family-agent.lnk"]
     )).toEqual(["C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\family-agent.lnk"]);
+  });
+
+  it("fails closed when an installer removes a shortcut that existed in the baseline", () => {
+    expect(shortcutSnapshotDiff(
+      ["C:\\Users\\test\\Desktop\\preexisting.lnk", "C:\\Users\\test\\Desktop\\kept.lnk"],
+      ["C:\\Users\\test\\Desktop\\kept.lnk", "C:\\Users\\test\\Desktop\\new.lnk"]
+    )).toEqual({
+      added: ["C:\\Users\\test\\Desktop\\new.lnk"],
+      removed: ["C:\\Users\\test\\Desktop\\preexisting.lnk"],
+      unchanged: false
+    });
   });
 
   it("observes isolated and real user/machine shortcut locations without selecting files to delete", () => {

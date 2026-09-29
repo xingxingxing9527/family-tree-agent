@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 import { QueryToolRegistry } from "../../../src/main/application/query/query-tool-registry";
+import { projectWorkspaceTree } from "../../../src/main/application/query/workspace-projection";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import { openQueryDatabase } from "../../../src/main/database/open-query-database";
@@ -244,6 +245,32 @@ describe("QueryToolRegistry", () => {
     expect(downward.reverseTerm).toBe(upward.primaryTerm);
     expect(downward.signature.pathPersonIds).toEqual(["father", "child-a"]);
     expect(upward.signature.pathPersonIds).toEqual(["child-a", "father"]);
+  });
+
+  it("withholds a relationship term when persisted direct roles conflict", () => {
+    const now = new Date().toISOString();
+    database.prepare(`INSERT INTO marriage (
+      id, workspace_id, spouse_a_id, spouse_b_id, marriage_status,
+      start_calendar, start_year, start_month, start_day, start_leap_month, start_precision,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'active', 'solar', 2020, 1, NULL, 0, 'month', ?, ?)`)
+      .run("invalid-direct-role", workspaceId, "child-a", "father", now, now);
+
+    const result = new QueryToolRegistry(database, workspaceId).tools.calculate_relationship({
+      viewpointId: "father",
+      targetId: "child-a"
+    });
+
+    expect(result.primaryTerm).toBeNull();
+    expect(result.reverseTerm).toBeNull();
+    expect(result.uncertainty).toEqual([
+      "数据冲突：incompatible-direct-roles:child-a:father"
+    ]);
+    expect(projectWorkspaceTree(database, workspaceId, {
+      view: "full",
+      collapseDepth: 4,
+      viewpointId: "father"
+    }).labels["child-a"]).toBeNull();
   });
 
   it("summarizes blood generations without counting married-in members", () => {

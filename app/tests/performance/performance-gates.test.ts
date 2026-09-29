@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   BENCHMARK_SEED,
@@ -10,9 +10,12 @@ import {
   materializeBenchmarkWorkspace
 } from "../../scripts/generate-benchmark-workspace";
 import { parseImport } from "../../src/main/application/import/workbook-parser";
+import { QueryToolRegistry } from "../../src/main/application/query/query-tool-registry";
 import {
   PERFORMANCE_GATES,
+  REQUIRED_RELATIONSHIP_DISTRIBUTION,
   buildFixedRelationshipPairs,
+  classifyProductionRelationship,
   parsePerformanceConstraints,
   writeBenchmarkImportFiles
 } from "../../scripts/run-performance-gates";
@@ -26,7 +29,7 @@ describe("1000-person beta performance fixture", () => {
 
     expect(BENCHMARK_SEED).toBe(20260916);
     expect(digest(first)).toBe(digest(second));
-    expect(digest(first)).toBe("0464088a8ddbef8f449efb347bc402de0174ea958c075f2ce8119d11f428f953");
+    expect(digest(first)).toBe("166974a1ca85726f7db37a4e5b166777c716612da332420ac09e31e5d7cb9fce");
   });
 
   it("contains every required stress shape without binary payloads", () => {
@@ -135,16 +138,25 @@ describe("1000-person beta performance fixture", () => {
     }
   });
 
-  it("accepts only an explicit 4-core and at-most-8GB constrained-runner declaration", () => {
+  it("accepts only a queried Windows Job Object cap plus the explicit four-core constraint", () => {
     expect(parsePerformanceConstraints({
       FAMILY_AGENT_PERF_LOGICAL_CORES: "4",
-      FAMILY_AGENT_PERF_MEMORY_LIMIT_MB: "6144",
-      FAMILY_AGENT_PERF_AFFINITY_MASK: "0x0000000f"
+      FAMILY_AGENT_PERF_MEMORY_LIMIT_MB: "8192",
+      FAMILY_AGENT_PERF_AFFINITY_MASK: "0x0000000f",
+      FAMILY_AGENT_PERF_JOB_MEMORY_LIMIT_BYTES: String(8 * 1024 * 1024 * 1024),
+      FAMILY_AGENT_PERF_JOB_LIMIT_FLAGS: "0x00002200",
+      FAMILY_AGENT_PERF_JOB_LIMIT_VERIFIED: "true"
     }, 6_442_450_944)).toEqual({
       logicalCores: 4,
-      memoryLimitMb: 6144,
+      memoryLimitMb: 8192,
       affinityMask: "0x0000000f",
       observedHeapLimitBytes: 6_442_450_944,
+      kernelJob: {
+        mechanism: "windows-job-object",
+        jobMemoryLimitBytes: 8 * 1024 * 1024 * 1024,
+        limitFlags: "0x00002200",
+        configuredAndQueried: true
+      },
       constrained: true
     });
     expect(() => parsePerformanceConstraints({
@@ -156,7 +168,27 @@ describe("1000-person beta performance fixture", () => {
       FAMILY_AGENT_PERF_LOGICAL_CORES: "4",
       FAMILY_AGENT_PERF_MEMORY_LIMIT_MB: "6144",
       FAMILY_AGENT_PERF_AFFINITY_MASK: "0x0000000f"
+    }, 6_000_000_000)).toThrow(/kernel.*Job Object/i);
+    expect(() => parsePerformanceConstraints({
+      FAMILY_AGENT_PERF_LOGICAL_CORES: "4",
+      FAMILY_AGENT_PERF_MEMORY_LIMIT_MB: "8192",
+      FAMILY_AGENT_PERF_AFFINITY_MASK: "0x0000000f",
+      FAMILY_AGENT_PERF_JOB_MEMORY_LIMIT_BYTES: String(8 * 1024 * 1024 * 1024),
+      FAMILY_AGENT_PERF_JOB_LIMIT_FLAGS: "0x00002200",
+      FAMILY_AGENT_PERF_JOB_LIMIT_VERIFIED: "true"
     }, 9 * 1024 * 1024 * 1024)).toThrow(/observed heap.*8192 MiB/i);
+  });
+
+  it("uses a kernel Job Object wrapper that queries its cap and records peak job memory", async () => {
+    const wrapper = await readFile(resolve("scripts/run-performance-gates-constrained.ps1"), "utf8");
+
+    expect(wrapper).toContain("JOB_OBJECT_LIMIT_JOB_MEMORY");
+    expect(wrapper).toContain("JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE");
+    expect(wrapper).toContain("SetInformationJobObject");
+    expect(wrapper).toContain("QueryInformationJobObject");
+    expect(wrapper).toContain("AssignProcessToJobObject");
+    expect(wrapper).toContain("PeakJobMemoryUsed");
+    expect(wrapper).toContain("peakProcessCommitBytes");
   });
 
   it("materializes every blueprint shape in an isolated migrated database", async () => {
@@ -169,11 +201,39 @@ describe("1000-person beta performance fixture", () => {
         expect(count("lineage")).toBe(8);
         expect(count("wiki_entry")).toBe(80);
         expect(count("media_asset")).toBe(100);
+
+        const registry = new QueryToolRegistry(workspace.database, workspace.blueprint.workspaceId);
+        const classified = buildFixedRelationshipPairs(workspace.blueprint).map((pair) => {
+          const result = registry.tools.calculate_relationship({
+            viewpointId: pair.viewpointId,
+            targetId: pair.targetId
+          });
+          const category = classifyProductionRelationship(result);
+          expect(category, `${pair.category}:${pair.viewpointId}->${pair.targetId}`).toBe(pair.category);
+          if (category === "affinity") expect(result.signature.bloodAffinity).toBe("currentAffinity");
+          if (category === "multipath") {
+            expect(result.alternatives.length).toBeGreaterThan(0);
+            expect(result.alternatives.every((alternative) =>
+              alternative.signature.pathRelationIds.length === result.signature.pathRelationIds.length
+            )).toBe(true);
+          }
+          if (category === "missing") {
+            expect(result.signature.pathRelationIds).toEqual([]);
+            expect(result.uncertainty).toContain("未找到可用关系路径");
+          }
+          if (category === "conflict") {
+            expect(result.primaryTerm).toBeNull();
+            expect(result.uncertainty.some((entry) => entry.startsWith("数据冲突："))).toBe(true);
+          }
+          return category;
+        });
+        expect(Object.fromEntries(Object.entries(Object.groupBy(classified, (category) => category))
+          .map(([category, entries]) => [category, entries.length]))).toEqual(REQUIRED_RELATIONSHIP_DISTRIBUTION);
       } finally {
         workspace.database.close();
       }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });

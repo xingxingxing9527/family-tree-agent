@@ -107,6 +107,15 @@ export function newShortcutPaths(before: readonly string[], after: readonly stri
   return after.filter((path) => !previous.has(normalizedWindowsPath(path))).sort();
 }
 
+export function shortcutSnapshotDiff(
+  baseline: readonly string[],
+  observed: readonly string[]
+): { added: string[]; removed: string[]; unchanged: boolean } {
+  const added = newShortcutPaths(baseline, observed);
+  const removed = newShortcutPaths(observed, baseline);
+  return { added, removed, unchanged: added.length === 0 && removed.length === 0 };
+}
+
 function pathIsInside(root: string, candidate: string): boolean {
   const path = relative(resolve(root), resolve(candidate));
   return path === "" || (!path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path));
@@ -649,9 +658,11 @@ export async function smokePackagedApp(): Promise<string> {
       packageJson.version
     );
     const shortcutsAfterInstall = await shortcutSnapshot(observedShortcutLocations);
-    const shortcutsCreatedAfterInstall = newShortcutPaths(shortcutBaseline, shortcutsAfterInstall);
-    if (shortcutsCreatedAfterInstall.length > 0) {
-      throw new Error(`NSIS unexpectedly created shortcuts: ${shortcutsCreatedAfterInstall.join(", ")}`);
+    const shortcutInstallDiff = shortcutSnapshotDiff(shortcutBaseline, shortcutsAfterInstall);
+    if (!shortcutInstallDiff.unchanged) {
+      throw new Error(
+        `NSIS changed shortcuts after install (added: ${shortcutInstallDiff.added.join(", ") || "none"}; removed: ${shortcutInstallDiff.removed.join(", ") || "none"})`
+      );
     }
     const installedScan = await packageScan(resolvedInstallRoot);
 
@@ -703,9 +714,11 @@ export async function smokePackagedApp(): Promise<string> {
     await waitFor("temporary install root removal", async () => !await exists(resolvedInstallRoot));
     await waitFor("temporary install registry removal", async () => (await registeredInstallations()).length === 0);
     const shortcutsAfterUninstall = await shortcutSnapshot(observedShortcutLocations);
-    const shortcutsRemainingAfterUninstall = newShortcutPaths(shortcutBaseline, shortcutsAfterUninstall);
-    if (shortcutsRemainingAfterUninstall.length > 0) {
-      throw new Error(`NSIS uninstall left shortcuts created during the smoke: ${shortcutsRemainingAfterUninstall.join(", ")}`);
+    const shortcutUninstallDiff = shortcutSnapshotDiff(shortcutBaseline, shortcutsAfterUninstall);
+    if (!shortcutUninstallDiff.unchanged) {
+      throw new Error(
+        `NSIS changed shortcuts after uninstall (added: ${shortcutUninstallDiff.added.join(", ") || "none"}; removed: ${shortcutUninstallDiff.removed.join(", ") || "none"})`
+      );
     }
 
     if (!await exists(guard)) throw new Error("Uninstaller removed a sibling outside the temporary install root");
@@ -743,9 +756,12 @@ export async function smokePackagedApp(): Promise<string> {
         baselineCount: shortcutBaseline.length,
         afterInstallCount: shortcutsAfterInstall.length,
         afterUninstallCount: shortcutsAfterUninstall.length,
-        createdAfterInstall: shortcutsCreatedAfterInstall,
-        remainingAfterUninstall: shortcutsRemainingAfterUninstall,
-        existingEntriesNeverDeletedBySmoke: true
+        afterInstall: shortcutInstallDiff,
+        afterUninstall: shortcutUninstallDiff,
+        createdAfterInstall: shortcutInstallDiff.added,
+        remainingAfterUninstall: shortcutUninstallDiff.added,
+        existingEntriesNeverDeletedBySmoke:
+          shortcutInstallDiff.removed.length === 0 && shortcutUninstallDiff.removed.length === 0
       },
       artifacts,
       passed: true
@@ -779,9 +795,14 @@ export async function smokePackagedApp(): Promise<string> {
           await runExecutable(cleanupUninstaller, ["/S"], 60_000, resolvedTemporaryRoot, installerEnvironment);
           await waitFor("cleanup install-root removal", async () => !await exists(resolvedInstallRoot));
           await waitFor("cleanup registry removal", async () => (await registeredInstallations()).length === 0);
-          const remainingShortcuts = newShortcutPaths(shortcutBaseline, await shortcutSnapshot(observedShortcutLocations));
-          if (remainingShortcuts.length > 0) {
-            throw new Error(`Cleanup left shortcuts created during the smoke; no shortcut was deleted: ${remainingShortcuts.join(", ")}`);
+          const cleanupShortcutDiff = shortcutSnapshotDiff(
+            shortcutBaseline,
+            await shortcutSnapshot(observedShortcutLocations)
+          );
+          if (!cleanupShortcutDiff.unchanged) {
+            throw new Error(
+              `Cleanup changed shortcuts (added: ${cleanupShortcutDiff.added.join(", ") || "none"}; removed: ${cleanupShortcutDiff.removed.join(", ") || "none"})`
+            );
           }
         },
         installRootExists: () => exists(resolvedInstallRoot),

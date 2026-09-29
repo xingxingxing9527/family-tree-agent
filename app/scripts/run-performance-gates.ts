@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,6 +20,11 @@ import {
   type BenchmarkBlueprint,
   type BenchmarkRelationshipPair
 } from "./generate-benchmark-workspace.js";
+import {
+  REQUIRED_RELATIONSHIP_DISTRIBUTION,
+  classifyProductionRelationship
+} from "./performance-relationship-classification.js";
+export { REQUIRED_RELATIONSHIP_DISTRIBUTION, classifyProductionRelationship } from "./performance-relationship-classification.js";
 
 export const PERFORMANCE_GATES = Object.freeze({
   defaultTreeAndLayoutMs: 2_000,
@@ -26,6 +32,23 @@ export const PERFORMANCE_GATES = Object.freeze({
   relationshipP95Ms: 300,
   importPreviewMs: 30_000
 });
+
+const PERFORMANCE_SOURCE_FILES = [
+  "scripts/generate-benchmark-workspace.ts",
+  "scripts/performance-relationship-classification.ts",
+  "scripts/run-performance-gates-constrained.ps1",
+  "scripts/run-performance-gates.ts",
+  "src/main/application/import/import-planner.ts",
+  "src/main/application/import/workbook-parser.ts",
+  "src/main/application/query/persisted-kinship-facts.ts",
+  "src/main/application/query/query-tool-registry.ts",
+  "src/main/application/query/workspace-projection.ts",
+  "src/main/domain/kinship/conflict-annotation.ts",
+  "src/main/domain/kinship/path-search.ts",
+  "src/main/domain/kinship/relationship-calculator.ts",
+  "src/renderer/src/features/tree/layout-with-elk.ts"
+] as const;
+
 
 interface Distribution {
   sampleCount: number;
@@ -86,6 +109,21 @@ function gate(samples: readonly number[], thresholdMs: number): GateResult {
   return { ...stats, thresholdMs, measuredBy: "p95", passed: stats.p95Ms <= thresholdMs };
 }
 
+async function performanceSourceEvidence(commit: string | null): Promise<{
+  commit: string | null;
+  digestSha256: string;
+  files: Array<{ path: string; sha256: string }>;
+}> {
+  const files = await Promise.all(PERFORMANCE_SOURCE_FILES.map(async (path) => ({
+    path,
+    sha256: createHash("sha256").update(await readFile(resolve(path))).digest("hex")
+  })));
+  const digestSha256 = createHash("sha256")
+    .update(files.map(({ path, sha256 }) => `${path}:${sha256}\n`).join(""))
+    .digest("hex");
+  return { commit, digestSha256, files };
+}
+
 export async function writeBenchmarkImportFiles(root: string): Promise<{ csvPath: string; xlsxPath: string }> {
   await mkdir(root, { recursive: true });
   const csvPath = resolve(root, "benchmark-1000.csv");
@@ -123,6 +161,12 @@ export interface PerformanceConstraints {
   memoryLimitMb: number | null;
   affinityMask: string | null;
   observedHeapLimitBytes: number;
+  kernelJob: {
+    mechanism: "windows-job-object";
+    jobMemoryLimitBytes: number;
+    limitFlags: string;
+    configuredAndQueried: true;
+  } | null;
   constrained: boolean;
 }
 
@@ -133,12 +177,16 @@ export function parsePerformanceConstraints(
   const logicalCoresText = environment.FAMILY_AGENT_PERF_LOGICAL_CORES;
   const memoryLimitText = environment.FAMILY_AGENT_PERF_MEMORY_LIMIT_MB;
   const affinityMask = environment.FAMILY_AGENT_PERF_AFFINITY_MASK;
-  if (!logicalCoresText && !memoryLimitText && !affinityMask) {
+  const jobMemoryLimitText = environment.FAMILY_AGENT_PERF_JOB_MEMORY_LIMIT_BYTES;
+  const jobLimitFlagsText = environment.FAMILY_AGENT_PERF_JOB_LIMIT_FLAGS;
+  const jobLimitVerified = environment.FAMILY_AGENT_PERF_JOB_LIMIT_VERIFIED;
+  if (!logicalCoresText && !memoryLimitText && !affinityMask && !jobMemoryLimitText && !jobLimitFlagsText && !jobLimitVerified) {
     return {
       logicalCores: cpus().length,
       memoryLimitMb: null,
       affinityMask: null,
       observedHeapLimitBytes,
+      kernelJob: null,
       constrained: false
     };
   }
@@ -157,7 +205,27 @@ export function parsePerformanceConstraints(
   if (logicalCores !== 4 || !Number.isInteger(memoryLimitMb) || memoryLimitMb <= 0 || memoryLimitMb > 8_192 || maskBits !== 4) {
     throw new Error("Constrained performance evidence requires exactly 4 logical cores and at most 8192 MiB");
   }
-  if (observedHeapLimitBytes > 8_192 * 1024 * 1024) {
+  let jobMemoryLimitBytes = 0;
+  let jobLimitFlags = 0n;
+  try {
+    jobMemoryLimitBytes = Number(BigInt(jobMemoryLimitText ?? ""));
+    jobLimitFlags = BigInt(jobLimitFlagsText ?? "");
+  } catch {
+    jobMemoryLimitBytes = 0;
+    jobLimitFlags = 0n;
+  }
+  const requiredJobFlags = 0x0000_0200n | 0x0000_2000n;
+  if (
+    jobLimitVerified !== "true"
+    || !Number.isSafeInteger(jobMemoryLimitBytes)
+    || jobMemoryLimitBytes <= 0
+    || jobMemoryLimitBytes > 8_192 * 1024 * 1024
+    || jobMemoryLimitBytes !== memoryLimitMb * 1024 * 1024
+    || (jobLimitFlags & requiredJobFlags) !== requiredJobFlags
+  ) {
+    throw new Error("Constrained performance evidence requires a queried kernel Windows Job Object memory cap with JOB_MEMORY and KILL_ON_JOB_CLOSE flags");
+  }
+  if (observedHeapLimitBytes > jobMemoryLimitBytes) {
     throw new Error("Constrained performance evidence observed heap exceeds 8192 MiB");
   }
   return {
@@ -165,6 +233,12 @@ export function parsePerformanceConstraints(
     memoryLimitMb,
     affinityMask: affinityMask!,
     observedHeapLimitBytes,
+    kernelJob: {
+      mechanism: "windows-job-object",
+      jobMemoryLimitBytes,
+      limitFlags: jobLimitFlagsText!,
+      configuredAndQueried: true
+    },
     constrained: true
   };
 }
@@ -200,8 +274,31 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
       viewpointId: relationshipPairs[0]!.viewpointId,
       targetId: relationshipPairs[0]!.targetId
     });
-    const relationshipSamples = measureSync(relationshipPairs, ({ viewpointId, targetId }) =>
-      registry.tools.calculate_relationship({ viewpointId, targetId }));
+    const timedRelationshipResults: Array<{
+      declared: BenchmarkRelationshipPair["category"];
+      result: ReturnType<typeof registry.tools.calculate_relationship>;
+    }> = [];
+    const relationshipSamples = measureSync(relationshipPairs, ({ category, viewpointId, targetId }) => {
+      const result = registry.tools.calculate_relationship({ viewpointId, targetId });
+      timedRelationshipResults.push({ declared: category, result });
+      return result;
+    });
+    const observedRelationshipCategories = timedRelationshipResults.map(({ declared, result }) => {
+      const observed = classifyProductionRelationship(result);
+      if (observed !== declared) {
+        throw new Error(`Timed relationship workload changed class: declared=${declared}, observed=${observed}`);
+      }
+      return observed;
+    });
+    const relationshipDistribution = Object.fromEntries(
+      Object.entries(Object.groupBy(observedRelationshipCategories, (category) => category))
+        .map(([category, entries]) => [category, entries.length])
+    );
+    for (const [category, expected] of Object.entries(REQUIRED_RELATIONSHIP_DISTRIBUTION)) {
+      if (relationshipDistribution[category] !== expected) {
+        throw new Error(`Timed production relationship distribution changed for ${category}`);
+      }
+    }
     process.stdout.write("[performance] 200 categorized production relationship queries measured\n");
 
     const planner = new ImportPlanner(database, workspaceId, new ImportPlanStore());
@@ -228,14 +325,16 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     };
     const cpuInfo = cpus();
     const constraints = parsePerformanceConstraints(process.env, getHeapStatistics().heap_size_limit);
-    const relationshipDistribution = Object.fromEntries(
-      Object.entries(Object.groupBy(relationshipPairs, (entry) => entry.category))
-        .map(([category, entries]) => [category, entries.length])
-    );
+    const sourceCommit = process.env.FAMILY_AGENT_PERF_SOURCE_COMMIT ?? null;
+    if (constraints.constrained && !sourceCommit?.match(/^[0-9a-f]{40}$/)) {
+      throw new Error("Constrained performance evidence requires the exact source commit");
+    }
+    const source = await performanceSourceEvidence(sourceCommit);
     const report = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: new Date().toISOString(),
       seed: BENCHMARK_SEED,
+      source,
       invariants: benchmarkInvariants(blueprint),
       runtime: {
         node: process.version,
@@ -250,7 +349,12 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
         constraints
       },
       workloads: {
-        relationships: { executionPath: "QueryToolRegistry.calculate_relationship", ...relationshipDistribution },
+        relationships: {
+          executionPath: "QueryToolRegistry.calculate_relationship",
+          classification: "selected production result after SQLite materialization",
+          blueprintDigestSha256: createHash("sha256").update(JSON.stringify(blueprint)).digest("hex"),
+          ...relationshipDistribution
+        },
         importPreview: { executionPath: "parseImport + ImportPlanner.plan", rowsPerFile: 1_000, formats: importFormats }
       },
       gates,

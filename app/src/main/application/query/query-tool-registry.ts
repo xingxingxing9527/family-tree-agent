@@ -16,6 +16,7 @@ import { listRelatives } from "./list-relatives.js";
 import { searchPeople } from "./search-people.js";
 import { searchWiki } from "./search-wiki.js";
 import { summarizeLineage } from "./summarize-lineage.js";
+import { loadPersistedKinshipFacts } from "./persisted-kinship-facts.js";
 
 const id = z.string().trim().min(1).max(200);
 const query = z.string().trim().min(1).max(200);
@@ -55,21 +56,8 @@ export class QueryToolRegistry {
       list_relatives: (input) => listRelatives(this.queries, QUERY_TOOL_SCHEMAS.list_relatives.parse(input)),
       calculate_relationship: (input) => {
         const parsed = QUERY_TOOL_SCHEMAS.calculate_relationship.parse(input);
-        return new RelationshipCalculator({
-          people: this.queries.listPeople().map((person) => ({ id: person.id, gender: person.gender, birth: person.birth })),
-          parentChild: this.queries.listParentChild().map((relation) => ({
-            id: relation.id,
-            parentId: relation.parentId,
-            childId: relation.childId,
-            parentRole: relation.parentRole
-          })),
-          marriages: this.queries.listMarriages().map((marriage) => ({
-            id: marriage.id,
-            spouseAId: marriage.spouseAId,
-            spouseBId: marriage.spouseBId,
-            status: marriage.status
-          }))
-        }).calculateRelationship(parsed.viewpointId, parsed.targetId);
+        return new RelationshipCalculator(loadPersistedKinshipFacts(this.queries))
+          .calculateRelationship(parsed.viewpointId, parsed.targetId);
       },
       summarize_lineage: (input) => summarizeLineage(database, workspaceId, this.queries, QUERY_TOOL_SCHEMAS.summarize_lineage.parse(input)),
       search_wiki: (input) => searchWiki(database, workspaceId, QUERY_TOOL_SCHEMAS.search_wiki.parse(input))
