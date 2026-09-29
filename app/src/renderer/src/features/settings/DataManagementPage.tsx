@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState, type JSX } from "react";
 import type { BackupInspectionDto, DataManagementApi, WorkspaceSummary } from "../../../../shared/contracts";
+import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 import { AuditHistory } from "./AuditHistory";
 import { PrivacyWarning } from "./PrivacyWarning";
 
 export interface DataManagementPageProps {
   api: DataManagementApi;
   refreshToken?: number;
-  onMutationComplete?(targetWorkspaceId?: string): void | Promise<void>;
+  prepareMutation?(targetWorkspaceId?: string): PreparedMutationRefresh;
 }
 
-export function DataManagementPage({ api, refreshToken, onMutationComplete }: DataManagementPageProps): JSX.Element {
+export function DataManagementPage({ api, refreshToken, prepareMutation }: DataManagementPageProps): JSX.Element {
   const [targets, setTargets] = useState<WorkspaceSummary[]>([]);
   const [targetId, setTargetId] = useState("");
   const [fileToken, setFileToken] = useState("");
@@ -18,6 +19,7 @@ export function DataManagementPage({ api, refreshToken, onMutationComplete }: Da
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshWarning, setRefreshWarning] = useState<PreparedMutationRefresh | null>(null);
   const selectedTarget = useMemo(() => targets.find((target) => target.id === targetId) ?? null, [targetId, targets]);
 
   useEffect(() => {
@@ -59,19 +61,35 @@ export function DataManagementPage({ api, refreshToken, onMutationComplete }: Da
   };
   const restore = async (): Promise<void> => {
     if (!inspection || !confirmed) return;
-    setError(null); setMessage(null);
+    const preparedRefresh = prepareMutation?.(inspection.targetWorkspaceId);
+    setError(null); setMessage(null); setRefreshWarning(null);
+    let result: Awaited<ReturnType<DataManagementApi["restoreBackup"]>>;
     try {
-      const result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
-      if (!result.ok) { setError(result.error.message); return; }
-      await onMutationComplete?.(inspection.targetWorkspaceId);
-      setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
-    } catch { setError("无法恢复备份"); }
+      result = await api.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: inspection.targetWorkspaceId, confirmReplace: true });
+    } catch { setError("无法恢复备份"); return; }
+    if (!result.ok) { setError(result.error.message); return; }
+    setMessage(result.value.cleanupPending ? "恢复已提交，旧工作区清理待完成" : "恢复完成，自动快照已验证");
+    if (!preparedRefresh) return;
+    try {
+      const outcome = await preparedRefresh.complete();
+      if (outcome.status === "refresh-failed") setRefreshWarning(preparedRefresh);
+    } catch { setRefreshWarning(preparedRefresh); }
+  };
+
+  const retryRefresh = async (): Promise<void> => {
+    const preparedRefresh = refreshWarning;
+    if (!preparedRefresh) return;
+    try {
+      const outcome = await preparedRefresh.retry();
+      if (outcome.status !== "refresh-failed") setRefreshWarning(null);
+    } catch { /* Keep the sanitized committed warning visible. */ }
   };
 
   return <section className="settings-section" aria-labelledby="data-management-title">
     <header><h2 id="data-management-title">数据管理</h2></header>
     {error && <p role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
+    {refreshWarning && <div role="alert"><p>恢复已提交，但界面刷新失败。请勿重复恢复。</p><button type="button" onClick={() => void retryRefresh()}>重新刷新界面</button></div>}
     <section aria-labelledby="backup-export-title">
       <h2 id="backup-export-title">备份与导出</h2>
       <PrivacyWarning />
@@ -99,6 +117,6 @@ export function DataManagementPage({ api, refreshToken, onMutationComplete }: Da
         <button type="button" disabled={!confirmed} onClick={() => void restore()}>替换目标谱册</button>
       </div>}
     </section>
-    <AuditHistory api={api} refreshToken={refreshToken} onMutationComplete={() => onMutationComplete?.()} />
+    <AuditHistory api={api} refreshToken={refreshToken} prepareMutation={prepareMutation ? () => prepareMutation() : undefined} />
   </section>;
 }

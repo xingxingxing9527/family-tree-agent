@@ -9,7 +9,7 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { FamilyTreePage } from "../features/tree/FamilyTreePage";
 import { WikiPage } from "../features/wiki/WikiPage";
 import { ViewpointProvider, useViewpoint } from "./ViewpointContext";
-import { useWorkspace } from "./WorkspaceContext";
+import { useWorkspace, type MutationRefreshOutcome, type PreparedMutationRefresh } from "./WorkspaceContext";
 import "./app-shell.css";
 
 type Area = "tree" | "people" | "entry" | "wiki" | "settings";
@@ -68,13 +68,22 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
     if (await workspaceState.closeWorkspace()) navigate("/");
   };
 
-  const completeMutation = useCallback(async (targetWorkspaceId?: string): Promise<void> => {
+  const prepareMutation = useCallback((targetWorkspaceId?: string): PreparedMutationRefresh => {
     const target = targetWorkspaceId ?? workspace.id;
-    const refreshed = await workspaceState.completeMutation(target);
-    if (!refreshed) throw new Error("无法刷新变更后的谱册");
-    if (targetWorkspaceId && targetWorkspaceId !== workspace.id) {
-      navigate(`/workspace/${refreshed.id}/settings`, { replace: true });
-    }
+    const prepared = workspaceState.prepareMutation(workspace.id, target);
+    const finish = async (refresh: () => Promise<MutationRefreshOutcome>): Promise<MutationRefreshOutcome> => {
+      let outcome: MutationRefreshOutcome;
+      try { outcome = await refresh(); }
+      catch { outcome = { status: "refresh-failed" }; }
+      if (outcome.status === "refreshed" && target !== workspace.id) {
+        navigate(`/workspace/${outcome.workspace.id}/settings`, { replace: true });
+      }
+      return outcome;
+    };
+    return {
+      complete: () => finish(prepared.complete),
+      retry: () => finish(prepared.retry)
+    };
   }, [navigate, workspace.id, workspaceState]);
 
   if (!activeArea) return <Navigate to={`/workspace/${workspace.id}/tree`} replace />;
@@ -91,10 +100,10 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
       <nav className="primary-nav" aria-label="一级导航"><Link to="/">首页</Link>{areas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
       <main className="workspace-content" key={`${workspace.id}:${activeArea}:${activeArea === "settings" ? "persistent" : workspaceState.mutationEpoch}`}>
         {activeArea === "tree" && <FamilyTreePage api={api.query} people={snapshot.people} />}
-        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} onMutationComplete={completeMutation} onSelectedPersonChange={setSelectedPersonId} />}
+        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
         {activeArea === "wiki" && <WikiPage api={api.wiki} query={api.query} people={snapshot.people.map((person) => ({ id: person.id, displayName: person.displayName }))} sources={snapshot.sources.map((source) => ({ id: source.id, title: source.title }))} />}
-        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} onMutationComplete={completeMutation} />}
+        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} prepareMutation={prepareMutation} />}
       </main>
       <ChatPanel onSend={ask} />
     </div>

@@ -1,18 +1,20 @@
 import React, { useCallback, useEffect, useState, type JSX } from "react";
 import type { AuditOperationGroupDto, DataManagementApi } from "../../../../shared/contracts";
+import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 
 export interface AuditHistoryProps {
   api: DataManagementApi;
   refreshToken?: number;
-  onMutationComplete?(): void | Promise<void>;
+  prepareMutation?(): PreparedMutationRefresh;
 }
 
-export function AuditHistory({ api, refreshToken, onMutationComplete }: AuditHistoryProps): JSX.Element {
+export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistoryProps): JSX.Element {
   const [groups, setGroups] = useState<AuditOperationGroupDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingUndo, setPendingUndo] = useState<AuditOperationGroupDto | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [refreshWarning, setRefreshWarning] = useState<PreparedMutationRefresh | null>(null);
   const load = useCallback(async (): Promise<void> => {
     try {
       const result = await api.listAudit();
@@ -23,23 +25,39 @@ export function AuditHistory({ api, refreshToken, onMutationComplete }: AuditHis
 
   useEffect(() => { void load(); }, [load, refreshToken]);
   const undo = async (operationGroupId: string): Promise<void> => {
+    const preparedRefresh = prepareMutation?.();
     setBusyId(operationGroupId);
+    setRefreshWarning(null);
+    let result: Awaited<ReturnType<DataManagementApi["undoOperationGroup"]>>;
     try {
-      const result = await api.undoOperationGroup({ operationGroupId });
-      if (!result.ok) setError(result.error.message);
-      else {
-        setPendingUndo(null);
-        setConfirmed(false);
-        if (onMutationComplete) await onMutationComplete();
-        else await load();
-      }
-    } catch { setError("无法撤销操作，请稍后重试。"); }
-    finally { setBusyId(null); }
+      result = await api.undoOperationGroup({ operationGroupId });
+    } catch { setError("无法撤销操作，请稍后重试。"); setBusyId(null); return; }
+    if (!result.ok) { setError(result.error.message); setBusyId(null); return; }
+    setPendingUndo(null);
+    setConfirmed(false);
+    if (!preparedRefresh) await load();
+    else {
+      try {
+        const outcome = await preparedRefresh.complete();
+        if (outcome.status === "refresh-failed") setRefreshWarning(preparedRefresh);
+      } catch { setRefreshWarning(preparedRefresh); }
+    }
+    setBusyId(null);
+  };
+
+  const retryRefresh = async (): Promise<void> => {
+    const preparedRefresh = refreshWarning;
+    if (!preparedRefresh) return;
+    try {
+      const outcome = await preparedRefresh.retry();
+      if (outcome.status !== "refresh-failed") setRefreshWarning(null);
+    } catch { /* Keep the sanitized committed warning visible. */ }
   };
 
   return <section aria-labelledby="audit-history-title">
     <h2 id="audit-history-title">操作历史</h2>
     {error && <p role="alert">{error}</p>}
+    {refreshWarning && <div role="alert"><p>撤销已提交，但界面刷新失败。请勿重复撤销。</p><button type="button" onClick={() => void retryRefresh()}>重新刷新界面</button></div>}
     {groups.length === 0 ? <p>暂无操作记录</p> : <ul>
       {groups.map((group) => <li key={group.id}>
         <p>{group.kind} · {group.createdAt} · {group.status}</p>

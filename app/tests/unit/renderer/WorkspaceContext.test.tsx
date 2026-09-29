@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import React from "react";
+import React, { useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WorkspaceProvider, useWorkspace } from "../../../src/renderer/src/app/WorkspaceContext";
+import { WorkspaceProvider, useWorkspace, type MutationRefreshOutcome, type PreparedMutationRefresh } from "../../../src/renderer/src/app/WorkspaceContext";
 import type { AppResult, DesktopApi, WorkspaceSummary } from "../../../src/shared/contracts";
 
 const workspaceA: WorkspaceSummary = {
@@ -23,13 +23,42 @@ function deferred<T>() {
 
 function Harness(): React.JSX.Element {
   const state = useWorkspace();
+  const pendingMutation = useRef<PreparedMutationRefresh | null>(null);
+  const secondaryMutation = useRef<PreparedMutationRefresh | null>(null);
+  const [mutationResult, setMutationResult] = useState("none");
+  const [secondaryResult, setSecondaryResult] = useState("none");
+  const record = (outcome: MutationRefreshOutcome): void => setMutationResult(outcome.status === "refreshed" ? outcome.workspace.id : outcome.status);
   return <>
     <output aria-label="loading">{state.loading ? "loading" : "idle"}</output>
     <output aria-label="switching">{state.switching ? "switching" : "idle"}</output>
     <output aria-label="active">{state.activeWorkspace?.id ?? "none"}</output>
+    <output aria-label="mutation-epoch">{state.mutationEpoch}</output>
+    <output aria-label="mutation-result">{mutationResult}</output>
+    <output aria-label="secondary-mutation-result">{secondaryResult}</output>
     <output aria-label="workspaces">{state.workspaces.map((workspace) => workspace.id).join(",")}</output>
     <button onClick={() => void state.createWorkspace("甲谱")}>create</button>
+    <button onClick={() => void state.openWorkspace(workspaceA.id)}>open-a</button>
     <button onClick={() => void state.openWorkspace(workspaceB.id)}>open-b</button>
+    <button onClick={() => {
+      const sourceWorkspaceId = state.activeWorkspace?.id;
+      if (sourceWorkspaceId) pendingMutation.current = state.prepareMutation(sourceWorkspaceId);
+    }}>start-a-mutation</button>
+    <button onClick={() => {
+      const sourceWorkspaceId = state.activeWorkspace?.id;
+      if (sourceWorkspaceId) pendingMutation.current = state.prepareMutation(sourceWorkspaceId, workspaceB.id);
+    }}>start-restore-into-b</button>
+    <button onClick={() => {
+      const sourceWorkspaceId = state.activeWorkspace?.id;
+      if (sourceWorkspaceId) secondaryMutation.current = state.prepareMutation(sourceWorkspaceId);
+    }}>start-secondary-a-mutation</button>
+    <button onClick={() => {
+      const completion = pendingMutation.current;
+      if (completion) void completion.complete().then(record);
+    }}>complete-mutation</button>
+    <button onClick={() => {
+      const completion = secondaryMutation.current;
+      if (completion) void completion.complete().then((outcome) => setSecondaryResult(outcome.status === "refreshed" ? outcome.workspace.id : outcome.status));
+    }}>complete-secondary-mutation</button>
   </>;
 }
 
@@ -80,5 +109,87 @@ describe("WorkspaceContext request ownership", () => {
     await waitFor(() => expect(screen.getByLabelText("switching")).toHaveTextContent("idle"));
     expect(screen.getByLabelText("active")).toHaveTextContent(workspaceB.id);
     expect(api.open).not.toHaveBeenCalledWith({ id: workspaceA.id });
+  });
+
+  it("does not let a late workspace-A mutation completion supersede a newer explicit switch to B", async () => {
+    const openingB = deferred<AppResult<WorkspaceSummary>>();
+    const api = installApi({
+      list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }),
+      open: vi.fn(({ id }: { id: string }) => id === workspaceB.id
+        ? openingB.promise
+        : Promise.resolve({ ok: true as const, value: workspaceA }))
+    });
+    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
+
+    fireEvent.click(screen.getByRole("button", { name: "open-a" }));
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
+    fireEvent.click(screen.getByRole("button", { name: "start-a-mutation" }));
+    fireEvent.click(screen.getByRole("button", { name: "open-b" }));
+    await waitFor(() => expect(screen.getByLabelText("switching")).toHaveTextContent("switching"));
+    fireEvent.click(screen.getByRole("button", { name: "complete-mutation" }));
+    await act(async () => { openingB.resolve({ ok: true, value: workspaceB }); await openingB.promise; });
+
+    await waitFor(() => expect(screen.getByLabelText("switching")).toHaveTextContent("idle"));
+    expect(screen.getByLabelText("active")).toHaveTextContent(workspaceB.id);
+    expect(screen.getByLabelText("mutation-result")).toHaveTextContent("superseded");
+    expect(api.open).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes and increments the mutation epoch for a same-workspace completion without newer navigation", async () => {
+    const api = installApi({ list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }) });
+    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
+    fireEvent.click(screen.getByRole("button", { name: "open-a" }));
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
+
+    fireEvent.click(screen.getByRole("button", { name: "start-a-mutation" }));
+    fireEvent.click(screen.getByRole("button", { name: "complete-mutation" }));
+
+    await waitFor(() => expect(screen.getByLabelText("mutation-epoch")).toHaveTextContent("1"));
+    expect(screen.getByLabelText("mutation-result")).toHaveTextContent(workspaceA.id);
+    expect(api.open).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a committed restore targeting B as explicit navigation to B", async () => {
+    const api = installApi({ list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }) });
+    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
+    fireEvent.click(screen.getByRole("button", { name: "open-a" }));
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
+
+    fireEvent.click(screen.getByRole("button", { name: "start-restore-into-b" }));
+    fireEvent.click(screen.getByRole("button", { name: "complete-mutation" }));
+
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceB.id));
+    expect(screen.getByLabelText("mutation-result")).toHaveTextContent(workspaceB.id);
+    expect(screen.getByLabelText("switching")).toHaveTextContent("idle");
+    expect(api.open).toHaveBeenLastCalledWith({ id: workspaceB.id });
+  });
+
+  it("does not enqueue a same-source refresh behind an in-flight cross-target switch", async () => {
+    const openingB = deferred<AppResult<WorkspaceSummary>>();
+    const api = installApi({
+      list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }),
+      open: vi.fn(({ id }: { id: string }) => id === workspaceB.id
+        ? openingB.promise
+        : Promise.resolve({ ok: true as const, value: workspaceA }))
+    });
+    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
+    fireEvent.click(screen.getByRole("button", { name: "open-a" }));
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
+
+    fireEvent.click(screen.getByRole("button", { name: "start-restore-into-b" }));
+    fireEvent.click(screen.getByRole("button", { name: "complete-mutation" }));
+    await waitFor(() => expect(screen.getByLabelText("switching")).toHaveTextContent("switching"));
+    fireEvent.click(screen.getByRole("button", { name: "start-secondary-a-mutation" }));
+    fireEvent.click(screen.getByRole("button", { name: "complete-secondary-mutation" }));
+
+    await waitFor(() => expect(screen.getByLabelText("secondary-mutation-result")).toHaveTextContent("superseded"));
+    expect(api.open).toHaveBeenCalledTimes(2);
+    await act(async () => { openingB.resolve({ ok: true, value: workspaceB }); await openingB.promise; });
+    await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceB.id));
+    expect(screen.getByLabelText("switching")).toHaveTextContent("idle");
   });
 });

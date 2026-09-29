@@ -1,6 +1,16 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import type { WorkspaceSummary } from "../../../shared/contracts";
 
+export type MutationRefreshOutcome =
+  | { status: "refreshed"; workspace: WorkspaceSummary }
+  | { status: "superseded" }
+  | { status: "refresh-failed" };
+
+export interface PreparedMutationRefresh {
+  complete(): Promise<MutationRefreshOutcome>;
+  retry(): Promise<MutationRefreshOutcome>;
+}
+
 export interface WorkspaceState {
   workspaces: WorkspaceSummary[];
   activeWorkspace: WorkspaceSummary | null;
@@ -12,7 +22,7 @@ export interface WorkspaceState {
   createWorkspace(name: string): Promise<WorkspaceSummary | null>;
   openWorkspace(id: string): Promise<WorkspaceSummary | null>;
   closeWorkspace(): Promise<boolean>;
-  completeMutation(targetWorkspaceId?: string): Promise<WorkspaceSummary | null>;
+  prepareMutation(sourceWorkspaceId: string, targetWorkspaceId?: string): PreparedMutationRefresh;
   reportError(message: string): void;
   clearError(): void;
 }
@@ -28,6 +38,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
   const [error, setError] = useState<string | null>(null);
   const listRequestId = useRef(0);
   const switchRequestId = useRef(0);
+  const refreshRequestId = useRef(0);
+  const activeWorkspaceRef = useRef<WorkspaceSummary | null>(null);
+  const activeWorkspaceEpochRef = useRef(0);
+  activeWorkspaceRef.current = activeWorkspace;
 
   const supersedeList = useCallback((): void => {
     listRequestId.current += 1;
@@ -53,32 +67,42 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     finally { if (activeRequest === listRequestId.current) setLoading(false); }
   }, []);
 
-  useEffect(() => { void refresh(); return () => { listRequestId.current += 1; switchRequestId.current += 1; }; }, [refresh]);
+  useEffect(() => { void refresh(); return () => { listRequestId.current += 1; switchRequestId.current += 1; refreshRequestId.current += 1; }; }, [refresh]);
 
-  const performOpen = useCallback(async (id: string, activeRequest: number, clearActive: boolean, announceSwitch = true): Promise<WorkspaceSummary | null> => {
-    if (announceSwitch) setSwitching(true);
-    if (clearActive) setActiveWorkspace(null);
+  const performOpen = useCallback(async (id: string, activeRequest: number, clearActive: boolean): Promise<WorkspaceSummary | null> => {
+    if (activeRequest !== switchRequestId.current) return null;
+    setSwitching(true);
+    if (clearActive) { activeWorkspaceRef.current = null; setActiveWorkspace(null); }
     setError(null);
     try {
       const result = await window.desktopApi.workspaces.open({ id });
       if (activeRequest !== switchRequestId.current) return null;
       if (!result.ok) { setError(result.error.message); return null; }
+      activeWorkspaceRef.current = result.value;
+      activeWorkspaceEpochRef.current = activeRequest;
       setActiveWorkspace(result.value);
       upsertWorkspace(result.value);
       return result.value;
     } catch {
       if (activeRequest === switchRequestId.current) setError("无法打开所选谱册");
       return null;
-    } finally { if (announceSwitch && activeRequest === switchRequestId.current) setSwitching(false); }
+    } finally {
+      if (activeRequest === switchRequestId.current) {
+        activeWorkspaceEpochRef.current = activeRequest;
+        setSwitching(false);
+      }
+    }
   }, [upsertWorkspace]);
 
   const openWorkspace = useCallback(async (id: string): Promise<WorkspaceSummary | null> => {
     supersedeList();
+    refreshRequestId.current += 1;
     return performOpen(id, ++switchRequestId.current, true);
   }, [performOpen, supersedeList]);
 
   const createWorkspace = useCallback(async (name: string): Promise<WorkspaceSummary | null> => {
     supersedeList();
+    refreshRequestId.current += 1;
     const activeRequest = ++switchRequestId.current;
     setSwitching(true);
     setError(null);
@@ -95,38 +119,109 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
       if (activeRequest === switchRequestId.current) setError("无法创建谱册");
       return null;
     } finally {
-      if (activeRequest === switchRequestId.current) setSwitching(false);
+      if (activeRequest === switchRequestId.current) {
+        activeWorkspaceEpochRef.current = activeRequest;
+        setSwitching(false);
+      }
     }
   }, [performOpen, supersedeList, upsertWorkspace]);
 
   const closeWorkspace = useCallback(async (): Promise<boolean> => {
     supersedeList();
+    refreshRequestId.current += 1;
     const activeRequest = ++switchRequestId.current;
     setSwitching(true);
     try {
       const result = await window.desktopApi.workspaces.close();
       if (activeRequest !== switchRequestId.current) return false;
       if (!result.ok) { setError(result.error.message); return false; }
+      activeWorkspaceRef.current = null;
       setActiveWorkspace(null);
       return true;
     } catch { if (activeRequest === switchRequestId.current) setError("无法关闭当前谱册"); return false; }
-    finally { if (activeRequest === switchRequestId.current) setSwitching(false); }
+    finally {
+      if (activeRequest === switchRequestId.current) {
+        activeWorkspaceEpochRef.current = activeRequest;
+        setSwitching(false);
+      }
+    }
   }, [supersedeList]);
 
-  const completeMutation = useCallback(async (targetWorkspaceId?: string): Promise<WorkspaceSummary | null> => {
-    const target = targetWorkspaceId ?? activeWorkspace?.id;
-    if (!target) { setError("没有可刷新的谱册"); return null; }
-    supersedeList();
-    const refreshed = await performOpen(target, ++switchRequestId.current, false, target !== activeWorkspace?.id);
-    if (refreshed) setMutationEpoch((current) => current + 1);
-    return refreshed;
-  }, [activeWorkspace?.id, performOpen, supersedeList]);
+  const prepareMutation = useCallback((sourceWorkspaceId: string, requestedTargetWorkspaceId?: string): PreparedMutationRefresh => {
+    const targetWorkspaceId = requestedTargetWorkspaceId ?? sourceWorkspaceId;
+    const sourceNavigationEpoch = activeWorkspaceEpochRef.current;
+    let claimedTargetNavigationEpoch: number | null = null;
+
+    const runRefresh = async (): Promise<MutationRefreshOutcome> => {
+      const expectedNavigationEpoch = claimedTargetNavigationEpoch ?? sourceNavigationEpoch;
+      if (
+        switchRequestId.current !== expectedNavigationEpoch ||
+        activeWorkspaceEpochRef.current !== expectedNavigationEpoch ||
+        activeWorkspaceRef.current?.id !== sourceWorkspaceId
+      ) {
+        return { status: "superseded" };
+      }
+
+      if (targetWorkspaceId !== sourceWorkspaceId) {
+        if (claimedTargetNavigationEpoch === null) {
+          supersedeList();
+          refreshRequestId.current += 1;
+          claimedTargetNavigationEpoch = ++switchRequestId.current;
+        }
+        const activeRequest = claimedTargetNavigationEpoch;
+        setSwitching(true);
+        setError(null);
+        try {
+          const result = await window.desktopApi.workspaces.open({ id: targetWorkspaceId });
+          if (activeRequest !== switchRequestId.current) return { status: "superseded" };
+          if (!result.ok) return { status: "refresh-failed" };
+          activeWorkspaceRef.current = result.value;
+          activeWorkspaceEpochRef.current = activeRequest;
+          setActiveWorkspace(result.value);
+          upsertWorkspace(result.value);
+          setMutationEpoch((current) => current + 1);
+          return { status: "refreshed", workspace: result.value };
+        } catch {
+          return activeRequest === switchRequestId.current ? { status: "refresh-failed" } : { status: "superseded" };
+        } finally {
+          if (activeRequest === switchRequestId.current) {
+            activeWorkspaceEpochRef.current = activeRequest;
+            setSwitching(false);
+          }
+        }
+      }
+
+      const activeRefresh = ++refreshRequestId.current;
+      try {
+        const result = await window.desktopApi.workspaces.open({ id: sourceWorkspaceId });
+        if (
+          activeRefresh !== refreshRequestId.current ||
+          sourceNavigationEpoch !== switchRequestId.current ||
+          activeWorkspaceRef.current?.id !== sourceWorkspaceId
+        ) return { status: "superseded" };
+        if (!result.ok) return { status: "refresh-failed" };
+        activeWorkspaceRef.current = result.value;
+        setActiveWorkspace(result.value);
+        upsertWorkspace(result.value);
+        setMutationEpoch((current) => current + 1);
+        return { status: "refreshed", workspace: result.value };
+      } catch {
+        return (
+          activeRefresh === refreshRequestId.current &&
+          sourceNavigationEpoch === switchRequestId.current &&
+          activeWorkspaceRef.current?.id === sourceWorkspaceId
+        ) ? { status: "refresh-failed" } : { status: "superseded" };
+      }
+    };
+
+    return { complete: runRefresh, retry: runRefresh };
+  }, [supersedeList, upsertWorkspace]);
 
   const value = useMemo<WorkspaceState>(() => ({
-    workspaces, activeWorkspace, loading, switching, mutationEpoch, error, refresh, createWorkspace, openWorkspace, closeWorkspace, completeMutation,
+    workspaces, activeWorkspace, loading, switching, mutationEpoch, error, refresh, createWorkspace, openWorkspace, closeWorkspace, prepareMutation,
     reportError: setError,
     clearError: () => setError(null)
-  }), [activeWorkspace, closeWorkspace, completeMutation, createWorkspace, error, loading, mutationEpoch, openWorkspace, refresh, switching, workspaces]);
+  }), [activeWorkspace, closeWorkspace, createWorkspace, error, loading, mutationEpoch, openWorkspace, prepareMutation, refresh, switching, workspaces]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 
