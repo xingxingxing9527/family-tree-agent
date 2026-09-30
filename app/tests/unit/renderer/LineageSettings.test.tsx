@@ -76,7 +76,26 @@ describe("LineageSettings", () => {
       patch: { lineageRole: "associated", isPrimary: false, declaredGeneration: 5, generationMarker: "世" }
     }));
     fireEvent.click(within(membership).getByRole("button", { name: "移除成员在长房的归属" }));
+    expect(lineagesApi.removeMembership).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "确认移除人物归属" });
+    expect(dialog).toHaveTextContent("人物：成员");
+    expect(dialog).toHaveTextContent("支系：长房");
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认移除归属" }));
     await waitFor(() => expect(lineagesApi.removeMembership).toHaveBeenCalledWith({ membershipId: "membership-member", expectedVersion: 2 }));
     expect(onChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("names the lineage and member count before confirming archive", async () => {
+    const lineagesApi = api();
+    render(<LineageSettings lineages={lineages} people={people} api={lineagesApi} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "归档支系" }));
+    expect(lineagesApi.archiveLineage).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "确认归档支系" });
+    expect(dialog).toHaveTextContent("支系：长房");
+    expect(dialog).toHaveTextContent("成员归属：2 条");
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认归档支系" }));
+
+    await waitFor(() => expect(lineagesApi.archiveLineage).toHaveBeenCalledWith({ lineageId: "lineage-a", expectedVersion: 1 }));
   });
 });

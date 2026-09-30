@@ -60,8 +60,8 @@ async function fixture(cleanup: string[]): Promise<ExportFixture> {
   `).run(workspaceId, personId, childId, now, now);
   database.prepare("INSERT INTO lineage (id, workspace_id, name, founder_person_id, description, created_at, updated_at) VALUES ('lineage-one', ?, '@formula-lineage', ?, '-description', ?, ?)")
     .run(workspaceId, personId, now, now);
-  database.prepare("INSERT INTO lineage_membership (id, workspace_id, lineage_id, person_id, lineage_role, is_primary, declared_generation, generation_marker, created_at, updated_at) VALUES ('membership-one', ?, 'lineage-one', ?, 'blood', 1, 3, '承', ?, ?)")
-    .run(workspaceId, personId, now, now);
+  database.prepare("INSERT INTO lineage_membership (id, workspace_id, lineage_id, person_id, lineage_role, is_primary, declared_generation, generation_marker, created_at, updated_at) VALUES ('membership-one', ?, 'lineage-one', ?, 'blood', 1, 3, ?, ?, ?)")
+    .run(workspaceId, personId, "\t =SUM(1,1)", now, now);
   database.prepare("INSERT INTO source (id, workspace_id, source_key, title, created_at, updated_at) VALUES ('source-one', ?, 'source-key', '来源', ?, ?)")
     .run(workspaceId, now, now);
   database.prepare("INSERT INTO wiki_entry (id, workspace_id, slug, title, content, created_at, updated_at) VALUES ('wiki-one', ?, 'family-rules', '家训', '=wiki text is JSON, not a spreadsheet cell', ?, ?)")
@@ -152,7 +152,7 @@ describe("workspace export", () => {
       id: "marriage-one", spouse_a_id: personId, start_calendar: "lunar", start_year: "2000", start_month: "6", start_day: "1", start_leap_month: "1", start_precision: "day",
       end_calendar: "solar", end_year: "2010", end_month: "7", end_day: "", end_leap_month: "0", end_precision: "month"
     });
-    expect((await rows(join(first, "lineages.csv")))[0]).toMatchObject({ lineage_id: "lineage-one", lineage_name: "'@formula-lineage", founder_person_id: personId, description: "'-description", membership_id: "membership-one", person_id: personId, declared_generation: "3", generation_marker: "承" });
+    expect((await rows(join(first, "lineages.csv")))[0]).toMatchObject({ lineage_id: "lineage-one", lineage_name: "'@formula-lineage", founder_person_id: personId, description: "'-description", membership_id: "membership-one", person_id: personId, declared_generation: "3", generation_marker: "'\t =SUM(1,1)" });
     expect(JSON.parse(await readFile(join(first, "wiki.json"), "utf8"))).toEqual({ entries: [{ id: "wiki-one", slug: "family-rules", title: "家训", content: "=wiki text is JSON, not a spreadsheet cell", personIds: [personId], sourceIds: ["source-one"] }] });
 
     const firstFiles = await listFiles(first);

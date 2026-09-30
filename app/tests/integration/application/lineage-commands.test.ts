@@ -92,6 +92,8 @@ describe("lineage and membership commands", () => {
     expect(() => service.createLineage({ name: " ", founderPersonId: "founder", description: null })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "VALIDATION" }));
     expect(() => service.createLineage({ name: "越界", founderPersonId: "other-person", description: null })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "NOT_FOUND" }));
     const lineage = service.createLineage({ name: "本谱", founderPersonId: "founder", description: null }).value;
+    const founderMembership = database.prepare("SELECT id, row_version FROM lineage_membership WHERE lineage_id=? AND person_id='founder'").get(lineage.id) as { id: string; row_version: number };
+    expect(() => service.updateMembership({ membershipId: founderMembership.id, expectedVersion: founderMembership.row_version, patch: { lineageRole: "associated" } })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "VALIDATION" }));
     expect(() => service.addMembership({ lineageId: lineage.id, personId: "member", lineageRole: "blood", isPrimary: false, declaredGeneration: 0, generationMarker: "承" })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "VALIDATION" }));
     expect(() => service.addMembership({ lineageId: lineage.id, personId: "member", lineageRole: "blood", isPrimary: false, declaredGeneration: 2, generationMarker: " " })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "VALIDATION" }));
     expect(() => service.addMembership({ lineageId: lineage.id, personId: "other-person", lineageRole: "associated", isPrimary: false, declaredGeneration: null, generationMarker: null })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "NOT_FOUND" }));
@@ -132,5 +134,29 @@ describe("lineage and membership commands", () => {
     new UndoService(database, workspaceId).undoOperationGroup(changed.operationGroupId);
     expect(database.prepare("SELECT founder_person_id FROM lineage WHERE id=?").pluck().get(lineage.id)).toBe("founder");
     expect(database.prepare("SELECT COUNT(*) FROM lineage_membership WHERE lineage_id=? AND person_id=? AND deleted_at IS NULL").pluck().get(lineage.id, "member")).toBe(0);
+  });
+
+  it("archives and removes with optimistic isolation, audit history, and atomic undo", () => {
+    const lineage = service.createLineage({ name: "长房", founderPersonId: "founder", description: null }).value;
+    const updated = service.updateLineage({ lineageId: lineage.id, expectedVersion: lineage.rowVersion, patch: { description: "东支" } }).value;
+    expect(() => service.archiveLineage({ lineageId: lineage.id, expectedVersion: lineage.rowVersion })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "CONFLICT" }));
+    expect(() => new LineageCommandService(database, "other-workspace").archiveLineage({ lineageId: lineage.id, expectedVersion: updated.rowVersion })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "NOT_FOUND" }));
+
+    const archived = service.archiveLineage({ lineageId: lineage.id, expectedVersion: updated.rowVersion });
+    expect(database.prepare("SELECT deleted_at FROM lineage WHERE id=?").pluck().get(lineage.id)).not.toBeNull();
+    expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE operation_group_id=? AND entity_type='lineage' AND action='archive'").pluck().get(archived.operationGroupId)).toBe(1);
+    new UndoService(database, workspaceId).undoOperationGroup(archived.operationGroupId);
+    expect(database.prepare("SELECT deleted_at FROM lineage WHERE id=?").pluck().get(lineage.id)).toBeNull();
+
+    const membership = service.addMembership({ lineageId: lineage.id, personId: "member", lineageRole: "blood", isPrimary: false, declaredGeneration: 2, generationMarker: "承" }).value;
+    const changed = service.updateMembership({ membershipId: membership.id, expectedVersion: membership.rowVersion, patch: { generationMarker: "启" } }).value;
+    expect(() => service.removeMembership({ membershipId: membership.id, expectedVersion: membership.rowVersion })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "CONFLICT" }));
+    expect(() => new LineageCommandService(database, "other-workspace").removeMembership({ membershipId: membership.id, expectedVersion: changed.rowVersion })).toThrowError(expect.objectContaining<Partial<LineageCommandError>>({ code: "NOT_FOUND" }));
+
+    const removed = service.removeMembership({ membershipId: membership.id, expectedVersion: changed.rowVersion });
+    expect(database.prepare("SELECT deleted_at FROM lineage_membership WHERE id=?").pluck().get(membership.id)).not.toBeNull();
+    expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE operation_group_id=? AND entity_type='lineage_membership' AND action='archive'").pluck().get(removed.operationGroupId)).toBe(1);
+    new UndoService(database, workspaceId).undoOperationGroup(removed.operationGroupId);
+    expect(database.prepare("SELECT deleted_at, generation_marker FROM lineage_membership WHERE id=?").get(membership.id)).toEqual({ deleted_at: null, generation_marker: "启" });
   });
 });

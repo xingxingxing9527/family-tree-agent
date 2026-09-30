@@ -9,6 +9,10 @@ type MembershipForm = {
   generationMarker: string;
 };
 
+type PendingDestructiveAction =
+  | { kind: "archive-lineage"; lineage: WorkspaceLineageReadModel }
+  | { kind: "remove-membership"; lineage: WorkspaceLineageReadModel; membership: WorkspaceLineageMembershipReadModel; personName: string };
+
 const emptyMembership = (): MembershipForm => ({ lineageRole: "blood", isPrimary: false, declaredGeneration: "", generationMarker: "" });
 const fromMembership = (membership: WorkspaceLineageMembershipReadModel): MembershipForm => ({
   lineageRole: membership.role,
@@ -40,6 +44,7 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
   const [lineageEdit, setLineageEdit] = useState({ name: "", founderPersonId: "", description: "" });
   const [editingMembershipId, setEditingMembershipId] = useState<string | null>(null);
   const [membershipEdit, setMembershipEdit] = useState<MembershipForm>(emptyMembership);
+  const [pendingDestructive, setPendingDestructive] = useState<PendingDestructiveAction | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -119,6 +124,14 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
     }), "人物归属已更新")) setEditingMembershipId(null);
   };
 
+  const confirmDestructive = async (): Promise<void> => {
+    if (!pendingDestructive) return;
+    const saved = pendingDestructive.kind === "archive-lineage"
+      ? await mutate(() => api.archiveLineage({ lineageId: pendingDestructive.lineage.id, expectedVersion: pendingDestructive.lineage.rowVersion }), "支系已归档")
+      : await mutate(() => api.removeMembership({ membershipId: pendingDestructive.membership.id, expectedVersion: pendingDestructive.membership.rowVersion }), "人物归属已移除");
+    if (saved) setPendingDestructive(null);
+  };
+
   return <section className="settings-section lineage-settings" aria-labelledby="lineage-settings-title">
     <h2 id="lineage-settings-title">支系与世代</h2>
     <div className="explanation-grid">
@@ -142,7 +155,7 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
         <label>支系始祖<select value={lineageEdit.founderPersonId} onChange={(event) => setLineageEdit((current) => ({ ...current, founderPersonId: event.target.value }))}>{people.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label>
         <label>支系说明<textarea value={lineageEdit.description} onChange={(event) => setLineageEdit((current) => ({ ...current, description: event.target.value }))} /></label>
         <div className="button-row"><button type="button" disabled={pending} onClick={() => void saveLineage(lineage)}>保存支系</button><button type="button" onClick={() => setEditingLineageId(null)}>取消</button></div>
-      </div> : <div className="section-heading-row"><div><h3 id={`lineage-${lineage.id}`}>{lineage.name}</h3><p>始祖：{names.get(lineage.founderPersonId) ?? lineage.founderPersonId} · 成员：{lineage.memberCount}{lineage.description ? ` · ${lineage.description}` : ""}</p></div><div className="button-row"><button type="button" onClick={() => openLineageEdit(lineage)}>编辑支系</button><button type="button" disabled={pending} onClick={() => void mutate(() => api.archiveLineage({ lineageId: lineage.id, expectedVersion: lineage.rowVersion }), "支系已归档")}>归档支系</button></div></div>}
+      </div> : <div className="section-heading-row"><div><h3 id={`lineage-${lineage.id}`}>{lineage.name}</h3><p>始祖：{names.get(lineage.founderPersonId) ?? lineage.founderPersonId} · 成员：{lineage.memberCount}{lineage.description ? ` · ${lineage.description}` : ""}</p></div><div className="button-row"><button type="button" onClick={() => openLineageEdit(lineage)}>编辑支系</button><button type="button" disabled={pending} onClick={() => setPendingDestructive({ kind: "archive-lineage", lineage })}>归档支系</button></div></div>}
       <ul className="membership-list" aria-label={`${lineage.name}成员归属`}>{lineage.memberships.map((membership) => {
         const personName = names.get(membership.personId) ?? membership.personId;
         const founder = membership.personId === lineage.founderPersonId;
@@ -158,7 +171,7 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
             <span>角色：{membership.role === "blood" ? "血缘成员" : membership.role === "married_in" ? "婚入成员" : "关联成员"}</span>
             <span>字辈：{membership.generationMarker ?? "未录入"}</span>
             <span className={membership.generation.conflict ? "warning-copy" : undefined}>{generationLabel(membership)}</span>
-            <div className="button-row"><button type="button" onClick={() => openMembershipEdit(membership)} aria-label={`编辑${personName}在${lineage.name}的归属`}>编辑归属</button><button type="button" disabled={pending || founder} title={founder ? "始祖归属不能移除" : undefined} onClick={() => void mutate(() => api.removeMembership({ membershipId: membership.id, expectedVersion: membership.rowVersion }), "人物归属已移除")} aria-label={`移除${personName}在${lineage.name}的归属`}>移除归属</button></div>
+            <div className="button-row"><button type="button" onClick={() => openMembershipEdit(membership)} aria-label={`编辑${personName}在${lineage.name}的归属`}>编辑归属</button><button type="button" disabled={pending || founder} title={founder ? "始祖归属不能移除" : undefined} onClick={() => setPendingDestructive({ kind: "remove-membership", lineage, membership, personName })} aria-label={`移除${personName}在${lineage.name}的归属`}>移除归属</button></div>
           </>}
         </li>;
       })}</ul>
@@ -174,5 +187,14 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
       <label className="check-control"><input type="checkbox" checked={newMembership.isPrimary} onChange={(event) => setNewMembership((current) => ({ ...current, isPrimary: event.target.checked }))} />设为主归属</label>
       <button className="button secondary-button" type="submit" disabled={pending || !selectedLineageId || !memberPersonId}>添加归属</button>
     </form>}
+    {pendingDestructive && <div className="modal-backdrop"><section className="confirmation-dialog" role="dialog" aria-modal="true" aria-label={pendingDestructive.kind === "archive-lineage" ? "确认归档支系" : "确认移除人物归属"}>
+      <h3>{pendingDestructive.kind === "archive-lineage" ? "确认归档支系" : "确认移除人物归属"}</h3>
+      <p>支系：{pendingDestructive.lineage.name}</p>
+      {pendingDestructive.kind === "archive-lineage"
+        ? <p>成员归属：{pendingDestructive.lineage.memberCount} 条</p>
+        : <p>人物：{pendingDestructive.personName}</p>}
+      <p>{pendingDestructive.kind === "archive-lineage" ? "归档后该支系会从当前活动视图隐藏。" : "移除后该人物不再属于此支系。"}</p>
+      <div className="button-row"><button className="button danger-button" type="button" disabled={pending} onClick={() => void confirmDestructive()}>{pendingDestructive.kind === "archive-lineage" ? "确认归档支系" : "确认移除归属"}</button><button className="button secondary-button" type="button" disabled={pending} onClick={() => setPendingDestructive(null)}>取消</button></div>
+    </section></div>}
   </section>;
 }

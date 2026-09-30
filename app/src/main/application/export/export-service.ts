@@ -60,7 +60,7 @@ const lineageHeaders = ["lineage_id", "lineage_name", "founder_person_id", "desc
 
 const humanColumns = {
   people: new Set(["display_name", "aliases", "notes"]),
-  lineages: new Set(["lineage_name", "description"])
+  lineages: new Set(["lineage_name", "description", "generation_marker"])
 };
 
 const normalizeCase = (path: string): string => process.platform === "win32" ? path.toLocaleLowerCase("en-US") : path;

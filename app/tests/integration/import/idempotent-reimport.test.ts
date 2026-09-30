@@ -190,6 +190,34 @@ describe("idempotent spreadsheet re-import", () => {
     expect(database.prepare("SELECT COUNT(*) FROM marriage").pluck().get()).toBe(1);
   });
 
+  it("blocks a second active marriage for either spouse during preview even when the pair differs", () => {
+    const plan = planner.plan(parsed("archive:cross-pair-active", [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      peopleRow(4, "C", "丙"),
+      marriageRow(2, "A", "B", "active", 2010),
+      marriageRow(3, "A", "C", "active", 2020)
+    ]));
+
+    expect(plan.actions.filter((action) => action.entityType === "marriage").map((action) => action.kind)).toEqual(["create", "blocked"]);
+    expect(plan.summary).toEqual({ creates: 4, updates: 0, unchanged: 0, blocked: 1 });
+  });
+
+  it("blocks a cross-pair historical episode that overlaps a persisted marriage", () => {
+    const people = [peopleRow(2, "A", "甲"), peopleRow(3, "B", "乙"), peopleRow(4, "C", "丙")];
+    const initial = planner.plan(parsed("archive:cross-pair-history", [...people, marriageRow(2, "A", "B", "divorced", 1990, 2010)]));
+    committer.commitImport(initial.id, selectable(initial));
+
+    const preview = planner.plan(parsed("archive:cross-pair-history", [
+      ...people,
+      marriageRow(2, "A", "B", "divorced", 1990, 2010),
+      marriageRow(3, "A", "C", "divorced", 2000, 2005)
+    ]));
+
+    expect(preview.actions.filter((action) => action.entityType === "marriage").map((action) => action.kind)).toEqual(["unchanged", "blocked"]);
+    expect(preview.summary).toEqual({ creates: 0, updates: 0, unchanged: 4, blocked: 1 });
+  });
+
   it("blocks a conflicting second active episode and rolls back a stale selected set atomically", () => {
     const initial = planner.plan(parsed("archive:active-conflict", [peopleRow(2, "A", "甲"), peopleRow(3, "B", "乙")]));
     committer.commitImport(initial.id, selectable(initial));

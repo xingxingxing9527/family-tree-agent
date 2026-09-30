@@ -296,10 +296,16 @@ export class ImportPlanner {
     let expectedRowVersion: number | undefined;
     const pairKey = this.marriagePairKey(payload.spouseAExternalId, payload.spouseBExternalId);
     const alreadyPlanned = plannedMarriages.get(pairKey) ?? [];
+    const plannedForEitherSpouse = [...plannedMarriages.values()].flat().filter((episode) =>
+      this.episodesSharePerson(episode.spouseAExternalId, episode.spouseBExternalId, payload.spouseAExternalId, payload.spouseBExternalId)
+    );
     if (kind !== "blocked" && alreadyPlanned.some((episode) => this.sameEpisode(episode, payload))) {
       kind = "unchanged";
     } else if (kind !== "blocked" && alreadyPlanned.some((episode) => this.episodesConflict(episode, payload))) {
       rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with another row in the uploaded file", {}));
+      kind = "blocked";
+    } else if (kind !== "blocked" && plannedForEitherSpouse.some((episode) => this.episodesConflict(episode, payload))) {
+      rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "A spouse has an overlapping marriage episode in the uploaded file", {}));
       kind = "blocked";
     } else if (kind !== "blocked" && spouseAId && spouseBId) {
       const pair = [spouseAId, spouseBId].sort();
@@ -312,7 +318,7 @@ export class ImportPlanner {
         expectedRowVersion = exact.rowVersion;
       } else if (
         pairMarriages.some((marriage) => this.episodesConflict(marriage, payload)) ||
-        (payload.status === "active" && allMarriages.some((marriage) => marriage.status === "active" && (marriage.spouseAId === spouseAId || marriage.spouseBId === spouseAId || marriage.spouseAId === spouseBId || marriage.spouseBId === spouseBId)))
+        allMarriages.some((marriage) => this.episodesSharePerson(marriage.spouseAId, marriage.spouseBId, spouseAId, spouseBId) && this.episodesConflict(marriage, payload))
       ) {
         rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with an existing active or overlapping episode", {}));
         kind = "blocked";
@@ -325,6 +331,10 @@ export class ImportPlanner {
 
   private marriagePairKey(spouseA: string, spouseB: string): string {
     return [spouseA, spouseB].sort().join("\u0000");
+  }
+
+  private episodesSharePerson(leftA: string, leftB: string, rightA: string, rightB: string): boolean {
+    return leftA === rightA || leftA === rightB || leftB === rightA || leftB === rightB;
   }
 
   private sameEpisode(

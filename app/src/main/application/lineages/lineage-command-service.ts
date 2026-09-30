@@ -72,6 +72,9 @@ export class LineageCommandService {
     this.requireVersion(membership.rowVersion, input.expectedVersion, "lineage_membership", membership.id);
     if (Object.keys(input.patch).length === 0) throw new LineageCommandError("VALIDATION", "Membership patch cannot be empty", { field: "patch" });
     const patch = this.membershipPatch(input.patch);
+    if (patch.lineageRole !== undefined && patch.lineageRole !== "blood" && this.requireLineage(membership.lineageId).founderPersonId === membership.personId) {
+      throw new LineageCommandError("VALIDATION", "The active founder membership must remain a blood membership", { field: "lineageRole", entityId: membership.id, entityType: "lineage_membership" });
+    }
     return this.run("lineage-membership.update", (ctx) => {
       if (patch.isPrimary === true) this.demoteOtherPrimaries(ctx, membership.personId, membership.id);
       return ctx.lineages.updateMembership(ctx, membership.id, patch);
