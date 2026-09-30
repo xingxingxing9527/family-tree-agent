@@ -17,6 +17,7 @@ import { loadPersistedKinshipFacts } from "./persisted-kinship-facts.js";
 interface AliasRow { person_id: string; name: string; }
 interface SourceRow { id: string; source_key: string; title: string; kind: string | null; uri: string | null; citation: string | null; }
 interface LineageRow { id: string; name: string; founder_person_id: string; description: string | null; row_version: number; member_count: number; }
+interface SnapshotMembershipRow extends ProjectionMembershipRow { id: string; generation_marker: string | null; row_version: number; }
 interface ProjectionLineageRow { id: string; founder_person_id: string; }
 interface ProjectionMembershipRow {
   lineage_id: string;
@@ -24,6 +25,7 @@ interface ProjectionMembershipRow {
   lineage_role: "blood" | "married_in" | "associated";
   is_primary: number;
   declared_generation: number | null;
+  generation_marker: string | null;
 }
 
 export function readWorkspaceSnapshot(database: WorkspaceDatabase, workspaceId: string): WorkspaceSnapshotDto {
@@ -62,7 +64,7 @@ export function readWorkspaceSnapshot(database: WorkspaceDatabase, workspaceId: 
     uri: source.uri,
     citation: source.citation
   }));
-  const lineages = (database.prepare(`
+  const lineageRows = database.prepare(`
     SELECT l.id, l.name, l.founder_person_id, l.description, l.row_version,
       COUNT(m.id) AS member_count
     FROM lineage l
@@ -71,14 +73,44 @@ export function readWorkspaceSnapshot(database: WorkspaceDatabase, workspaceId: 
     WHERE l.workspace_id = ? AND l.deleted_at IS NULL
     GROUP BY l.id, l.name, l.founder_person_id, l.description, l.row_version
     ORDER BY l.name, l.id
-  `).all(workspaceId) as LineageRow[]).map((lineage): WorkspaceLineageReadModel => ({
-    id: lineage.id,
-    name: lineage.name,
-    founderPersonId: lineage.founder_person_id,
-    description: lineage.description,
-    memberCount: lineage.member_count,
-    rowVersion: lineage.row_version
-  }));
+  `).all(workspaceId) as LineageRow[];
+  const membershipRows = database.prepare(`
+    SELECT id, lineage_id, person_id, lineage_role, is_primary, declared_generation, generation_marker, row_version
+    FROM lineage_membership
+    WHERE workspace_id = ? AND deleted_at IS NULL
+    ORDER BY lineage_id, person_id, id
+  `).all(workspaceId) as SnapshotMembershipRow[];
+  const membershipByLineage = new Map<string, SnapshotMembershipRow[]>();
+  for (const membership of membershipRows) membershipByLineage.set(membership.lineage_id, [...(membershipByLineage.get(membership.lineage_id) ?? []), membership]);
+  const parentChildFacts = queries.listParentChild().map((fact) => ({ parentId: fact.parentId, childId: fact.childId, relationshipType: fact.relationshipType }));
+  const generationService = new GenerationService();
+  const lineages = lineageRows.map((lineage): WorkspaceLineageReadModel => {
+    const lineageMemberships = membershipByLineage.get(lineage.id) ?? [];
+    const generations = generationService.calculate({
+      founderPersonId: lineage.founder_person_id,
+      memberships: lineageMemberships.map((membership) => ({ personId: membership.person_id, lineageRole: membership.lineage_role, declaredGeneration: membership.declared_generation })),
+      parentChildFacts
+    });
+    return {
+      id: lineage.id,
+      name: lineage.name,
+      founderPersonId: lineage.founder_person_id,
+      description: lineage.description,
+      memberCount: lineage.member_count,
+      rowVersion: lineage.row_version,
+      memberships: lineageMemberships.map((membership) => ({
+        id: membership.id,
+        lineageId: membership.lineage_id,
+        personId: membership.person_id,
+        role: membership.lineage_role,
+        isPrimary: membership.is_primary === 1,
+        declaredGeneration: membership.declared_generation,
+        generationMarker: membership.generation_marker,
+        generation: generations[membership.person_id] ?? { declared: membership.declared_generation, computed: null, displayed: membership.declared_generation, source: membership.declared_generation === null ? "none" : "declared", conflict: false },
+        rowVersion: membership.row_version
+      }))
+    };
+  });
   return { workspaceId, people, sources, lineages };
 }
 
@@ -119,7 +151,7 @@ export function projectWorkspaceTree(
     ORDER BY id
   `).all(workspaceId) as ProjectionLineageRow[];
   const memberships = database.prepare(`
-    SELECT lineage_id, person_id, lineage_role, is_primary, declared_generation
+    SELECT lineage_id, person_id, lineage_role, is_primary, declared_generation, generation_marker
     FROM lineage_membership
     WHERE workspace_id = ? AND deleted_at IS NULL
     ORDER BY lineage_id, person_id, id
@@ -137,6 +169,7 @@ export function projectWorkspaceTree(
   }));
   const generations = new GenerationService();
   const generationByPerson = new Map<string, GenerationDisplay>();
+  const generationMarkerByPerson = new Map<string, string | null>();
   for (const lineage of lineages) {
     const lineageMemberships = membershipsByLineage.get(lineage.id) ?? [];
     const displays = generations.calculate({
@@ -151,7 +184,10 @@ export function projectWorkspaceTree(
     for (const membership of lineageMemberships) {
       if (membership.is_primary !== 1) continue;
       const display = displays[membership.person_id];
-      if (display) generationByPerson.set(membership.person_id, display);
+      if (display) {
+        generationByPerson.set(membership.person_id, display);
+        generationMarkerByPerson.set(membership.person_id, membership.generation_marker);
+      }
     }
   }
   const primaryTerms = input.viewpointId
@@ -163,7 +199,8 @@ export function projectWorkspaceTree(
       displayName: person.displayName,
       birthYear: person.birth?.year ?? null,
       deathYear: person.death?.year ?? null,
-      generation: generationByPerson.get(person.id) ?? null
+      generation: generationByPerson.get(person.id) ?? null,
+      generationMarker: generationMarkerByPerson.get(person.id) ?? null
     })),
     unions
   }, (viewpointId, targetPersonId) => primaryTerms && viewpointId === input.viewpointId

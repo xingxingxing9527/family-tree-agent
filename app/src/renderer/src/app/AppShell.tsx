@@ -103,7 +103,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
         {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
         {activeArea === "wiki" && <WikiPage api={api.wiki} query={api.query} people={snapshot.people.map((person) => ({ id: person.id, displayName: person.displayName }))} sources={snapshot.sources.map((source) => ({ id: source.id, title: source.title }))} />}
-        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} prepareMutation={prepareMutation} />}
+        {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} prepareMutation={prepareMutation} onChanged={refreshSnapshot} />}
       </main>
       <ChatPanel onSend={ask} />
     </div>

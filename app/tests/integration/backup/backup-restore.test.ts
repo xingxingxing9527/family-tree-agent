@@ -65,7 +65,7 @@ describe("verified backup and staged restore", () => {
       formatVersion: 1,
       workspaceId,
       workspaceName: "王氏家谱",
-      schemaVersion: 4,
+      schemaVersion: 5,
       counts: { people: 1, parentChild: 0, marriages: 0, wikiEntries: 1, mediaAssets: 1 }
     });
     expect(backup.manifest.files.map((entry) => entry.path)).toEqual([...backup.manifest.files.map((entry) => entry.path)].sort());
@@ -97,13 +97,14 @@ describe("verified backup and staged restore", () => {
       completeActivation: () => { completed = true; }
     });
     const inspection = await restore.inspectBackup({ archivePath: value.archivePath, targetWorkspaceId: workspaceId });
-    expect(inspection).toMatchObject({ verified: true, targetWorkspaceId: workspaceId, manifest: { schemaVersion: 4, counts: backup.manifest.counts } });
+    expect(inspection).toMatchObject({ verified: true, targetWorkspaceId: workspaceId, manifest: { schemaVersion: 5, counts: backup.manifest.counts } });
     await restore.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: workspaceId, confirmReplace: true });
 
     expect(committed).toBe(true);
     expect(completed).toBe(true);
     const restored = openDatabase(value.workspace.databasePath);
     expect(restored.prepare("SELECT display_name FROM person WHERE id=?").pluck().get(originPersonId)).toBe("王小明");
+    expect(restored.prepare("SELECT declared_generation, generation_marker, is_primary FROM lineage_membership WHERE lineage_id='backup-lineage'").get()).toEqual({ declared_generation: 1, generation_marker: "承", is_primary: 1 });
     expect(restored.pragma("integrity_check", { simple: true })).toBe("ok");
     restored.close();
     expect(await readFile(join(value.workspace.workspaceRoot, backup.manifest.files.find((entry) => entry.path.startsWith("media/"))!.path))).toEqual(mediaBytes);

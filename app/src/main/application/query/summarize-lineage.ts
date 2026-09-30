@@ -23,6 +23,8 @@ export function summarizeLineage(
       personId: person.id,
       displayName: person.displayName,
       role: membership.lineageRole,
+      isPrimary: membership.isPrimary,
+      generationMarker: membership.generationMarker,
       generation
     }] : [];
   });

@@ -3,7 +3,7 @@ import { join, normalize, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { installNavigationPolicy } from "./security/navigation-policy.js";
 import { createSecureWebPreferences } from "./security/window-options.js";
-import { registerChatIpc, registerDataManagementIpc, registerFactsIpc, registerImportIpc, registerMediaIpc, registerMergeIpc, registerModelSettingsIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
+import { registerChatIpc, registerDataManagementIpc, registerFactsIpc, registerImportIpc, registerLineageIpc, registerMediaIpc, registerMergeIpc, registerModelSettingsIpc, registerQueryIpc, registerWikiIpc, registerWorkspaceIpc } from "./ipc/register-ipc.js";
 import { WorkspaceMergeGateway } from "./ipc/merge-ipc.js";
 import { WorkspaceImportGateway, type ImportDialogs } from "./ipc/import-ipc.js";
 import { WorkspaceFactsGateway } from "./application/facts/facts-gateway.js";
@@ -20,6 +20,7 @@ import { WorkspaceMutationGate } from "./workspaces/workspace-mutation-gate.js";
 import { DeterministicE2EAdapter } from "./llm/deterministic-e2e-adapter.js";
 import { resolveRuntimeSeams } from "./security/runtime-seams.js";
 import { installSessionSecurityPolicy } from "./security/session-policy.js";
+import { WorkspaceLineageGateway } from "./ipc/lineage-ipc.js";
 
 const rendererRoot = resolve(__dirname, "../renderer");
 
@@ -79,6 +80,7 @@ app.whenReady().then(() => {
   mainWindow = createWindow(seams.rendererUrl);
   registerWorkspaceIpc(ipcMain, () => mainWindow?.webContents.id, workspaceManager, workspaceMutations);
   registerFactsIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceFactsGateway(workspaceManager), workspaceMutations);
+  registerLineageIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceLineageGateway(workspaceManager), workspaceMutations);
   registerQueryIpc(ipcMain, () => mainWindow?.webContents.id, new WorkspaceQueryGateway(workspaceManager), workspaceMutations);
   const importPath = seams.importPath ?? undefined;
   const importDialogs: ImportDialogs | undefined = importPath ? {

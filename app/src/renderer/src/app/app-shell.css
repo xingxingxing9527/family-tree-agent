@@ -38,6 +38,25 @@
 .settings-list li { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding: 0.75rem; background: var(--surface-muted); border-radius: 8px; }
 .explanation-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
 .explanation-grid article { padding: 0.8rem; background: var(--surface-muted); border-radius: 8px; }
+.lineage-settings, .lineage-list, .lineage-form, .membership-list, .membership-edit-grid { display: grid; gap: 0.75rem; }
+.lineage-form, .lineage-card { min-width: 0; padding: 0.9rem; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 10px; }
+.lineage-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lineage-form h3, .lineage-form textarea, .lineage-form .button, .lineage-form .empty-copy { grid-column: 1 / -1; }
+.lineage-form label, .membership-edit-grid label { display: grid; gap: 0.3rem; min-width: 0; color: var(--text-secondary); font-weight: 700; }
+.lineage-form input, .lineage-form select, .lineage-form textarea, .membership-edit-grid input, .membership-edit-grid select { width: 100%; min-width: 0; min-height: 2.55rem; padding: 0.55rem; color: var(--text-primary); background: #fff; border: 1px solid var(--control-border); border-radius: 7px; }
+.lineage-form textarea { min-height: 5rem; resize: vertical; }
+.lineage-card h3, .lineage-card p { margin: 0; }
+.membership-list { padding: 0; list-style: none; }
+.membership-list li { display: grid; gap: 0.45rem; min-width: 0; padding: 0.75rem; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
+.membership-list li > div:first-child { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+.membership-edit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.membership-edit-grid .button-row { grid-column: 1 / -1; }
+.button-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.button-row button { min-height: 2.35rem; padding: 0.4rem 0.7rem; color: var(--accent-strong); background: #fff; border: 1px solid var(--control-border); border-radius: 7px; font-weight: 700; }
+.check-control { display: flex !important; grid-auto-flow: column; grid-template-columns: auto 1fr; justify-content: start; align-items: center; }
+.check-control input { width: 1.15rem !important; min-height: 1.15rem !important; }
+.tag { padding: 0.15rem 0.45rem; color: #172019; background: #dce9dd; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+.warning-copy { color: #7a2d16; font-weight: 700; }
 
 @media (max-width: 1180px) {
   .top-bar { grid-template-columns: auto 1fr auto; }
@@ -54,6 +73,8 @@
   .chat-panel { grid-column: 1; }
   .workspace-content { padding: 0.85rem; }
   .wiki-layout, .explanation-grid { grid-template-columns: 1fr; }
+  .lineage-form, .membership-edit-grid { grid-template-columns: 1fr; }
+  .lineage-form > *, .membership-edit-grid > * { grid-column: 1; }
 }
 @media (max-width: 420px) {
   .top-bar { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; padding: 0.65rem; }

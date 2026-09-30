@@ -56,7 +56,7 @@ test("enforces renderer, CSP, navigation, permission, API and main-validation bo
     }))).toEqual({
       requireType: "undefined",
       processType: "undefined",
-      apiKeys: ["app", "chat", "dataManagement", "imports", "media", "merges", "modelSettings", "people", "query", "relations", "wiki", "workspaces"],
+      apiKeys: ["app", "chat", "dataManagement", "imports", "lineages", "media", "merges", "modelSettings", "people", "query", "relations", "wiki", "workspaces"],
       dangerousKeys: []
     });
 

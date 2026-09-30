@@ -70,8 +70,10 @@ describe("safe person unmerge", () => {
       notes: "次记录（有来源）",
       deleted_at: null
     });
-    expect(database.prepare("SELECT person_id, deleted_at FROM lineage_membership WHERE id = ?").get(ids.lineageTwoSecondary)).toEqual({
+    expect(database.prepare("SELECT person_id, generation_marker, declared_generation, deleted_at FROM lineage_membership WHERE id = ?").get(ids.lineageTwoSecondary)).toEqual({
       person_id: ids.secondary,
+      generation_marker: "继",
+      declared_generation: 4,
       deleted_at: null
     });
     expect(database.prepare("SELECT person_id FROM media_person WHERE id = ?").get(ids.mediaPerson)).toEqual({ person_id: ids.secondary });

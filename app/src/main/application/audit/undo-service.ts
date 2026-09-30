@@ -97,7 +97,8 @@ const membershipSchema = z.object({
   personId: bounded,
   lineageRole: z.enum(["blood", "married_in", "associated"]),
   isPrimary: z.boolean(),
-  declaredGeneration: z.number().int().positive().nullable()
+  declaredGeneration: z.number().int().positive().nullable(),
+  generationMarker: z.string().trim().min(1).max(50).nullable()
 }).strict();
 const importIdentitySchema = z.object({
   id: bounded,
@@ -394,8 +395,8 @@ export class UndoService {
       },
       lineage_membership: {
         table: "lineage_membership", schema: membershipSchema as z.ZodType<Snapshot>, supportsRestore: true,
-        read: (id) => row("SELECT * FROM lineage_membership WHERE workspace_id=? AND id=?", id, (value) => ({ ...base(value), lineageId: String(value.lineage_id), personId: String(value.person_id), lineageRole: value.lineage_role as "blood" | "married_in" | "associated", isPrimary: Number(value.is_primary) === 1, declaredGeneration: value.declared_generation === null ? null : Number(value.declared_generation) })),
-        restore: (snapshot) => { const value = membershipSchema.parse(snapshot); this.database.prepare("UPDATE lineage_membership SET lineage_id=?, person_id=?, lineage_role=?, is_primary=?, declared_generation=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?").run(value.lineageId, value.personId, value.lineageRole, value.isPrimary ? 1 : 0, value.declaredGeneration, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
+        read: (id) => row("SELECT * FROM lineage_membership WHERE workspace_id=? AND id=?", id, (value) => ({ ...base(value), lineageId: String(value.lineage_id), personId: String(value.person_id), lineageRole: value.lineage_role as "blood" | "married_in" | "associated", isPrimary: Number(value.is_primary) === 1, declaredGeneration: value.declared_generation === null ? null : Number(value.declared_generation), generationMarker: value.generation_marker === null ? null : String(value.generation_marker) })),
+        restore: (snapshot) => { const value = membershipSchema.parse(snapshot); this.database.prepare("UPDATE lineage_membership SET lineage_id=?, person_id=?, lineage_role=?, is_primary=?, declared_generation=?, generation_marker=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?").run(value.lineageId, value.personId, value.lineageRole, value.isPrimary ? 1 : 0, value.declaredGeneration, value.generationMarker, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
         dependencies: none
       },
       import_identity: {

@@ -149,6 +149,8 @@ export interface LineageMemberSummary {
   personId: string;
   displayName: string;
   role: "blood" | "married_in" | "associated";
+  isPrimary: boolean;
+  generationMarker: string | null;
   generation: {
     declared: number | null;
     computed: number | null;
@@ -202,6 +204,19 @@ export interface WorkspaceLineageReadModel {
   description: string | null;
   memberCount: number;
   rowVersion: number;
+  memberships: WorkspaceLineageMembershipReadModel[];
+}
+
+export interface WorkspaceLineageMembershipReadModel {
+  id: string;
+  lineageId: string;
+  personId: string;
+  role: "blood" | "married_in" | "associated";
+  isPrimary: boolean;
+  declaredGeneration: number | null;
+  generationMarker: string | null;
+  generation: TreeGenerationDisplayDto;
+  rowVersion: number;
 }
 
 export interface WorkspaceSnapshotDto {
@@ -228,6 +243,7 @@ export interface TreePersonNodeDto {
     birthYear: number | null;
     deathYear: number | null;
     generation: TreeGenerationDisplayDto | null;
+    generationMarker: string | null;
   };
 }
 
@@ -303,6 +319,15 @@ export interface ParentChildDraft {
   childId: string;
   parentRole: "father" | "mother";
   sourceDescription: string;
+}
+
+export interface LineageApi {
+  createLineage(input: { name: string; founderPersonId: string; description: string | null }): Promise<AppResult<FactMutationReceipt>>;
+  updateLineage(input: { lineageId: string; expectedVersion: number; patch: { name?: string; founderPersonId?: string; description?: string | null } }): Promise<AppResult<FactMutationReceipt>>;
+  archiveLineage(input: { lineageId: string; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
+  addMembership(input: { lineageId: string; personId: string; lineageRole: "blood" | "married_in" | "associated"; isPrimary: boolean; declaredGeneration: number | null; generationMarker: string | null }): Promise<AppResult<FactMutationReceipt>>;
+  updateMembership(input: { membershipId: string; expectedVersion: number; patch: { lineageRole?: "blood" | "married_in" | "associated"; isPrimary?: boolean; declaredGeneration?: number | null; generationMarker?: string | null } }): Promise<AppResult<FactMutationReceipt>>;
+  removeMembership(input: { membershipId: string; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
 }
 
 export interface MarriageDraft {
@@ -473,6 +498,7 @@ export interface DesktopApi {
     addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
   };
+  lineages: LineageApi;
   imports: ImportApi;
   merges: MergeApi;
   media: MediaApi;

@@ -138,6 +138,7 @@ describe("workspace snapshot and tree projection", () => {
     insertMembership.run("member-child-a", workspaceId, "lineage-a", "child-a", 3, now, now);
     insertMembership.run("member-founder-b", workspaceId, "lineage-b", "founder-b", null, now, now);
     insertMembership.run("member-child-b", workspaceId, "lineage-b", "child-b", null, now, now);
+    database.prepare("UPDATE lineage_membership SET generation_marker='承' WHERE id='member-child-a'").run();
 
     statements = 0;
     const tree = projectWorkspaceTree(database, workspaceId, { view: "full", collapseDepth: 20 });
@@ -145,7 +146,7 @@ describe("workspace snapshot and tree projection", () => {
       .filter((node): node is Extract<typeof node, { kind: "person" }> => node.kind === "person")
       .map((node) => [node.personId, node]));
     expect(personNodes.get("founder-a")?.display.generation).toMatchObject({ displayed: 1, computed: 1, source: "computed", conflict: false });
-    expect(personNodes.get("child-a")?.display.generation).toMatchObject({ displayed: 3, computed: 2, source: "declared", conflict: true });
+    expect(personNodes.get("child-a")?.display).toMatchObject({ generationMarker: "承", generation: { displayed: 3, computed: 2, source: "declared", conflict: true } });
     expect(personNodes.get("child-b")?.display.generation).toMatchObject({ displayed: 2, computed: 2, source: "computed", conflict: false });
     expect(statements).toBeLessThanOrEqual(6);
     database.close();

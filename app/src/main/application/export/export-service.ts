@@ -56,7 +56,7 @@ const marriageHeaders = [
   "start_calendar", "start_year", "start_month", "start_day", "start_leap_month", "start_precision",
   "end_calendar", "end_year", "end_month", "end_day", "end_leap_month", "end_precision"
 ] as const;
-const lineageHeaders = ["lineage_id", "lineage_name", "founder_person_id", "description", "membership_id", "person_id", "lineage_role", "is_primary", "declared_generation"] as const;
+const lineageHeaders = ["lineage_id", "lineage_name", "founder_person_id", "description", "membership_id", "person_id", "lineage_role", "is_primary", "declared_generation", "generation_marker"] as const;
 
 const humanColumns = {
   people: new Set(["display_name", "aliases", "notes"]),
@@ -140,7 +140,7 @@ function collectSnapshot(database: Database.Database, workspaceId: string): Expo
   `, workspaceId);
   const lineages = readRows(database, `
     SELECT lineage.id AS lineage_id, lineage.name AS lineage_name, lineage.founder_person_id, lineage.description,
-      membership.id AS membership_id, membership.person_id, membership.lineage_role, membership.is_primary, membership.declared_generation
+      membership.id AS membership_id, membership.person_id, membership.lineage_role, membership.is_primary, membership.declared_generation, membership.generation_marker
     FROM lineage
     LEFT JOIN lineage_membership AS membership
       ON membership.lineage_id = lineage.id AND membership.workspace_id = lineage.workspace_id AND membership.deleted_at IS NULL

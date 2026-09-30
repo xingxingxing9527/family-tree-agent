@@ -8,6 +8,7 @@ import { FactCommandService } from "../../../src/main/application/facts/fact-com
 import { WikiService } from "../../../src/main/application/wiki/wiki-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
+import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
 
 export const workspaceId = "11111111-1111-4111-8111-111111111111";
 export const workspaceDirectory = "22222222-2222-4222-8222-222222222222";
@@ -32,7 +33,7 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
   await mkdir(mediaRoot, { recursive: true });
   await mkdir(backupsRoot);
   await mkdir(join(root, "archives"));
-  const workspaceManifest = { id: workspaceId, name: "王氏家谱", directory: workspaceDirectory, originPersonId, lastOpenedAt: "2026-09-16T00:00:00.000Z", schemaVersion: 4 };
+  const workspaceManifest = { id: workspaceId, name: "王氏家谱", directory: workspaceDirectory, originPersonId, lastOpenedAt: "2026-09-16T00:00:00.000Z", schemaVersion: 5 };
   await writeFile(manifestPath, JSON.stringify(workspaceManifest));
   await writeFile(join(root, "workspaces", "index.json"), JSON.stringify({ workspaces: [workspaceManifest] }));
   const database = openDatabase(databasePath);
@@ -44,6 +45,11 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
     type: "person.create",
     draft: { id: originPersonId, workspaceId, displayName: "王小明", gender: "male", birth: { calendar: "lunar", year: 1980, month: 4, day: 2, leapMonth: true, precision: "day" } },
     source: { sourceKey: "seed", title: "seed", kind: "test" }
+  });
+  createUnitOfWork(database, workspaceId).run("fixture.lineage", (ctx) => {
+    ctx.lineages.create(ctx, { id: "backup-lineage", name: "长房", founderPersonId: originPersonId });
+    const founderMembership = ctx.lineages.listMemberships("backup-lineage")[0]!;
+    ctx.lineages.updateMembership(ctx, founderMembership.id, { declaredGeneration: 1, generationMarker: "承", isPrimary: true });
   });
   new WikiService(database, workspaceId).create({ title: "家训", body: "正文", personIds: [originPersonId], sourceIds: [] });
   const hash = createHash("sha256").update(mediaBytes).digest("hex");

@@ -33,6 +33,7 @@ export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | n
       {relationshipLabel && <span className="tree-kinship-label">{relationshipLabel}</span>}
       {years && <span className="tree-life-years">{years}</span>}
       {generation && <span className={display.generation?.conflict ? "tree-generation conflict" : "tree-generation"}>{generation}</span>}
+      {display.generationMarker && <span className="tree-generation-marker">字辈：{display.generationMarker}</span>}
       <Handle type="source" position={Position.Bottom} isConnectable={false} />
     </article>
   );

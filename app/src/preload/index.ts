@@ -22,6 +22,14 @@ const desktopApi: DesktopApi = {
     addMarriage: (input) => ipcRenderer.invoke("relations:add-marriage", input),
     divorce: (input) => ipcRenderer.invoke("relations:divorce", input)
   },
+  lineages: {
+    createLineage: (input) => ipcRenderer.invoke("lineages:create", input),
+    updateLineage: (input) => ipcRenderer.invoke("lineages:update", input),
+    archiveLineage: (input) => ipcRenderer.invoke("lineages:archive", input),
+    addMembership: (input) => ipcRenderer.invoke("lineages:add-membership", input),
+    updateMembership: (input) => ipcRenderer.invoke("lineages:update-membership", input),
+    removeMembership: (input) => ipcRenderer.invoke("lineages:remove-membership", input)
+  },
   imports: {
     selectFile: () => ipcRenderer.invoke("imports:select-file", {}),
     parse: (input) => ipcRenderer.invoke("imports:parse", input),

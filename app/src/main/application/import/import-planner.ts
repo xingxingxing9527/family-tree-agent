@@ -299,7 +299,7 @@ export class ImportPlanner {
     if (kind !== "blocked" && alreadyPlanned.some((episode) => this.sameEpisode(episode, payload))) {
       kind = "unchanged";
     } else if (kind !== "blocked" && alreadyPlanned.some((episode) => this.episodesConflict(episode, payload))) {
-      rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with another row in this import", {}));
+      rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with another row in the uploaded file", {}));
       kind = "blocked";
     } else if (kind !== "blocked" && spouseAId && spouseBId) {
       const pair = [spouseAId, spouseBId].sort();

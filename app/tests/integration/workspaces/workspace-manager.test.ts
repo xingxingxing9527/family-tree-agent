@@ -159,8 +159,8 @@ describe("WorkspaceManager", () => {
     expect(opened.ok).toBe(true);
     const database = new Database(join(root, created.value.directory, "genealogy.sqlite"), { readonly: true });
     try {
-      expect(database.pragma("user_version", { simple: true })).toBe(4);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(4);
+      expect(database.pragma("user_version", { simple: true })).toBe(5);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(5);
     } finally {
       database.close();
     }
@@ -200,14 +200,18 @@ describe("WorkspaceManager", () => {
 
     expect(manager.getOpenWorkspaceContext()).toBeNull();
     await manager.open({ id: created.value.id });
-    expect(manager.getOpenWorkspaceContext()).toEqual({
+    const firstContext = manager.getOpenWorkspaceContext();
+    expect(firstContext).toEqual({
       workspaceId: created.value.id,
       databasePath: join(root, created.value.directory, "genealogy.sqlite"),
-      mediaPath: join(root, created.value.directory, "media")
+      mediaPath: join(root, created.value.directory, "media"),
+      openContextId: expect.stringMatching(/^[0-9a-f-]{36}$/u)
     });
 
     await manager.close();
     expect(manager.getOpenWorkspaceContext()).toBeNull();
+    await manager.open({ id: created.value.id });
+    expect(manager.getOpenWorkspaceContext()?.openContextId).not.toBe(firstContext?.openContextId);
   });
 
   it("does not update workspace state when migration fails", async () => {

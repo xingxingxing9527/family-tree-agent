@@ -77,6 +77,8 @@ export async function createMergeFixture(): Promise<MergeFixture> {
 
   database.prepare("UPDATE lineage_membership SET id = ? WHERE workspace_id = ? AND lineage_id = ? AND person_id = ?")
     .run(ids.lineageOneSecondary, workspaceId, ids.lineageOne, ids.secondary);
+  database.prepare("UPDATE lineage_membership SET generation_marker = '继', declared_generation = 4 WHERE id = ?")
+    .run(ids.lineageTwoSecondary);
 
   unit.run("fixture.source", (ctx) => {
     ctx.sources.create(ctx, { id: ids.source, sourceKey: "archive:secondary", title: "次记录来源", kind: "archive" });

@@ -76,6 +76,11 @@ describe("person merge", () => {
       death_year: 2025,
       notes: "次记录（有来源）"
     });
+    expect(database.prepare("SELECT person_id, generation_marker, declared_generation FROM lineage_membership WHERE id=?").get(ids.lineageTwoSecondary)).toEqual({
+      person_id: ids.primary,
+      generation_marker: "继",
+      declared_generation: 4
+    });
 
     for (const [table, column] of [
       ["person_alias", "person_id"], ["lineage", "founder_person_id"], ["lineage_membership", "person_id"],

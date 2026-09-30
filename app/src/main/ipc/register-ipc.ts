@@ -12,6 +12,7 @@ export { MEDIA_CHANNELS, registerMediaIpc } from "./media-ipc.js";
 export { WIKI_CHANNELS, registerWikiIpc } from "./wiki-ipc.js";
 export { CHAT_CHANNELS, MODEL_SETTINGS_CHANNELS, registerChatIpc, registerModelSettingsIpc } from "./chat-ipc.js";
 export { DATA_MANAGEMENT_CHANNELS, registerDataManagementIpc } from "./data-management-ipc.js";
+export { LINEAGE_CHANNELS, registerLineageIpc } from "./lineage-ipc.js";
 
 export const WORKSPACE_CHANNELS = { list: "workspaces:list", create: "workspaces:create", open: "workspaces:open", close: "workspaces:close" } as const;
 type IpcMainLike = Pick<IpcMain, "handle">;

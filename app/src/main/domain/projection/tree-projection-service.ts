@@ -6,6 +6,7 @@ export interface TreePersonDisplay {
   birthYear: number | null;
   deathYear: number | null;
   generation: GenerationDisplay | null;
+  generationMarker: string | null;
 }
 
 export interface TreeProjectionPerson extends TreePersonDisplay {
@@ -150,7 +151,8 @@ export class TreeProjectionService {
           displayName: person.displayName,
           birthYear: person.birthYear,
           deathYear: person.deathYear,
-          generation: person.generation
+          generation: person.generation,
+          generationMarker: person.generationMarker
         }
       }] : [];
     });
