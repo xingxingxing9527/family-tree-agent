@@ -8,6 +8,8 @@ import { ImportCommitter } from "../../../src/main/application/import/import-com
 import { ImportPlanner, ImportPlanStore } from "../../../src/main/application/import/import-planner";
 import type { ParsedImport, ParsedImportRow } from "../../../src/main/application/import/import-types";
 import { parseImport } from "../../../src/main/application/import/workbook-parser";
+import { MergePreviewService } from "../../../src/main/application/merge/merge-preview-service";
+import { PersonMergeService } from "../../../src/main/application/merge/person-merge-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 
@@ -77,6 +79,25 @@ describe("idempotent spreadsheet re-import", () => {
     database.close();
     await rm(root, { recursive: true, force: true });
   });
+
+  const mergeImportedAliases = (sourceKey: string): void => {
+    const initial = planner.plan(parsed(sourceKey, [
+      peopleRow(2, "OLD-A", "甲旧记录"),
+      peopleRow(3, "NEW-A", "甲新记录"),
+      peopleRow(4, "B", "乙"),
+      peopleRow(5, "C", "丙")
+    ]));
+    committer.commitImport(initial.id, selectable(initial));
+    const identities = database.prepare("SELECT external_person_id, person_id FROM import_identity WHERE workspace_id = ? AND source_key = ?").all(workspaceId, sourceKey) as Array<{ external_person_id: string; person_id: string }>;
+    const personIds = new Map(identities.map((entry) => [entry.external_person_id, entry.person_id]));
+    const preview = new MergePreviewService(database, workspaceId).previewMerge(personIds.get("OLD-A")!, personIds.get("NEW-A")!);
+    new PersonMergeService(database, workspaceId).mergePeople({
+      primaryPersonId: personIds.get("OLD-A")!,
+      secondaryPersonId: personIds.get("NEW-A")!,
+      scalarChoices: {},
+      expectedVersions: preview.expectedVersions
+    });
+  };
 
   it("commits the workbook in one operation group and re-imports the same source key without creates", async () => {
     const first = planner.plan(await parseImport(fixture("valid-family.xlsx"), "archive:王氏-2026"));
@@ -216,6 +237,42 @@ describe("idempotent spreadsheet re-import", () => {
 
     expect(preview.actions.filter((action) => action.entityType === "marriage").map((action) => action.kind)).toEqual(["unchanged", "blocked"]);
     expect(preview.summary).toEqual({ creates: 0, updates: 0, unchanged: 4, blocked: 1 });
+  });
+
+  it("blocks active marriage rows whose different external IDs resolve to one merged person", () => {
+    const sourceKey = "archive:merged-active";
+    mergeImportedAliases(sourceKey);
+
+    const preview = planner.plan(parsed(sourceKey, [
+      marriageRow(2, "OLD-A", "B", "active", 2010),
+      marriageRow(3, "NEW-A", "C", "active", 2020)
+    ]));
+
+    expect(preview.actions.map((action) => action.kind)).toEqual(["create", "blocked"]);
+    expect(preview.issues.map((issue) => issue.code)).toContain("RELATION_CONFLICT");
+  });
+
+  it("blocks overlapping historical rows whose different external IDs resolve to one merged person", () => {
+    const sourceKey = "archive:merged-history";
+    mergeImportedAliases(sourceKey);
+
+    const preview = planner.plan(parsed(sourceKey, [
+      marriageRow(2, "OLD-A", "B", "divorced", 1990, 2010),
+      marriageRow(3, "NEW-A", "C", "divorced", 2000, 2005)
+    ]));
+
+    expect(preview.actions.map((action) => action.kind)).toEqual(["create", "blocked"]);
+    expect(preview.issues.map((issue) => issue.code)).toContain("RELATION_CONFLICT");
+  });
+
+  it("blocks self-marriage when two external IDs resolve to one merged person", () => {
+    const sourceKey = "archive:merged-self";
+    mergeImportedAliases(sourceKey);
+
+    const preview = planner.plan(parsed(sourceKey, [marriageRow(2, "OLD-A", "NEW-A", "active", 2010)]));
+
+    expect(preview.actions.map((action) => action.kind)).toEqual(["blocked"]);
+    expect(preview.issues.map((issue) => issue.code)).toContain("SELF_RELATION");
   });
 
   it("blocks a conflicting second active episode and rolls back a stale selected set atomically", () => {

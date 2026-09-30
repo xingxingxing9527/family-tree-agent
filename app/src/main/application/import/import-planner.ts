@@ -85,6 +85,12 @@ interface PlannedPerson {
   externalId: string;
 }
 
+interface PlannedMarriageEpisode {
+  payload: ImportMarriagePayload;
+  spouseAId: string;
+  spouseBId: string;
+}
+
 const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
 const value = (raw: unknown): string => raw === null || raw === undefined ? "" : String(raw);
 const actionId = (row: ParsedImportRow, type: ImportAction["entityType"]): string => `${row.sheet}:${row.row}:${type}`;
@@ -132,15 +138,14 @@ export class ImportPlanner {
       issues.push(...result.issues);
     }
 
-    const plannedMarriages = new Map<string, ImportMarriagePayload[]>();
+    const plannedMarriages = new Map<string, PlannedMarriageEpisode[]>();
     for (const row of input.rows.filter((entry) => entry.sheet === "Marriages")) {
       const result = this.planMarriage(input.sourceKey, row, plannedPeople, plannedMarriages);
       actions.push(result.action);
       issues.push(...result.issues);
-      if (result.action.kind !== "blocked") {
-        const payload = result.action.payload as ImportMarriagePayload;
-        const key = this.marriagePairKey(payload.spouseAExternalId, payload.spouseBExternalId);
-        plannedMarriages.set(key, [...(plannedMarriages.get(key) ?? []), payload]);
+      if (result.action.kind !== "blocked" && result.episode) {
+        const key = this.marriagePairKey(result.episode.spouseAId, result.episode.spouseBId);
+        plannedMarriages.set(key, [...(plannedMarriages.get(key) ?? []), result.episode]);
       }
     }
 
@@ -265,8 +270,8 @@ export class ImportPlanner {
     sourceKey: string,
     row: ParsedImportRow,
     plannedPeople: Map<string, PlannedPerson>,
-    plannedMarriages: Map<string, ImportMarriagePayload[]>
-  ): { action: ImportAction; issues: ImportIssue[] } {
+    plannedMarriages: Map<string, PlannedMarriageEpisode[]>
+  ): { action: ImportAction; issues: ImportIssue[]; episode?: PlannedMarriageEpisode } {
     const id = actionId(row, "marriage");
     const rowIssues: ImportIssue[] = [];
     const spouseA = requiredText(row, "spouse_a_external_id");
@@ -285,7 +290,10 @@ export class ImportPlanner {
     };
     const spouseAId = this.resolvePerson(sourceKey, payload.spouseAExternalId, plannedPeople, row, "spouse_a_external_id", rowIssues);
     const spouseBId = this.resolvePerson(sourceKey, payload.spouseBExternalId, plannedPeople, row, "spouse_b_external_id", rowIssues);
-    if (payload.spouseAExternalId === payload.spouseBExternalId && payload.spouseAExternalId) {
+    if (
+      (spouseAId && spouseBId && spouseAId === spouseBId) ||
+      (payload.spouseAExternalId === payload.spouseBExternalId && payload.spouseAExternalId)
+    ) {
       rowIssues.push(issueFor(row, "error", "SELF_RELATION", "A person cannot marry themselves", { externalId: payload.spouseAExternalId }));
     }
     if (this.invalidEpisodeChronology(payload)) {
@@ -294,17 +302,18 @@ export class ImportPlanner {
     let kind: ImportActionKind = rowIssues.some((issue) => issue.severity === "error") ? "blocked" : "create";
     let entityId: string | undefined;
     let expectedRowVersion: number | undefined;
-    const pairKey = this.marriagePairKey(payload.spouseAExternalId, payload.spouseBExternalId);
-    const alreadyPlanned = plannedMarriages.get(pairKey) ?? [];
-    const plannedForEitherSpouse = [...plannedMarriages.values()].flat().filter((episode) =>
-      this.episodesSharePerson(episode.spouseAExternalId, episode.spouseBExternalId, payload.spouseAExternalId, payload.spouseBExternalId)
-    );
-    if (kind !== "blocked" && alreadyPlanned.some((episode) => this.sameEpisode(episode, payload))) {
+    const episode = spouseAId && spouseBId ? { payload, spouseAId, spouseBId } : undefined;
+    const pairKey = episode ? this.marriagePairKey(episode.spouseAId, episode.spouseBId) : null;
+    const alreadyPlanned = pairKey ? plannedMarriages.get(pairKey) ?? [] : [];
+    const plannedForEitherSpouse = episode ? [...plannedMarriages.values()].flat().filter((planned) =>
+      this.episodesSharePerson(planned.spouseAId, planned.spouseBId, episode.spouseAId, episode.spouseBId)
+    ) : [];
+    if (kind !== "blocked" && alreadyPlanned.some((planned) => this.sameEpisode(planned.payload, payload))) {
       kind = "unchanged";
-    } else if (kind !== "blocked" && alreadyPlanned.some((episode) => this.episodesConflict(episode, payload))) {
+    } else if (kind !== "blocked" && alreadyPlanned.some((planned) => this.episodesConflict(planned.payload, payload))) {
       rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with another row in the uploaded file", {}));
       kind = "blocked";
-    } else if (kind !== "blocked" && plannedForEitherSpouse.some((episode) => this.episodesConflict(episode, payload))) {
+    } else if (kind !== "blocked" && plannedForEitherSpouse.some((planned) => this.episodesConflict(planned.payload, payload))) {
       rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "A spouse has an overlapping marriage episode in the uploaded file", {}));
       kind = "blocked";
     } else if (kind !== "blocked" && spouseAId && spouseBId) {
@@ -326,7 +335,7 @@ export class ImportPlanner {
     }
     const action = this.action(id, row, "marriage", kind, payload, rowIssues, entityId, expectedRowVersion);
     action.dependsOnActionIds = this.personDependencies(plannedPeople, [payload.spouseAExternalId, payload.spouseBExternalId]);
-    return { action, issues: this.attachIssues(id, rowIssues) };
+    return { action, issues: this.attachIssues(id, rowIssues), ...(episode ? { episode } : {}) };
   }
 
   private marriagePairKey(spouseA: string, spouseB: string): string {
@@ -388,7 +397,10 @@ export class ImportPlanner {
     issues: ImportIssue[]
   ): string | null {
     const planned = plannedPeople.get(externalId);
-    if (planned && planned.action.kind !== "blocked") return planned.action.entityId ?? null;
+    if (planned && planned.action.kind !== "blocked") {
+      if (planned.action.entityId) return planned.action.entityId;
+      if (planned.action.payload.type === "person") return planned.action.payload.newEntityId;
+    }
     const identity = this.identities.get(sourceKey, externalId);
     if (identity && this.people.get(identity.personId)) return identity.personId;
     issues.push(issueFor(row, "error", "MISSING_REFERENCE", "The external person reference was not found in this source", {
