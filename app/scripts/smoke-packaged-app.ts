@@ -19,7 +19,7 @@ import { listPackage } from "@electron/asar";
 import { _electron as electron, type ElectronApplication } from "playwright";
 
 const EXPECTED_API_GROUPS = [
-  "app", "chat", "dataManagement", "imports", "media", "merges",
+  "app", "chat", "dataManagement", "imports", "lineages", "media", "merges",
   "modelSettings", "people", "query", "relations", "wiki", "workspaces"
 ] as const;
 
