@@ -78,6 +78,8 @@ export interface ImportAction {
 
 export interface ImportPlan {
   id: string;
+  workspaceId: string;
+  openContextId: string;
   sourceKey: string;
   fileName: string;
   actions: ImportAction[];

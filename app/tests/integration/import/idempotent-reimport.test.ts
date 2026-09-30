@@ -29,6 +29,32 @@ const peopleRow = (row: number, externalId: string, name: string): ParsedImportR
     notes: ""
   }
 });
+const marriageRow = (
+  row: number,
+  spouseA: string,
+  spouseB: string,
+  status: "active" | "divorced",
+  startYear: number,
+  endYear?: number
+): ParsedImportRow => ({
+  sheet: "Marriages",
+  row,
+  raw: {
+    spouse_a_external_id: spouseA,
+    spouse_b_external_id: spouseB,
+    status,
+    start_calendar: "solar",
+    start_year: String(startYear),
+    start_month: "1",
+    start_day: "",
+    start_leap_month: "false",
+    end_calendar: endYear === undefined ? "" : "solar",
+    end_year: endYear === undefined ? "" : String(endYear),
+    end_month: endYear === undefined ? "" : "1",
+    end_day: "",
+    end_leap_month: "false"
+  }
+});
 const parsed = (sourceKey: string, rows: ParsedImportRow[]): ParsedImport => ({ sourceKey, fileName: "updates.xlsx", rows });
 
 describe("idempotent spreadsheet re-import", () => {
@@ -118,5 +144,79 @@ describe("idempotent spreadsheet re-import", () => {
     expect(() => committer.commitImport(plan.id, [relationship.id])).toThrow(/prerequisite/i);
     expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(0);
     expect(database.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()).toBe(0);
+  });
+
+  it("imports divorce and remarriage episodes and re-imports both as unchanged", () => {
+    const rows = [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      marriageRow(2, "A", "B", "divorced", 1990, 2000),
+      marriageRow(3, "B", "A", "active", 2010)
+    ];
+    const first = planner.plan(parsed("archive:remarriage", rows));
+    expect(first.summary).toEqual({ creates: 4, updates: 0, unchanged: 0, blocked: 0 });
+    committer.commitImport(first.id, selectable(first));
+    expect(database.prepare("SELECT marriage_status, start_year, end_year FROM marriage ORDER BY start_year").all()).toEqual([
+      { marriage_status: "divorced", start_year: 1990, end_year: 2000 },
+      { marriage_status: "active", start_year: 2010, end_year: null }
+    ]);
+
+    const second = planner.plan(parsed("archive:remarriage", rows));
+    expect(second.summary).toEqual({ creates: 0, updates: 0, unchanged: 4, blocked: 0 });
+    expect(second.actions.filter((action) => action.entityType === "marriage").every((action) => action.kind === "unchanged")).toBe(true);
+  });
+
+  it("creates a later active episode after a persisted divorce", () => {
+    const people = [peopleRow(2, "A", "甲"), peopleRow(3, "B", "乙")];
+    const historical = planner.plan(parsed("archive:persisted-remarriage", [...people, marriageRow(2, "A", "B", "divorced", 1990, 2000)]));
+    committer.commitImport(historical.id, selectable(historical));
+
+    const later = planner.plan(parsed("archive:persisted-remarriage", [...people, marriageRow(2, "A", "B", "divorced", 1990, 2000), marriageRow(3, "A", "B", "active", 2010)]));
+    expect(later.summary).toEqual({ creates: 1, updates: 0, unchanged: 3, blocked: 0 });
+    committer.commitImport(later.id, selectable(later));
+    expect(database.prepare("SELECT COUNT(*) FROM marriage").pluck().get()).toBe(2);
+  });
+
+  it("deduplicates an identical marriage episode repeated in one input", () => {
+    const plan = planner.plan(parsed("archive:duplicate-episode", [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      marriageRow(2, "A", "B", "divorced", 1990, 2000),
+      marriageRow(3, "B", "A", "divorced", 1990, 2000)
+    ]));
+
+    expect(plan.summary).toEqual({ creates: 3, updates: 0, unchanged: 1, blocked: 0 });
+    committer.commitImport(plan.id, selectable(plan));
+    expect(database.prepare("SELECT COUNT(*) FROM marriage").pluck().get()).toBe(1);
+  });
+
+  it("blocks a conflicting second active episode and rolls back a stale selected set atomically", () => {
+    const initial = planner.plan(parsed("archive:active-conflict", [peopleRow(2, "A", "甲"), peopleRow(3, "B", "乙")]));
+    committer.commitImport(initial.id, selectable(initial));
+
+    const proposed = planner.plan(parsed("archive:active-conflict", [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      peopleRow(4, "C", "丙"),
+      marriageRow(2, "A", "B", "active", 2010)
+    ]));
+    const identities = database.prepare("SELECT external_person_id, person_id FROM import_identity WHERE source_key = ?").all("archive:active-conflict") as Array<{ external_person_id: string; person_id: string }>;
+    const ids = new Map(identities.map((entry) => [entry.external_person_id, entry.person_id]));
+    new FactCommandService(database, workspaceId).execute({
+      type: "marriage.add",
+      draft: { workspaceId, spouseAId: ids.get("A")!, spouseBId: ids.get("B")!, status: "active", start: { calendar: "solar", year: 2005, month: 1, day: null, leapMonth: false, precision: "month" } },
+      source: { sourceKey: "manual:concurrent-marriage", title: "manual", kind: "test" }
+    });
+
+    expect(() => committer.commitImport(proposed.id, selectable(proposed))).toThrow(/active marriage/i);
+    expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(2);
+    expect(database.prepare("SELECT COUNT(*) FROM import_identity WHERE external_person_id = 'C'").pluck().get()).toBe(0);
+
+    const previewAfterConflict = planner.plan(parsed("archive:active-conflict", [
+      peopleRow(2, "A", "甲"),
+      peopleRow(3, "B", "乙"),
+      marriageRow(2, "A", "B", "active", 2010)
+    ]));
+    expect(previewAfterConflict.actions.find((action) => action.entityType === "marriage")).toMatchObject({ kind: "blocked" });
   });
 });

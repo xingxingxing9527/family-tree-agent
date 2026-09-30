@@ -5,7 +5,7 @@ import { createUnitOfWork, type TransactionContext } from "../../database/unit-o
 import { FactCommandService } from "../facts/fact-command-service.js";
 import type { SourceDraft } from "../facts/fact-commands.js";
 import { ImportPlanStore } from "./import-planner.js";
-import type { ImportAction, ImportCommitReport, ImportPersonPayload } from "./import-types.js";
+import type { ImportAction, ImportCommitReport, ImportPersonPayload, ImportPlan } from "./import-types.js";
 
 const priority: Readonly<Record<ImportAction["entityType"], number>> = { person: 0, parentChild: 1, marriage: 2 };
 
@@ -17,7 +17,8 @@ export class ImportCommitter {
   constructor(
     private readonly database: WorkspaceDatabase,
     private readonly workspaceId: string,
-    private readonly store: ImportPlanStore
+    private readonly store: ImportPlanStore,
+    private readonly openContextId: string = workspaceId
   ) {
     this.people = new PersonRepository(database, workspaceId);
     this.identities = new ImportIdentityRepository(database, workspaceId);
@@ -25,8 +26,7 @@ export class ImportCommitter {
   }
 
   commitImport(planId: string, selectedActionIds: string[]): ImportCommitReport {
-    const plan = this.store.get(planId);
-    if (!plan) throw new Error("Import plan was not found or expired");
+    const plan = this.store.require(planId, { workspaceId: this.workspaceId, openContextId: this.openContextId });
     if (new Set(selectedActionIds).size !== selectedActionIds.length) throw new Error("Selected import actions must be unique");
     const selected = new Set(selectedActionIds);
     const selectedActions = plan.actions
@@ -41,7 +41,11 @@ export class ImportCommitter {
         throw new Error(`Selected action has an unselected prerequisite: ${action.id}`);
       }
     }
-    if (selectedActions.length === 0) return this.report(plan, selected, null, new Map());
+    if (selectedActions.length === 0) {
+      const report = this.report(plan, selected, null, new Map());
+      this.store.retire(planId);
+      return report;
+    }
 
     const committed = createUnitOfWork(this.database, this.workspaceId).run("spreadsheet.import", (ctx) => {
       this.revalidate(selectedActions, plan.sourceKey);
@@ -64,7 +68,9 @@ export class ImportCommitter {
       return { operationGroupId: ctx.operationGroupId, entities };
     });
 
-    return this.report(plan, selected, committed.operationGroupId, committed.entities);
+    const report = this.report(plan, selected, committed.operationGroupId, committed.entities);
+    this.store.retire(planId);
+    return report;
   }
 
   private revalidate(actions: ImportAction[], sourceKey: string): void {
@@ -167,7 +173,7 @@ export class ImportCommitter {
   }
 
   private report(
-    plan: NonNullable<ReturnType<ImportPlanStore["get"]>>,
+    plan: ImportPlan,
     selected: Set<string>,
     operationGroupId: string | null,
     entities: Map<string, string>

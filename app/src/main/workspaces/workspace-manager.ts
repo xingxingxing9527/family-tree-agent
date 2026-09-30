@@ -69,6 +69,7 @@ export interface OpenWorkspaceContext {
   workspaceId: string;
   databasePath: string;
   mediaPath: string;
+  openContextId: string;
 }
 
 export interface OpenWorkspaceDetails extends OpenWorkspaceContext {
@@ -190,7 +191,8 @@ export class WorkspaceManager {
     return this.openWorkspaceContext ? {
       workspaceId: this.openWorkspaceContext.workspaceId,
       databasePath: this.openWorkspaceContext.databasePath,
-      mediaPath: this.openWorkspaceContext.mediaPath
+      mediaPath: this.openWorkspaceContext.mediaPath,
+      openContextId: this.openWorkspaceContext.openContextId
     } : null;
   }
 
@@ -411,6 +413,7 @@ export class WorkspaceManager {
 
   private context(summary: WorkspaceSummary, paths: WorkspacePaths): OpenWorkspaceDetails {
     return {
+      openContextId: randomUUID(),
       workspaceId: summary.id,
       workspaceName: summary.name,
       directory: summary.directory,

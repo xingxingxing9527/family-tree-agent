@@ -169,4 +169,18 @@ describe("spreadsheet import planning", () => {
       "People:2:person", "People:3:person"
     ]);
   });
+
+  it("expires plans at the retention boundary and evicts the oldest plan when bounded", () => {
+    let now = 1_000;
+    const store = new ImportPlanStore({ ttlMs: 10, maxEntries: 2, now: () => now });
+    const boundedPlanner = new ImportPlanner(database, workspaceId, store, "open-context-1");
+    const first = boundedPlanner.plan(parsed("retention-1", [peopleRow(2, "A", "甲")]));
+    const second = boundedPlanner.plan(parsed("retention-2", [peopleRow(2, "B", "乙")]));
+    const third = boundedPlanner.plan(parsed("retention-3", [peopleRow(2, "C", "丙")]));
+
+    expect(() => store.require(first.id, { workspaceId, openContextId: "open-context-1" })).toThrow(/expired|consumed/i);
+    expect(store.require(third.id, { workspaceId, openContextId: "open-context-1" }).id).toBe(third.id);
+    now = 1_010;
+    expect(() => store.require(second.id, { workspaceId, openContextId: "open-context-1" })).toThrow(/expired|consumed/i);
+  });
 });

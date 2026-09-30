@@ -18,15 +18,65 @@ import type {
   ParsedImportRow
 } from "./import-types.js";
 
-export class ImportPlanStore {
-  private readonly plans = new Map<string, ImportPlan>();
+export class ImportPlanAccessError extends Error {
+  constructor(public readonly code: "CONFLICT" | "PATH_DENIED", message: string) {
+    super(message);
+  }
+}
 
-  save(plan: ImportPlan): void {
-    this.plans.set(plan.id, plan);
+export interface ImportPlanStoreOptions {
+  ttlMs?: number;
+  maxEntries?: number;
+  now?: () => number;
+}
+
+interface StoredImportPlan {
+  plan: ImportPlan;
+  expiresAt: number;
+}
+
+export class ImportPlanStore {
+  private readonly plans = new Map<string, StoredImportPlan>();
+  private readonly ttlMs: number;
+  private readonly maxEntries: number;
+  private readonly now: () => number;
+
+  constructor(options: ImportPlanStoreOptions = {}) {
+    this.ttlMs = options.ttlMs ?? 5 * 60_000;
+    this.maxEntries = options.maxEntries ?? 100;
+    this.now = options.now ?? Date.now;
   }
 
-  get(planId: string): ImportPlan | null {
-    return this.plans.get(planId) ?? null;
+  save(plan: ImportPlan): void {
+    this.prune();
+    while (this.plans.size >= this.maxEntries) {
+      const oldest = this.plans.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.plans.delete(oldest);
+    }
+    this.plans.set(plan.id, { plan, expiresAt: this.now() + this.ttlMs });
+  }
+
+  require(planId: string, binding: { workspaceId: string; openContextId: string }): ImportPlan {
+    const entry = this.plans.get(planId);
+    if (!entry) throw new ImportPlanAccessError("CONFLICT", "Import plan was not found, expired, or already consumed");
+    if (entry.expiresAt <= this.now()) {
+      this.plans.delete(planId);
+      throw new ImportPlanAccessError("CONFLICT", "Import plan was not found, expired, or already consumed");
+    }
+    if (entry.plan.workspaceId !== binding.workspaceId || entry.plan.openContextId !== binding.openContextId) {
+      throw new ImportPlanAccessError("PATH_DENIED", "Import plan belongs to a different workspace context");
+    }
+    return entry.plan;
+  }
+
+  retire(planId: string): void {
+    this.plans.delete(planId);
+  }
+
+  private prune(): void {
+    const now = this.now();
+    for (const [id, entry] of this.plans) if (entry.expiresAt <= now) this.plans.delete(id);
   }
 }
 
@@ -47,7 +97,8 @@ export class ImportPlanner {
   constructor(
     private readonly database: WorkspaceDatabase,
     private readonly workspaceId: string,
-    private readonly store: ImportPlanStore
+    private readonly store: ImportPlanStore,
+    private readonly openContextId: string = workspaceId
   ) {
     this.identities = new ImportIdentityRepository(database, workspaceId);
     this.people = new PersonRepository(database, workspaceId);
@@ -81,14 +132,22 @@ export class ImportPlanner {
       issues.push(...result.issues);
     }
 
+    const plannedMarriages = new Map<string, ImportMarriagePayload[]>();
     for (const row of input.rows.filter((entry) => entry.sheet === "Marriages")) {
-      const result = this.planMarriage(input.sourceKey, row, plannedPeople);
+      const result = this.planMarriage(input.sourceKey, row, plannedPeople, plannedMarriages);
       actions.push(result.action);
       issues.push(...result.issues);
+      if (result.action.kind !== "blocked") {
+        const payload = result.action.payload as ImportMarriagePayload;
+        const key = this.marriagePairKey(payload.spouseAExternalId, payload.spouseBExternalId);
+        plannedMarriages.set(key, [...(plannedMarriages.get(key) ?? []), payload]);
+      }
     }
 
     const plan: ImportPlan = {
       id: randomUUID(),
+      workspaceId: this.workspaceId,
+      openContextId: this.openContextId,
       sourceKey: input.sourceKey,
       fileName: input.fileName,
       actions,
@@ -202,7 +261,12 @@ export class ImportPlanner {
     return { action, issues: this.attachIssues(id, rowIssues) };
   }
 
-  private planMarriage(sourceKey: string, row: ParsedImportRow, plannedPeople: Map<string, PlannedPerson>): { action: ImportAction; issues: ImportIssue[] } {
+  private planMarriage(
+    sourceKey: string,
+    row: ParsedImportRow,
+    plannedPeople: Map<string, PlannedPerson>,
+    plannedMarriages: Map<string, ImportMarriagePayload[]>
+  ): { action: ImportAction; issues: ImportIssue[] } {
     const id = actionId(row, "marriage");
     const rowIssues: ImportIssue[] = [];
     const spouseA = requiredText(row, "spouse_a_external_id");
@@ -224,24 +288,85 @@ export class ImportPlanner {
     if (payload.spouseAExternalId === payload.spouseBExternalId && payload.spouseAExternalId) {
       rowIssues.push(issueFor(row, "error", "SELF_RELATION", "A person cannot marry themselves", { externalId: payload.spouseAExternalId }));
     }
+    if (this.invalidEpisodeChronology(payload)) {
+      rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "Marriage end must not precede its start", {}));
+    }
     let kind: ImportActionKind = rowIssues.some((issue) => issue.severity === "error") ? "blocked" : "create";
     let entityId: string | undefined;
     let expectedRowVersion: number | undefined;
-    if (kind !== "blocked" && spouseAId && spouseBId) {
+    const pairKey = this.marriagePairKey(payload.spouseAExternalId, payload.spouseBExternalId);
+    const alreadyPlanned = plannedMarriages.get(pairKey) ?? [];
+    if (kind !== "blocked" && alreadyPlanned.some((episode) => this.sameEpisode(episode, payload))) {
+      kind = "unchanged";
+    } else if (kind !== "blocked" && alreadyPlanned.some((episode) => this.episodesConflict(episode, payload))) {
+      rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with another row in this import", {}));
+      kind = "blocked";
+    } else if (kind !== "blocked" && spouseAId && spouseBId) {
       const pair = [spouseAId, spouseBId].sort();
-      const existing = this.relations.listMarriages().find((marriage) => marriage.spouseAId === pair[0] && marriage.spouseBId === pair[1]);
-      if (existing && existing.status === payload.status && same(existing.start, payload.start) && same(existing.end, payload.end)) {
+      const allMarriages = this.relations.listMarriages();
+      const pairMarriages = allMarriages.filter((marriage) => marriage.spouseAId === pair[0] && marriage.spouseBId === pair[1]);
+      const exact = pairMarriages.find((marriage) => marriage.status === payload.status && same(marriage.start, payload.start) && same(marriage.end, payload.end));
+      if (exact) {
         kind = "unchanged";
-        entityId = existing.id;
-        expectedRowVersion = existing.rowVersion;
-      } else if (existing) {
-        rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage already exists with different fields", { entityId: existing.id }));
+        entityId = exact.id;
+        expectedRowVersion = exact.rowVersion;
+      } else if (
+        pairMarriages.some((marriage) => this.episodesConflict(marriage, payload)) ||
+        (payload.status === "active" && allMarriages.some((marriage) => marriage.status === "active" && (marriage.spouseAId === spouseAId || marriage.spouseBId === spouseAId || marriage.spouseAId === spouseBId || marriage.spouseBId === spouseBId)))
+      ) {
+        rowIssues.push(issueFor(row, "error", "RELATION_CONFLICT", "The marriage episode conflicts with an existing active or overlapping episode", {}));
         kind = "blocked";
       }
     }
     const action = this.action(id, row, "marriage", kind, payload, rowIssues, entityId, expectedRowVersion);
     action.dependsOnActionIds = this.personDependencies(plannedPeople, [payload.spouseAExternalId, payload.spouseBExternalId]);
     return { action, issues: this.attachIssues(id, rowIssues) };
+  }
+
+  private marriagePairKey(spouseA: string, spouseB: string): string {
+    return [spouseA, spouseB].sort().join("\u0000");
+  }
+
+  private sameEpisode(
+    left: Pick<ImportMarriagePayload, "status" | "start" | "end">,
+    right: Pick<ImportMarriagePayload, "status" | "start" | "end">
+  ): boolean {
+    return left.status === right.status && same(left.start, right.start) && same(left.end, right.end);
+  }
+
+  private invalidEpisodeChronology(episode: Pick<ImportMarriagePayload, "start" | "end">): boolean {
+    const start = this.dateBounds(episode.start);
+    const end = this.dateBounds(episode.end);
+    return Boolean(start && end && start.calendar === end.calendar && start.lower > end.upper);
+  }
+
+  private episodesConflict(
+    left: Pick<ImportMarriagePayload, "status" | "start" | "end">,
+    right: Pick<ImportMarriagePayload, "status" | "start" | "end">
+  ): boolean {
+    if (left.status === "active" && right.status === "active") return true;
+    const leftStart = this.dateBounds(left.start);
+    const rightStart = this.dateBounds(right.start);
+    const leftEnd = this.dateBounds(left.end);
+    const rightEnd = this.dateBounds(right.end);
+    const calendars = [leftStart, rightStart, leftEnd, rightEnd].filter((entry): entry is NonNullable<typeof entry> => entry !== null).map((entry) => entry.calendar);
+    if (new Set(calendars).size > 1) return false;
+    const leftLower = leftStart?.lower ?? Number.NEGATIVE_INFINITY;
+    const rightLower = rightStart?.lower ?? Number.NEGATIVE_INFINITY;
+    const leftUpper = left.status === "active" ? Number.POSITIVE_INFINITY : leftEnd?.upper ?? Number.NEGATIVE_INFINITY;
+    const rightUpper = right.status === "active" ? Number.POSITIVE_INFINITY : rightEnd?.upper ?? Number.NEGATIVE_INFINITY;
+    return leftLower <= rightUpper && rightLower <= leftUpper;
+  }
+
+  private dateBounds(date: PartialDate | null): { calendar: PartialDate["calendar"]; lower: number; upper: number } | null {
+    if (!date) return null;
+    const lowerDay = date.day ?? 1;
+    const upperDay = date.day ?? 31;
+    return {
+      calendar: date.calendar,
+      lower: date.year * 10_000 + date.month * 100 + lowerDay,
+      upper: date.year * 10_000 + date.month * 100 + upperDay
+    };
   }
 
   private resolvePerson(

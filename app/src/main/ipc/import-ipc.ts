@@ -6,7 +6,7 @@ import { dialog, type IpcMain, type IpcMainInvokeEvent } from "electron";
 import { z } from "zod";
 import type { AppResult, ImportCommitReportDto, ImportPlanDto } from "../../shared/contracts.js";
 import { ImportCommitter } from "../application/import/import-committer.js";
-import { ImportPlanner, ImportPlanStore } from "../application/import/import-planner.js";
+import { ImportPlanAccessError, ImportPlanner, ImportPlanStore } from "../application/import/import-planner.js";
 import { exportImportTemplate, parseImport } from "../application/import/workbook-parser.js";
 import { applyMigrations } from "../database/migrations/index.js";
 import { openDatabase } from "../database/open-database.js";
@@ -44,6 +44,15 @@ export class WorkspaceImportGateway implements ImportGateway {
   private readonly capabilities: ImportCapabilityStore;
   constructor(private readonly workspaces: OpenWorkspaceContextProvider, private readonly dialogs: ImportDialogs = nativeDialogs, capabilities?: ImportCapabilityStore) { this.capabilities = capabilities ?? new ImportCapabilityStore(); }
 
+  private contextId(context: { workspaceId: string; databasePath: string; openContextId?: string }): string {
+    return context.openContextId ?? `${context.workspaceId}\u0000${context.databasePath.toLocaleLowerCase("en-US")}`;
+  }
+
+  private planFailure<T>(error: unknown): AppResult<T> | null {
+    if (!(error instanceof ImportPlanAccessError)) return null;
+    return failure(error.code, error.code === "PATH_DENIED" ? "Import preview belongs to a different workspace context" : "Import preview expired or was already committed; create a new preview");
+  }
+
   async selectImportFile(): Promise<AppResult<{ fileToken: string; fileName: string }>> {
     const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open");
     const selected = await this.dialogs.showOpenDialog({ title: "选择导入表格", properties: ["openFile"], filters: [{ name: "Spreadsheet", extensions: ["xlsx", "csv"] }] });
@@ -59,14 +68,28 @@ export class WorkspaceImportGateway implements ImportGateway {
     const path = this.capabilities.consume(input.fileToken, context.workspaceId); if (!path) return failure("PATH_DENIED", "Import file selection expired; select it again");
     try {
       const parsed = await parseImport(path, input.sourceKey, { csvEntityType: input.csvEntityType, fieldMapping: input.fieldMapping });
-      const database = openDatabase(context.databasePath); try { applyMigrations(database); return { ok: true, value: new ImportPlanner(database, context.workspaceId, this.plans).plan(parsed) }; } finally { database.close(); }
+      const database = openDatabase(context.databasePath); try {
+        applyMigrations(database);
+        const plan = new ImportPlanner(database, context.workspaceId, this.plans, this.contextId(context)).plan(parsed);
+        const { workspaceId: _workspaceId, openContextId: _openContextId, ...publicPlan } = plan;
+        return { ok: true, value: publicPlan };
+      } finally { database.close(); }
     } catch { return failure("VALIDATION", "Import file is invalid"); }
   }
   async commitImport(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>> {
-    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open"); if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request"); const database = openDatabase(context.databasePath);
+    const context = this.workspaces.getOpenWorkspaceContext(); if (!context) return failure("NOT_FOUND", "No workspace is open");
+    const openContextId = this.contextId(context);
+    try { this.plans.require(input.planId, { workspaceId: context.workspaceId, openContextId }); }
+    catch (error) { return this.planFailure(error) ?? failure("INTERNAL", "Unable to complete import request"); }
+    if (!existsSync(context.databasePath)) return failure("INTERNAL", "Unable to complete import request"); const database = openDatabase(context.databasePath);
     let value: ImportCommitReportDto;
-    try { applyMigrations(database); value = new ImportCommitter(database, context.workspaceId, this.plans).commitImport(input.planId, input.selectedActionIds); }
-    catch (error) { const stale = /changed since preview/i.test(error instanceof Error ? error.message : ""); return failure(stale ? "CONFLICT" : "VALIDATION", stale ? "Import data changed since preview; create a new preview" : "Import selection could not be committed"); }
+    try { applyMigrations(database); value = new ImportCommitter(database, context.workspaceId, this.plans, openContextId).commitImport(input.planId, input.selectedActionIds); }
+    catch (error) {
+      const planError = this.planFailure<ImportCommitReportDto>(error);
+      if (planError) return planError;
+      const stale = /changed since preview/i.test(error instanceof Error ? error.message : "");
+      return failure(stale ? "CONFLICT" : "VALIDATION", stale ? "Import data changed since preview; create a new preview" : "Import selection could not be committed");
+    }
     finally { database.close(); }
     try { await this.workspaces.synchronizeOriginPerson?.(); }
     catch { return failure("INTERNAL", "Unable to publish workspace origin person"); }

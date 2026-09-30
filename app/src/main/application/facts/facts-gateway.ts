@@ -26,6 +26,8 @@ export interface OpenWorkspaceContext {
   workspaceId: string;
   databasePath: string;
   mediaPath?: string;
+  /** Changes every time a workspace database is opened or replaced. */
+  openContextId?: string;
 }
 
 export interface OpenWorkspaceContextProvider {
