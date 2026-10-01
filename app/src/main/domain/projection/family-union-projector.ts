@@ -1,4 +1,5 @@
 import type { PartialDate } from "../../../shared/domain.js";
+import { relationToPartialDateInterval } from "../relations/partial-date-interval.js";
 
 export interface FamilyUnion {
   id: string;
@@ -38,62 +39,8 @@ export interface FamilyUnionProjectionInput {
   parentChildFacts: FamilyUnionParentChild[];
 }
 
-type IntervalRelation = "inside" | "outside" | "unknown";
-
-interface DateRange {
-  calendar: PartialDate["calendar"];
-  minimum: CalendarPoint;
-  maximum: CalendarPoint;
-}
-
-interface CalendarPoint {
-  year: number;
-  monthOrder: number;
-  day: number;
-}
-
 const ordered = (ids: Iterable<string>): string[] => [...new Set(ids)].sort((left, right) => left.localeCompare(right));
 const pairKey = (ids: Iterable<string>): string => ordered(ids).join(":");
-
-function solarMonthLength(year: number, month: number): number {
-  if (month === 2) {
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    return leapYear ? 29 : 28;
-  }
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-function dateRange(date: PartialDate): DateRange {
-  const monthOrder = date.calendar === "lunar"
-    ? date.month * 2 + (date.leapMonth ? 1 : 0)
-    : date.month;
-  const maximumDay = date.calendar === "lunar" ? 30 : solarMonthLength(date.year, date.month);
-  return {
-    calendar: date.calendar,
-    minimum: { year: date.year, monthOrder, day: date.day ?? 1 },
-    maximum: { year: date.year, monthOrder, day: date.day ?? maximumDay }
-  };
-}
-
-function comparePoint(left: CalendarPoint, right: CalendarPoint): number {
-  if (left.year !== right.year) return left.year < right.year ? -1 : 1;
-  if (left.monthOrder !== right.monthOrder) return left.monthOrder < right.monthOrder ? -1 : 1;
-  if (left.day !== right.day) return left.day < right.day ? -1 : 1;
-  return 0;
-}
-
-function relationToInterval(birth: PartialDate | null, marriage: FamilyUnionMarriage): IntervalRelation {
-  if (!birth || (!marriage.start && !marriage.end)) return "unknown";
-  const child = dateRange(birth);
-  const start = marriage.start ? dateRange(marriage.start) : null;
-  const end = marriage.end ? dateRange(marriage.end) : null;
-  if ((start && start.calendar !== child.calendar) || (end && end.calendar !== child.calendar)) return "unknown";
-  if ((start && comparePoint(child.maximum, start.minimum) < 0) || (end && comparePoint(child.minimum, end.maximum) > 0)) return "outside";
-
-  const afterStart = !start || comparePoint(child.minimum, start.maximum) >= 0;
-  const beforeEnd = !end || comparePoint(child.maximum, end.minimum) <= 0;
-  return afterStart && beforeEnd ? "inside" : "unknown";
-}
 
 function emptyUnion(id: string, kind: FamilyUnion["kind"], parentIds: string[], marriage?: FamilyUnionMarriage): FamilyUnion {
   return {
@@ -151,7 +98,10 @@ export class FamilyUnionProjector {
       }
 
       const birth = people.get(childId)?.birth ?? null;
-      const relations = marriages.map((marriage) => ({ marriage, relation: relationToInterval(birth, marriage) }));
+      const relations = marriages.map((marriage) => ({
+        marriage,
+        relation: relationToPartialDateInterval(birth, marriage.start, marriage.end)
+      }));
       const inside = relations.filter((candidate) => candidate.relation === "inside");
       const selected = inside.length === 1 && relations.every((candidate) => candidate === inside[0] || candidate.relation === "outside")
         ? inside[0].marriage

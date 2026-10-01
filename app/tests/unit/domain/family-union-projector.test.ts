@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PartialDate } from "../../../src/shared/domain";
 import { FamilyUnionProjector } from "../../../src/main/domain/projection/family-union-projector";
+import { relationToPartialDateInterval } from "../../../src/main/domain/relations/partial-date-interval";
 import { TreeProjectionService } from "../../../src/main/domain/projection/tree-projection-service";
 
 const solar = (year: number, month: number, day: number | null = null): PartialDate => ({
@@ -19,6 +20,31 @@ const lunar = (year: number, month: number, day: number | null = null, leapMonth
   day,
   leapMonth,
   precision: day === null ? "month" : "day"
+});
+
+describe("relationToPartialDateInterval", () => {
+  it("uses the real last day of a solar month for month precision", () => {
+    expect(relationToPartialDateInterval(solar(2000, 2), null, solar(2000, 2, 29))).toBe("inside");
+    expect(relationToPartialDateInterval(solar(2001, 2), solar(2001, 3, 1), null)).toBe("outside");
+  });
+
+  it("orders a lunar leap month after its regular month", () => {
+    expect(relationToPartialDateInterval(
+      lunar(2000, 1, 10, true),
+      lunar(2000, 1, 1, true),
+      lunar(2000, 1, 30, true)
+    )).toBe("inside");
+    expect(relationToPartialDateInterval(
+      lunar(2000, 1, 10, true),
+      lunar(2000, 1, 1),
+      lunar(2000, 1, 30)
+    )).toBe("outside");
+  });
+
+  it("returns unknown for month-boundary overlap and cross-calendar comparisons", () => {
+    expect(relationToPartialDateInterval(solar(2000, 1, 20), null, solar(2000, 1))).toBe("unknown");
+    expect(relationToPartialDateInterval(solar(2000, 1, 20), lunar(1999, 1), lunar(2001, 1))).toBe("unknown");
+  });
 });
 
 describe("FamilyUnionProjector", () => {
