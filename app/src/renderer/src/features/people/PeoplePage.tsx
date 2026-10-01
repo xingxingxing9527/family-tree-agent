@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { FamilyAgentApi, PersonDetailReadModel, PersonDraft, PersonListItem, WorkspaceSummary } from "../../../../shared/contracts";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
+import type { RelativeQuickCreateRequest } from "../relations/FamilyRelationsPanel";
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
 import { PersonEditor } from "./PersonEditor";
@@ -38,6 +39,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   const [selected, setSelected] = useState<PersonDetailReadModel | null>(null);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [relativeCreation, setRelativeCreation] = useState<RelativeQuickCreateRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const listRequestId = useRef(0);
@@ -81,6 +83,15 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
     onDataChanged();
   };
 
+  const relativePersonSaved = async (detail: PersonDetailReadModel): Promise<void> => {
+    const request = relativeCreation;
+    if (!request) return;
+    setRelativeCreation(null);
+    await loadPeople();
+    request.onCreated({ ...detail.person, aliases: detail.aliases });
+    onDataChanged();
+  };
+
   const relationsChanged = async (): Promise<void> => {
     await loadPeople();
     if (selected) await loadDetail(selected.person.id);
@@ -94,7 +105,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <p className="eyebrow text-secondary">当前谱册</p>
           <h1 id="people-page-title">{workspace.name}</h1>
         </div>
-        <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); }}>新增人物</button>
+        <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); setRelativeCreation(null); }}>新增人物</button>
       </header>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="people-layout">
@@ -108,7 +119,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
               type="button"
               key={person.id}
               aria-label={`查看${person.displayName}`}
-              onClick={() => { setCreating(false); setEditing(false); void loadDetail(person.id); }}
+              onClick={() => { setCreating(false); setEditing(false); setRelativeCreation(null); void loadDetail(person.id); }}
             >
               <strong>{person.displayName}</strong>
               <span className="text-secondary">{person.aliases.join("、") || "无别名"}</span>
@@ -116,6 +127,10 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           ))}
         </aside>
         <div className="people-content">
+          {relativeCreation && <section className="relative-person-creation" aria-labelledby="relative-person-creation-title">
+            <h2 id="relative-person-creation-title">快速新建关系人物：{relativeCreation.purpose}</h2>
+            <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void relativePersonSaved(detail)} onCancel={() => setRelativeCreation(null)} />
+          </section>}
           {creating && <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void personSaved(detail)} onCancel={() => setCreating(false)} />}
           {editing && selected && (
             <PersonEditor
@@ -130,10 +145,10 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
             />
           )}
           {!creating && !editing && selected && (
-            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => setEditing(true)} onChanged={relationsChanged} onUseAsViewpoint={onUseAsViewpoint} onAskAbout={onAskAbout} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
+            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => { setEditing(true); setRelativeCreation(null); }} onChanged={relationsChanged} onRequestQuickCreate={(request) => { setRelativeCreation(request); setCreating(false); setEditing(false); }} onUseAsViewpoint={onUseAsViewpoint} onAskAbout={onAskAbout} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
-          {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} onSaved={relationsChanged} />}
+          {people.length >= 2 && <details className="advanced-relations"><summary>高级关系录入</summary><RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} onSaved={relationsChanged} /></details>}
           <MergeHistory api={api.merges} prepareMutation={prepareMutation} />
         </div>
       </div>

@@ -158,6 +158,29 @@ describe("WorkspaceFactsGateway", () => {
     });
   });
 
+  it("persists a public divorced marriage event with its required end", async () => {
+    const spouseA = await gateway.savePerson({ draft: draft("前配偶甲", "unknown"), confirmWarnings: false });
+    const spouseB = await gateway.savePerson({ draft: draft("前配偶乙", "unknown"), confirmWarnings: false });
+    if (!spouseA.ok || !spouseB.ok || !spouseA.value.entityId || !spouseB.value.entityId) throw new Error("person fixtures failed");
+    const end = { calendar: "solar" as const, year: 2018, month: 6, day: null, leapMonth: false, precision: "month" as const };
+
+    const marriage = await gateway.addMarriage({
+      draft: {
+        spouseAId: spouseA.value.entityId,
+        spouseBId: spouseB.value.entityId,
+        status: "divorced",
+        start: null,
+        end,
+        sourceDescription: "离婚档案"
+      },
+      confirmWarnings: false
+    });
+
+    expect(marriage).toMatchObject({ ok: true, value: { saved: true } });
+    const detail = await gateway.getPerson({ personId: spouseA.value.entityId });
+    expect(detail).toMatchObject({ ok: true, value: { marriages: [{ status: "divorced", end }] } });
+  });
+
   it("serializes concurrent creation requests at the 1,000-person boundary", async () => {
     const database = openDatabase(databasePath);
     const now = new Date().toISOString();

@@ -37,6 +37,28 @@ describe("workspace IPC contracts", () => {
     }] }).success).toBe(false);
   });
 
+  it("keeps legacy marriage drafts compatible while requiring an end for divorced events", () => {
+    const legacy = {
+      spouseAId: "spouse-a",
+      spouseBId: "spouse-b",
+      start: null,
+      sourceDescription: "旧版表单"
+    };
+    const end = { calendar: "solar" as const, year: 2018, month: 6, day: null, leapMonth: false, precision: "month" as const };
+    const divorced = { ...legacy, status: "divorced", end };
+
+    expect(RPC_INPUT_SCHEMAS.relations.addMarriage.safeParse({ draft: legacy, confirmWarnings: false }).success).toBe(true);
+    expect(RPC_INPUT_SCHEMAS.relations.addMarriage.safeParse({ draft: divorced, confirmWarnings: false }).success).toBe(true);
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: [{ type: "marriage.add", draft: divorced }] }).success).toBe(true);
+    expect(RPC_INPUT_SCHEMAS.relations.addMarriage.safeParse({
+      draft: { ...legacy, status: "divorced", end: null },
+      confirmWarnings: false
+    }).success).toBe(false);
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({
+      intents: [{ type: "marriage.add", draft: { ...legacy, status: "divorced" } }]
+    }).success).toBe(false);
+  });
+
   it("enforces the public 1000-intent and 2000-selected-change bounds", () => {
     const intent = { type: "lineage.create", name: "长房", founderPersonId: "founder", description: null };
     expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: Array.from({ length: 1_000 }, () => intent) }).success).toBe(true);

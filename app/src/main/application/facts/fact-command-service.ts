@@ -156,6 +156,9 @@ export class FactCommandService {
         this.requireOpenWorkspace(command.draft.workspaceId, errors);
         this.validateOptionalDate(command.draft.start, errors);
         this.validateOptionalDate(command.draft.end, errors);
+        if ((command.draft.status ?? "active") === "divorced" && !command.draft.end) {
+          errors.push(issue("DIVORCED_MARRIAGE_END_REQUIRED", "A divorced marriage requires an end date"));
+        }
         const spouseA = this.loadPerson(command.draft.spouseAId, "spouseAId", ids, errors);
         const spouseB = this.loadPerson(command.draft.spouseBId, "spouseBId", ids, errors);
         if (!spouseA || !spouseB) break;

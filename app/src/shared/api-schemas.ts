@@ -43,6 +43,21 @@ const personDraft = z.object({
   sourceDescription
 }).strict();
 const personPatch = personDraft.partial().refine((value) => Object.keys(value).length > 0, { message: "Patch cannot be empty" });
+const marriageDraft = z.object({
+  spouseAId: id,
+  spouseBId: id,
+  start: nullableDate,
+  status: z.enum(["active", "divorced"]).optional(),
+  end: nullableDate.optional(),
+  sourceDescription
+}).strict().superRefine((value, context) => {
+  if (value.spouseAId === value.spouseBId) {
+    context.addIssue({ code: "custom", path: ["spouseBId"], message: "People must be different" });
+  }
+  if (value.status === "divorced" && !value.end) {
+    context.addIssue({ code: "custom", path: ["end"], message: "A divorced marriage requires an end date" });
+  }
+});
 
 const lineageRole = z.enum(["blood", "married_in", "associated"]);
 const nullableText = (maximum: number) => z.string().trim().min(1).max(maximum).nullable();
@@ -67,7 +82,7 @@ const mutationIntent = z.discriminatedUnion("type", [
     skipCompletion: z.boolean().optional(),
     sourceDescription
   }).strict().refine((value) => value.knownParentId !== value.childId, { message: "People must be different" }),
-  z.object({ type: z.literal("marriage.add"), draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict() }).strict(),
+  z.object({ type: z.literal("marriage.add"), draft: marriageDraft }).strict(),
   z.object({ type: z.literal("marriage.divorce"), marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
   z.object({ type: z.literal("person.childrenCompleteness.set"), personId: id, complete: z.boolean(), sourceDescription, expectedVersion }).strict(),
   z.object({ type: z.literal("lineage.create"), name: z.string().trim().min(1).max(200), founderPersonId: id, description: nullableText(10_000) }).strict(),
@@ -114,8 +129,7 @@ export const RPC_INPUT_SCHEMAS = {
   relations: {
     addParentChild: z.object({ draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict()
       .refine((value) => value.parentId !== value.childId, { message: "People must be different" }), confirmWarnings: z.boolean() }).strict(),
-    addMarriage: z.object({ draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict()
-      .refine((value) => value.spouseAId !== value.spouseBId, { message: "People must be different" }), confirmWarnings: z.boolean() }).strict(),
+    addMarriage: z.object({ draft: marriageDraft, confirmWarnings: z.boolean() }).strict(),
     divorce: z.object({ marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
     planParentCompletion: z.object({
       knownParentId: id,

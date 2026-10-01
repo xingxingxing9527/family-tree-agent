@@ -423,6 +423,8 @@ export interface MarriageDraft {
   spouseAId: string;
   spouseBId: string;
   start: PartialDate | null;
+  status?: "active" | "divorced";
+  end?: PartialDate | null;
   sourceDescription: string;
 }
 

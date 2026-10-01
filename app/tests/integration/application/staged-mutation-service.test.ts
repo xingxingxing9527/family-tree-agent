@@ -482,6 +482,78 @@ describe("StagedMutationService", () => {
     database.close();
   });
 
+  it("compiles and persists multiple completed marriage events with their status and end", () => {
+    createPerson("center", "中心人物");
+    createPerson("former", "前配偶");
+    createPerson("current-spouse", "现配偶");
+    const ended = solar(2018, 6);
+    const preview = service.stage({ intents: [
+      {
+        type: "marriage.add",
+        draft: {
+          spouseAId: "center",
+          spouseBId: "former",
+          status: "divorced",
+          start: solar(2010, 1),
+          end: ended,
+          sourceDescription: "旧婚姻记录"
+        }
+      },
+      {
+        type: "marriage.add",
+        draft: {
+          spouseAId: "center",
+          spouseBId: "current-spouse",
+          status: "active",
+          start: solar(2020, 2),
+          end: null,
+          sourceDescription: "当前婚姻记录"
+        }
+      }
+    ] });
+
+    expect(preview.changes).toMatchObject([{ disposition: "create" }, { disposition: "create" }]);
+    service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: preview.changes.map(({ id }) => id),
+      acknowledgedWarningCodes: []
+    });
+    expect(database.prepare("SELECT marriage_status, start_year, end_year FROM marriage ORDER BY start_year").all()).toEqual([
+      { marriage_status: "divorced", start_year: 2010, end_year: 2018 },
+      { marriage_status: "active", start_year: 2020, end_year: null }
+    ]);
+  });
+
+  it("blocks a divorced marriage draft without an end and a second new active event for the same person", () => {
+    createPerson("center", "中心人物");
+    createPerson("spouse-a", "配偶甲");
+    createPerson("spouse-b", "配偶乙");
+    const missingEnd = service.stage({ intents: [{
+      type: "marriage.add",
+      draft: {
+        spouseAId: "center",
+        spouseBId: "spouse-a",
+        status: "divorced",
+        start: null,
+        end: null,
+        sourceDescription: "缺少结束日期"
+      }
+    }] });
+    expect(missingEnd.changes).toMatchObject([{ disposition: "blocked" }]);
+    expect(missingEnd.issues).toContainEqual(expect.objectContaining({ code: "DIVORCED_MARRIAGE_END_REQUIRED" }));
+
+    const duplicateActive = service.stage({ intents: [
+      { type: "marriage.add", draft: { spouseAId: "center", spouseBId: "spouse-a", status: "active", start: null, end: null, sourceDescription: "当前婚姻一" } },
+      { type: "marriage.add", draft: { spouseAId: "center", spouseBId: "spouse-b", status: "active", start: null, end: null, sourceDescription: "当前婚姻二" } }
+    ] });
+    expect(duplicateActive.changes).toMatchObject([
+      { disposition: "create" },
+      { disposition: "blocked" }
+    ]);
+    expect(duplicateActive.issues).toContainEqual(expect.objectContaining({ code: "ACTIVE_MARRIAGE_EXISTS" }));
+  });
+
   it("commits lineage side effects in the same undoable operation group", () => {
     const facts = new FactCommandService(database, workspaceId);
     facts.execute({ type: "person.create", draft: { id: "founder", workspaceId, displayName: "始祖", gender: "male" }, source: source("founder") });

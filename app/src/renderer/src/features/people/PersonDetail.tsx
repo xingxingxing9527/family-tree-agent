@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, type JSX } from "react";
 import type { ChildrenCountStatusDto, FamilyAgentApi, PersonDetailReadModel } from "../../../../shared/contracts";
 import type { MutationApi } from "../../../../shared/mutations";
+import { FamilyRelationsPanel, type RelativeQuickCreateRequest } from "../relations/FamilyRelationsPanel";
 import { MarriageHistory } from "../relations/MarriageHistory";
 import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
 import { useStagedMutation } from "../mutations/useStagedMutation";
@@ -15,11 +16,12 @@ interface PersonDetailProps {
   mediaApi: FamilyAgentApi["media"];
   onEdit(): void;
   onChanged(): Promise<void>;
+  onRequestQuickCreate?(request: RelativeQuickCreateRequest): void;
   onUseAsViewpoint?(personId: string): void;
   onAskAbout?(personId: string): void;
 }
 
-export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged, onUseAsViewpoint, onAskAbout }: PersonDetailProps): JSX.Element {
+export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged, onRequestQuickCreate, onUseAsViewpoint, onAskAbout }: PersonDetailProps): JSX.Element {
   const gender = detail.person.gender === "male" ? "男" : detail.person.gender === "female" ? "女" : "未知";
   const [childrenStatus, setChildrenStatus] = useState<ChildrenCountStatusDto | null>(null);
   useEffect(() => {
@@ -61,26 +63,19 @@ export function PersonDetail({ detail, peopleApi, relationsApi, mutations, media
         <div><dt>去世</dt><dd>{formatPartialDate(detail.person.death)}</dd></div>
         <div className="detail-wide"><dt>备注</dt><dd>{detail.person.notes || "未记录"}</dd></div>
       </dl>
-      <div className="family-summary">
-        <section>
-          <h3>父母</h3>
-          {detail.parents.length > 0 ? (
-            <ul className="relation-list" aria-label="已记录父母">
-              {detail.parents.map((entry) => (
-                <li key={entry.relationId} data-relation-id={entry.relationId}>
-                  {entry.person.displayName}（{entry.role === "father" ? "父亲" : "母亲"}）
-                </li>
-              ))}
-            </ul>
-          ) : <p>未记录</p>}
-        </section>
-        <section>
-          <h3>子女</h3>
-          <p>{detail.children.map((entry) => entry.person.displayName).join("、") || "未记录"}</p>
-          {childrenStatus && <p>{childrenStatus.completeness === "complete" ? "已确认完整" : "可能仍待补充"} · 已记录 {childrenStatus.count} 人</p>}
-          {childrenStatus && mutations && <button type="button" className="button secondary-button" disabled={staged.busy} onClick={changeCompleteness}>{childrenStatus.completeness === "complete" ? "改为仍待补充" : "确认子女资料完整"}</button>}
-        </section>
-      </div>
+      <FamilyRelationsPanel
+        detail={detail}
+        peopleApi={peopleApi}
+        relationsApi={relationsApi}
+        mutations={mutations}
+        onChanged={onChanged}
+        onRequestQuickCreate={onRequestQuickCreate}
+      />
+      {childrenStatus && <section className="children-completeness" aria-labelledby="children-completeness-title">
+        <h3 id="children-completeness-title">子女资料完整度</h3>
+        <p>{childrenStatus.completeness === "complete" ? "已确认完整" : "可能仍待补充"} · 已记录 {childrenStatus.count} 人</p>
+        {mutations && <button type="button" className="button secondary-button" disabled={staged.busy} onClick={changeCompleteness}>{childrenStatus.completeness === "complete" ? "改为仍待补充" : "确认子女资料完整"}</button>}
+      </section>}
       {staged.error && <div className="error-banner" role="alert">{staged.error}</div>}
       <MarriageHistory marriages={detail.marriages} api={relationsApi} mutations={mutations} onChanged={onChanged} />
       <MediaGallery personId={detail.person.id} media={mediaApi} />

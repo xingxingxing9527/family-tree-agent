@@ -187,6 +187,97 @@ dd { margin: 0.25rem 0 0; color: var(--text-primary); }
 
 .relation-list li + li { margin-top: 0.35rem; }
 
+.family-relations-panel,
+.children-completeness,
+.relative-person-creation,
+.advanced-relations {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+}
+
+.family-relation-sections,
+.marriage-event-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.family-relation-section,
+.relation-correction,
+.ambiguity-resolution,
+.marriage-event-editor {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.family-relation-section h4,
+.family-relation-row > *,
+.children-completeness h3,
+.relative-person-creation h2 { margin: 0; }
+
+.family-relation-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--surface-muted);
+  border-radius: 0.45rem;
+}
+
+.family-relation-row > div:first-child,
+.ambiguity-resolution fieldset > label > span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mutation-origin {
+  width: fit-content;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.mutation-origin-explicit { color: #1e3a8a; background: #dbeafe; }
+.mutation-origin-spouse_default { color: #713f12; background: #fef3c7; }
+
+.parent-role-choice,
+.child-candidate-list,
+.ambiguity-resolution fieldset {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+}
+
+.parent-role-choice label,
+.child-candidate-list label,
+.ambiguity-resolution fieldset > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.parent-role-choice input,
+.child-candidate-list input,
+.ambiguity-resolution input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; }
+.family-relation-notice { margin: 0; padding: 0.75rem; color: #713f12; background: #fefce8; border: 1px solid #ca8a04; border-radius: 0.45rem; }
+.advanced-relations > summary { color: var(--accent); font-weight: 700; cursor: pointer; }
+.advanced-relations[open] > summary { margin-bottom: 0.25rem; }
+
 .relative-wizard {
   display: grid;
   gap: 0.9rem;

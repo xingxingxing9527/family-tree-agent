@@ -362,7 +362,16 @@ export class StagedMutationService {
       case "marriage.add": {
         const id = randomUUID();
         return [make({ disposition: "create", entityType: "marriage", entityId: generatedEntityId, summary: "创建婚姻关系", fieldChanges: [] }, {
-          type: "marriage.add", draft: { id: generatedEntityId, workspaceId: this.workspaceId, spouseAId: intent.draft.spouseAId, spouseBId: intent.draft.spouseBId, start: intent.draft.start },
+          type: "marriage.add",
+          draft: {
+            id: generatedEntityId,
+            workspaceId: this.workspaceId,
+            spouseAId: intent.draft.spouseAId,
+            spouseBId: intent.draft.spouseBId,
+            start: intent.draft.start,
+            status: intent.draft.status,
+            end: intent.draft.end
+          },
           source: source(intent.draft.sourceDescription, draftId, id)
         }, { id })];
       }

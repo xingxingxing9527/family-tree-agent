@@ -211,7 +211,14 @@ export class WorkspaceFactsGateway implements FactsGateway {
   async addMarriage(input: { draft: PublicMarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>> {
     return this.withWorkspace((database, workspaceId) => receipt(new FactCommandService(database, workspaceId).execute({
       type: "marriage.add",
-      draft: { workspaceId, spouseAId: input.draft.spouseAId, spouseBId: input.draft.spouseBId, start: input.draft.start },
+      draft: {
+        workspaceId,
+        spouseAId: input.draft.spouseAId,
+        spouseBId: input.draft.spouseBId,
+        start: input.draft.start,
+        status: input.draft.status,
+        end: input.draft.end
+      },
       source: source(input.draft.sourceDescription, "marriage")
     }, { confirmWarnings: input.confirmWarnings })));
   }
