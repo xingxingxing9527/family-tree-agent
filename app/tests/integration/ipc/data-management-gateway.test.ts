@@ -88,7 +88,7 @@ describe("data-management native capabilities", () => {
     }).createBackup(archivePath);
     const request = { fileToken: selected.value.fileToken, targetWorkspaceId: context.workspaceId };
     const inspected = await gateway.inspectBackup(request);
-    expect(inspected).toMatchObject({ ok: true, value: { verified: true, targetWorkspaceId: context.workspaceId, manifest: { schemaVersion: 7 } } });
+    expect(inspected).toMatchObject({ ok: true, value: { verified: true, targetWorkspaceId: context.workspaceId, manifest: { schemaVersion: 8 } } });
     expect(JSON.stringify(inspected)).not.toContain(root);
     await expect(gateway.inspectBackup(request)).resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
     if (!inspected.ok) throw new Error("inspection failed");

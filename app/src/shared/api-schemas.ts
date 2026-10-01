@@ -73,6 +73,20 @@ const mutationIntent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("parentChild.add"), draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict() }).strict(),
   z.object({ type: z.literal("parentChild.remove"), relationId: id, expectedVersion }).strict(),
   z.object({
+    type: z.literal("parentChild.correct"),
+    relationId: id,
+    expectedVersion,
+    replacement: z.object({
+      knownParentId: id,
+      childId: id,
+      parentRole: z.enum(["father", "mother"]),
+      completionPolicy: z.literal("spouse-default"),
+      selectedSpouseId: id.optional(),
+      skipCompletion: z.boolean().optional(),
+      sourceDescription
+    }).strict().refine((value) => value.knownParentId !== value.childId, { message: "People must be different" })
+  }).strict(),
+  z.object({
     type: z.literal("parentFamily.add"),
     knownParentId: id,
     childId: id,

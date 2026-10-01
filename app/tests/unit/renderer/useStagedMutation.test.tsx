@@ -119,6 +119,26 @@ describe("useStagedMutation commit lifecycle", () => {
     expect(result.current.error).toBe("确认冲突");
   });
 
+  it("turns parent-completion stale details into refresh guidance and discards the unusable preview", async () => {
+    const api = apiWithConfirm(vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        code: "CONFLICT",
+        message: "Selected changes could not be committed atomically",
+        details: { code: "PARENT_COMPLETION_STALE", reason: "required_evidence_unavailable" }
+      }
+    }));
+    const { result } = renderHook(() => useStagedMutation(api));
+    await stagePreview(result);
+
+    await act(async () => {
+      expect(await result.current.confirm(["change-1"], [])).toBe(false);
+    });
+
+    expect(result.current.error).toBe("父母补全依据已发生变化，请刷新人物资料后重新生成预览");
+    expect(result.current.preview).toBeNull();
+  });
+
   it("keeps both persistence and owner callbacks for the current owner", async () => {
     const onCommitted = vi.fn();
     const onPersisted = vi.fn();

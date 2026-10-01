@@ -237,6 +237,35 @@ describe("QueryToolRegistry", () => {
     expect(database.prepare("SELECT COUNT(*) AS count FROM operation_group").get()).toEqual(operationCount);
   });
 
+  it("falls back to legacy operation-group provenance when durable fact-source links are absent", () => {
+    database.prepare(`DELETE FROM fact_source_link
+      WHERE workspace_id = ?
+        AND (entity_type, entity_id) IN (('person', 'child-a'), ('parent_child', 'father-child-a'))`)
+      .run(workspaceId);
+
+    expect(registry.tools.get_person({ personId: "child-a" }).sources)
+      .toEqual([expect.objectContaining({ title: "来源 child-a", sourceKey: "child-a" })]);
+    const relationSourceIds = registry.sourceIdsForFacts(["father-child-a"]);
+    expect(relationSourceIds).toHaveLength(1);
+    expect(database.prepare("SELECT source_key FROM source WHERE id = ?").pluck().get(relationSourceIds[0]))
+      .toBe("father-child-a");
+  });
+
+  it("combines legacy provenance with later directly-linked updates without widening the new operation", () => {
+    database.prepare("DELETE FROM fact_source_link WHERE workspace_id = ? AND entity_type = 'person' AND entity_id = 'child-a'")
+      .run(workspaceId);
+    new FactCommandService(database, workspaceId).execute({
+      type: "person.update",
+      personId: "child-a",
+      expectedVersion: 1,
+      patch: { notes: "迁移后的修订" },
+      source: source("child-a-update")
+    });
+
+    expect(registry.tools.get_person({ personId: "child-a" }).sources.map(({ sourceKey }) => sourceKey).sort())
+      .toEqual(["child-a", "child-a-update"]);
+  });
+
   it("returns provenance only for parent and child relatives", () => {
     const facts = new FactCommandService(database, workspaceId);
     facts.execute({

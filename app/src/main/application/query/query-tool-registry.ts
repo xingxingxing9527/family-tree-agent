@@ -103,8 +103,19 @@ export class QueryToolRegistry {
     const ids = [...new Set(factIds)];
     if (ids.length === 0) return [];
     const placeholders = ids.map(() => "?").join(", ");
-    return this.database.prepare(`
-      SELECT DISTINCT source.id
+    const direct = this.database.prepare(`
+      SELECT DISTINCT source.id, source.title, link.entity_id
+      FROM source
+      JOIN fact_source_link AS link
+        ON link.workspace_id = source.workspace_id
+        AND link.source_id = source.id
+      WHERE source.workspace_id = ?
+        AND source.deleted_at IS NULL
+        AND link.entity_type IN ('parent_child', 'marriage')
+        AND link.entity_id IN (${placeholders})
+    `).all(this.workspaceId, ...ids) as Array<{ id: string; title: string; entity_id: string }>;
+    const legacy = this.database.prepare(`
+      SELECT DISTINCT source.id, source.title
       FROM source
       JOIN audit_log AS source_audit
         ON source_audit.workspace_id = source.workspace_id
@@ -115,9 +126,20 @@ export class QueryToolRegistry {
         AND fact_audit.operation_group_id = source_audit.operation_group_id
       WHERE source.workspace_id = ?
         AND source.deleted_at IS NULL
+        AND fact_audit.entity_type IN ('parent_child', 'marriage')
         AND fact_audit.entity_id IN (${placeholders})
-      ORDER BY source.title, source.id
-    `).pluck().all(this.workspaceId, ...ids) as string[];
+        AND NOT EXISTS (
+          SELECT 1
+          FROM fact_source_link AS link
+          WHERE link.workspace_id = fact_audit.workspace_id
+            AND link.entity_type = fact_audit.entity_type
+            AND link.entity_id = fact_audit.entity_id
+            AND link.operation_group_id = fact_audit.operation_group_id
+        )
+    `).all(this.workspaceId, ...ids) as Array<{ id: string; title: string }>;
+    return [...new Map([...direct, ...legacy].map((row) => [row.id, row])).values()]
+      .sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id))
+      .map((row) => row.id);
   }
 }
 

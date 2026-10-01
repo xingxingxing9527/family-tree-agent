@@ -186,6 +186,45 @@ describe("data-management settings", () => {
     expect(value.listAudit).toHaveBeenCalledTimes(1);
   });
 
+  it("renders human-readable parent-completion provenance in operation history without internal relation ids", async () => {
+    const value = api();
+    vi.mocked(value.listAudit).mockResolvedValue({ ok: true, value: [{
+      id: groupId,
+      kind: "mutation.confirm",
+      createdAt: "2026-09-16T00:00:00.000Z",
+      status: "blocked",
+      affectedEntities: [
+        {
+          entityType: "parent_child",
+          entityId: "private-relation-id",
+          originKind: "spouse_default",
+          inferredFromMarriage: {
+            spouseAName: "王建国",
+            spouseBName: "李秀兰",
+            status: "divorced",
+            start: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" },
+            end: { calendar: "solar", year: 1990, month: 2, day: 3, leapMonth: false, precision: "day" }
+          }
+        },
+        {
+          entityType: "parent_child",
+          entityId: "legacy-private-relation-id",
+          originKind: "spouse_default",
+          inferredFromMarriage: null
+        }
+      ],
+      undoable: false,
+      reason: "历史记录仅用于展示",
+      undoneAt: null
+    }] });
+
+    render(<AuditHistory api={value} />);
+
+    expect(await screen.findByText("系统自动补全亲子关系：王建国 与 李秀兰；已离婚；公历 1980年1月 至 公历 1990年2月3日")).toBeVisible();
+    expect(screen.getByText("系统自动补全亲子关系（来源婚姻详情暂不可用）")).toBeVisible();
+    expect(screen.queryByText(/private-relation-id/u)).not.toBeInTheDocument();
+  });
+
   it("sanitizes a rejected audit-history request", async () => {
     const value = api();
     vi.mocked(value.listAudit).mockRejectedValue(new Error("C:\\private\\audit.sqlite 张敏"));

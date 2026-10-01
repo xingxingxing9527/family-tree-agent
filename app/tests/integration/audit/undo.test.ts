@@ -50,6 +50,8 @@ describe("conservative operation-group undo", () => {
       patch: { displayName: "新名", notes: "新备注" },
       source: source("manual:update")
     });
+    const updateSourceId = database.prepare("SELECT id FROM source WHERE source_key = ?").pluck().get("manual:update") as string;
+    expect(database.prepare("SELECT COUNT(*) FROM fact_source_link WHERE source_id = ?").pluck().get(updateSourceId)).toBe(1);
 
     const receipt = undo.undoOperationGroup(changed.operationGroupId);
 
@@ -57,6 +59,7 @@ describe("conservative operation-group undo", () => {
     expect(database.prepare("SELECT display_name, notes, row_version FROM person WHERE id = ?").get("person-manual"))
       .toEqual({ display_name: "原名", notes: "旧备注", row_version: 1 });
     expect(database.prepare("SELECT COUNT(*) FROM source WHERE source_key = ?").pluck().get("manual:update")).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) FROM fact_source_link WHERE source_id = ?").pluck().get(updateSourceId)).toBe(0);
     expect(database.prepare("SELECT undone_at FROM operation_group WHERE id = ?").pluck().get(changed.operationGroupId)).toMatch(/T/);
     expect(undo.listOperationGroups().find((group) => group.id === changed.operationGroupId)).toMatchObject({ status: "undone", undoable: false });
   });
@@ -149,6 +152,72 @@ describe("conservative operation-group undo", () => {
     expect(marriage.operationGroupId).not.toBe(archived.operationGroupId);
   });
 
+  it("enriches inferred parent audit history with readable marriage provenance and a safe legacy fallback", () => {
+    for (const [id, name] of [["history-father", "王建国"], ["history-mother", "李秀兰"], ["history-child", "孩子"], ["legacy-child", "旧记录孩子"]] as const) {
+      facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`history:${id}`) });
+    }
+    facts.execute({
+      type: "marriage.add",
+      draft: {
+        id: "history-marriage",
+        workspaceId,
+        spouseAId: "history-father",
+        spouseBId: "history-mother",
+        status: "divorced",
+        start: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" },
+        end: { calendar: "solar", year: 1990, month: 2, day: 3, leapMonth: false, precision: "day" }
+      },
+      source: source("history:marriage")
+    });
+    const detailed = facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "history-inferred",
+        workspaceId,
+        parentId: "history-mother",
+        childId: "history-child",
+        parentRole: "mother",
+        originKind: "spouse_default",
+        inferredFromMarriageId: "history-marriage"
+      },
+      source: source("history:inferred")
+    });
+    const legacy = facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "history-legacy-inferred",
+        workspaceId,
+        parentId: "history-father",
+        childId: "legacy-child",
+        parentRole: "father",
+        originKind: "spouse_default",
+        inferredFromMarriageId: null
+      },
+      source: source("history:legacy")
+    });
+
+    expect(undo.listOperationGroups().find(({ id }) => id === detailed.operationGroupId)?.affectedEntities)
+      .toContainEqual(expect.objectContaining({
+        entityType: "parent_child",
+        entityId: "history-inferred",
+        originKind: "spouse_default",
+        inferredFromMarriage: {
+          spouseAName: "王建国",
+          spouseBName: "李秀兰",
+          status: "divorced",
+          start: { calendar: "solar", year: 1980, month: 1, day: null, leapMonth: false, precision: "month" },
+          end: { calendar: "solar", year: 1990, month: 2, day: 3, leapMonth: false, precision: "day" }
+        }
+      }));
+    expect(undo.listOperationGroups().find(({ id }) => id === legacy.operationGroupId)?.affectedEntities)
+      .toContainEqual(expect.objectContaining({
+        entityType: "parent_child",
+        entityId: "history-legacy-inferred",
+        originKind: "spouse_default",
+        inferredFromMarriage: null
+      }));
+  });
+
   it("undoes one atomic parent correction by restoring the original provenance and removing the replacement", () => {
     for (const [id, name] of [["old-father", "错误父亲"], ["mother", "母亲"], ["new-father", "正确父亲"], ["child", "孩子"]] as const) {
       facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`correction:${id}`) });
@@ -168,10 +237,18 @@ describe("conservative operation-group undo", () => {
     });
     const staged = new StagedMutationService(database, workspaceId);
     const preview = staged.stage({ intents: [
-      { type: "parentChild.remove", relationId: "original-edge", expectedVersion: 1 },
       {
-        type: "parentChild.add",
-        draft: { parentId: "new-father", childId: "child", parentRole: "father", sourceDescription: "管理员更正" }
+        type: "parentChild.correct",
+        relationId: "original-edge",
+        expectedVersion: 1,
+        replacement: {
+          knownParentId: "new-father",
+          childId: "child",
+          parentRole: "father",
+          completionPolicy: "spouse-default",
+          skipCompletion: true,
+          sourceDescription: "管理员更正"
+        }
       }
     ] });
 

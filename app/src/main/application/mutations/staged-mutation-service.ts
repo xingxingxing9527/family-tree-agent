@@ -19,6 +19,7 @@ import { FactQueries } from "../facts/fact-queries.js";
 import { LineageCommandError, LineageCommandService } from "../lineages/lineage-command-service.js";
 import {
   ParentCompletionService,
+  ParentCompletionServiceError,
   type ParentCompletionRequest
 } from "../relations/parent-completion-service.js";
 
@@ -146,6 +147,7 @@ export class StagedMutationService {
       throw new MutationValidationError("VALIDATION", "Blocked or unchanged changes cannot be confirmed");
     }
     this.validateDependencies(stored, selected);
+    this.validateSelectionGroups(stored, selected);
     const requiredWarnings = stored.preview.issues
       .filter((issue) => selected.has(issue.changeId) && issue.severity === "warning")
       .map((issue) => issue.code);
@@ -208,11 +210,39 @@ export class StagedMutationService {
     }
   }
 
+  private validateSelectionGroups(stored: StoredDraft, selected: ReadonlySet<string>): void {
+    const groups = new Map<string, MutationChange[]>();
+    for (const change of stored.preview.changes) {
+      if (!change.selectionGroupId || !["create", "update"].includes(change.disposition)) continue;
+      const members = groups.get(change.selectionGroupId) ?? [];
+      members.push(change);
+      groups.set(change.selectionGroupId, members);
+    }
+    for (const members of groups.values()) {
+      const selectedCount = members.filter((change) => selected.has(change.id)).length;
+      if (selectedCount !== 0 && selectedCount !== members.length) {
+        throw new MutationValidationError("VALIDATION", "A parent correction must be selected in full");
+      }
+    }
+  }
+
   private requireFreshParentCompletionPlans(plans: readonly StoredParentCompletionPlan[]): void {
     if (plans.length === 0) return;
     const planner = new ParentCompletionService(new FactQueries(this.database, this.workspaceId));
     for (const stored of plans) {
-      const current = planner.plan(stored.input);
+      let current: ReturnType<ParentCompletionService["plan"]>;
+      try {
+        current = planner.plan(stored.input);
+      } catch (error) {
+        if (error instanceof ParentCompletionServiceError) {
+          throw new MutationValidationError(
+            "CONFLICT",
+            "父母补全所依据的人物已被合并或归档，请刷新后重试",
+            { code: "PARENT_COMPLETION_STALE" }
+          );
+        }
+        throw error;
+      }
       if (current.planningFingerprint !== stored.planningFingerprint || !sameValue(current.plan, stored.plan)) {
         throw new MutationValidationError(
           "CONFLICT",
@@ -268,9 +298,44 @@ export class StagedMutationService {
         throw new PreviewRollback(publicChanges, issues);
       });
     } catch (error) {
-      if (error instanceof PreviewRollback) return { changes: error.changes, issues: error.issues };
+      if (error instanceof PreviewRollback) return this.enforcePreviewSelectionGroups(error.changes, error.issues);
       throw error;
     }
+  }
+
+  private enforcePreviewSelectionGroups(changes: MutationChange[], issues: MutationIssue[]): { changes: MutationChange[]; issues: MutationIssue[] } {
+    const next = changes.map((change) => ({ ...change }));
+    const nextIssues = [...issues];
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const blockedIds = new Set(next.filter((change) => change.disposition === "blocked").map((change) => change.id));
+      const blockedGroups = new Set(next
+        .filter((change) => change.selectionGroupId && change.disposition === "blocked")
+        .map((change) => change.selectionGroupId!));
+      for (const change of next) {
+        const groupBlocked = Boolean(change.selectionGroupId && blockedGroups.has(change.selectionGroupId));
+        const dependencyBlocked = change.dependsOnChangeIds.some((dependencyId) => blockedIds.has(dependencyId));
+        if (!groupBlocked && !dependencyBlocked) continue;
+        if (change.disposition === "create" || change.disposition === "update") {
+          change.disposition = "blocked";
+          change.selectedByDefault = false;
+          changed = true;
+        }
+        const code = groupBlocked ? "CORRECTION_REPLACEMENT_BLOCKED" : "DEPENDENCY_BLOCKED";
+        if (!nextIssues.some((issue) => issue.changeId === change.id && issue.code === code)) {
+          nextIssues.push({
+            changeId: change.id,
+            severity: "error",
+            code,
+            message: groupBlocked
+              ? "更正关系的移除与替换必须同时有效；原关系未移除"
+              : "系统自动补全依赖的人工录入关系无法提交"
+          });
+        }
+      }
+    }
+    return { changes: next, issues: nextIssues };
   }
 
   private compile(draftId: string, intent: MutationIntent): InternalChange[] {
@@ -350,13 +415,53 @@ export class StagedMutationService {
           entityType: "parentChild",
           entityId: intent.relationId,
           summary: "移除亲子关系",
-          fieldChanges: [{ field: "relation", before, after: null }]
+          fieldChanges: [{ field: "relation", before, after: null }],
+          originKind: relation?.originKind ?? "explicit"
         }, {
           type: "fact.softDelete",
           entityType: "parent_child",
           entityId: intent.relationId,
           expectedVersion: intent.expectedVersion
         }, { id })];
+      }
+      case "parentChild.correct": {
+        const relation = new RelationRepository(this.database, this.workspaceId).getParentChild(intent.relationId);
+        if (relation && (relation.childId !== intent.replacement.childId || relation.parentRole !== intent.replacement.parentRole)) {
+          throw new MutationValidationError("VALIDATION", "A correction must replace the same child and parent role");
+        }
+        const selectionGroupId = randomUUID();
+        const removalId = randomUUID();
+        const before = relation ? {
+          parentId: relation.parentId,
+          childId: relation.childId,
+          parentRole: relation.parentRole,
+          originKind: relation.originKind,
+          inferredFromMarriageId: relation.inferredFromMarriageId
+        } : null;
+        const removal = make({
+          disposition: "update",
+          entityType: "parentChild",
+          entityId: intent.relationId,
+          summary: "移除待更正的亲子关系",
+          fieldChanges: [{ field: "relation", before, after: null }],
+          originKind: relation?.originKind ?? "explicit",
+          selectionGroupId
+        }, {
+          type: "fact.softDelete",
+          entityType: "parent_child",
+          entityId: intent.relationId,
+          expectedVersion: intent.expectedVersion
+        }, { id: removalId });
+        const replacementIntent: Extract<MutationIntent, { type: "parentFamily.add" }> = {
+          type: "parentFamily.add",
+          ...intent.replacement
+        };
+        const replacements = this.compileParentFamily(draftId, replacementIntent, make);
+        const explicit = replacements[0]!;
+        if (explicit.public.disposition === "create" || explicit.public.disposition === "update") {
+          explicit.public = { ...explicit.public, selectionGroupId };
+        }
+        return [removal, ...replacements];
       }
       case "parentFamily.add": return this.compileParentFamily(draftId, intent, make);
       case "marriage.add": {

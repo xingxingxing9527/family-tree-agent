@@ -45,10 +45,10 @@ describe("parent completion provenance migration", () => {
   it("backfills old parent-child rows as explicit", () => {
     const database = versionSixDatabaseWithParent();
     try {
-      expect(applyMigrations(database)).toBe(7);
+      expect(applyMigrations(database)).toBe(8);
       expect(database.prepare("SELECT origin_kind, inferred_from_marriage_id FROM parent_child").get())
         .toEqual({ origin_kind: "explicit", inferred_from_marriage_id: null });
-      expect(applyMigrations(database)).toBe(7);
+      expect(applyMigrations(database)).toBe(8);
     } finally {
       database.close();
     }
@@ -83,7 +83,8 @@ describe("parent completion provenance migration", () => {
         .run(workspaceId, after.updatedAt, after.updatedAt);
       database.prepare("INSERT INTO audit_log (id, workspace_id, operation_group_id, entity_type, entity_id, action, before_json, after_json, created_at, updated_at) VALUES ('old-parent-audit', ?, 'old-parent-archive', 'parent_child', 'old-parent', 'archive', ?, ?, ?, ?)")
         .run(workspaceId, JSON.stringify(before), JSON.stringify(after), after.updatedAt, after.updatedAt);
-      expect(applyMigrations(database)).toBe(7);
+      expect(applyMigrations(database)).toBe(8);
+      expect(database.prepare("SELECT COUNT(*) FROM fact_source_link").pluck().get()).toBe(0);
 
       new UndoService(database, workspaceId).undoOperationGroup("old-parent-archive");
 

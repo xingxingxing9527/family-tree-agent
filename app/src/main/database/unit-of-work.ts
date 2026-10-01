@@ -6,6 +6,7 @@ import { ImportIdentityRepository } from "./repositories/import-identity-reposit
 import { PersonRepository } from "./repositories/person-repository.js";
 import { RelationRepository } from "./repositories/relation-repository.js";
 import { SourceRepository } from "./repositories/source-repository.js";
+import { FactSourceLinkRepository } from "./repositories/fact-source-link-repository.js";
 
 export interface UnitOfWork {
   run<T>(kind: string, work: (ctx: TransactionContext) => T): T;
@@ -18,6 +19,7 @@ export interface TransactionContext {
   lineages: LineageRepository;
   importIdentities: ImportIdentityRepository;
   sources: SourceRepository;
+  factSources: FactSourceLinkRepository;
   audit: AuditRepository;
 }
 
@@ -37,6 +39,7 @@ export class SqliteUnitOfWork implements UnitOfWork {
         lineages: new LineageRepository(this.database, this.workspaceId),
         importIdentities: new ImportIdentityRepository(this.database, this.workspaceId),
         sources: new SourceRepository(this.database, this.workspaceId),
+        factSources: new FactSourceLinkRepository(this.database, this.workspaceId),
         audit: new AuditRepository(this.database, this.workspaceId, operationGroupId)
       };
       const result = work(ctx);

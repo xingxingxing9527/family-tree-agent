@@ -13,19 +13,20 @@ describe("database migrations", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  it("migrates an empty database to version 7 exactly once with stable person codes", async () => {
+  it("migrates an empty database to version 8 exactly once with stable person codes and fact-specific sources", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
     roots.push(root);
     const database = openDatabase(join(root, "genealogy.sqlite"));
 
     try {
-      expect(applyMigrations(database)).toBe(7);
-      expect(applyMigrations(database)).toBe(7);
-      expect(database.pragma("user_version", { simple: true })).toBe(7);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(7);
+      expect(applyMigrations(database)).toBe(8);
+      expect(applyMigrations(database)).toBe(8);
+      expect(database.pragma("user_version", { simple: true })).toBe(8);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(8);
       expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
       expect(database.prepare("SELECT name FROM pragma_table_info('lineage_membership') WHERE name = 'generation_marker'").pluck().get()).toBe("generation_marker");
       expect(database.prepare("SELECT name FROM pragma_table_info('person') WHERE name = 'person_code'").pluck().get()).toBe("person_code");
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fact_source_link'").pluck().get()).toBe("fact_source_link");
       expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.pragma("journal_mode", { simple: true })).toBe("wal");
       expect(database.pragma("busy_timeout", { simple: true })).toBe(5000);
@@ -56,7 +57,7 @@ describe("database migrations", () => {
     applyMigrations(database);
     const tables = (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").pluck().all() as string[]);
     expect(tables).toEqual([
-      "audit_log", "id_redirect", "import_identity", "lineage", "lineage_membership",
+      "audit_log", "fact_source_link", "id_redirect", "import_identity", "lineage", "lineage_membership",
       "marriage", "media_asset", "media_person", "merge_record", "operation_group",
       "parent_child", "person", "person_alias", "person_code_counter", "schema_migrations", "source",
       "wiki_entry", "wiki_fts", "wiki_fts_config", "wiki_fts_content", "wiki_fts_data", "wiki_fts_docsize", "wiki_fts_idx", "wiki_person", "wiki_source", "workspace_meta"
@@ -77,10 +78,27 @@ describe("database migrations", () => {
     database.close();
   });
 
+  it("creates a fact-specific source link with cascading source cleanup and a bounded lookup index", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
+    roots.push(root);
+    const database = openDatabase(join(root, "genealogy.sqlite"));
+    try {
+      applyMigrations(database);
+      expect(database.prepare("SELECT [table], [from], [to], on_delete FROM pragma_foreign_key_list('fact_source_link') WHERE [from]='source_id'").get())
+        .toEqual({ table: "source", from: "source_id", to: "id", on_delete: "CASCADE" });
+      expect(database.prepare("SELECT name, [unique] FROM pragma_index_list('fact_source_link') WHERE name='fact_source_link_entity_idx'").get())
+        .toEqual({ name: "fact_source_link_entity_idx", unique: 0 });
+      expect(database.prepare("SELECT name FROM pragma_index_info('fact_source_link_entity_idx') ORDER BY seqno").pluck().all())
+        .toEqual(["workspace_id", "entity_type", "entity_id"]);
+    } finally {
+      database.close();
+    }
+  });
+
   it.each([
     ["a renamed ledger row", "UPDATE schema_migrations SET name = 'forged' WHERE version = 2"],
     ["a gap in the ledger", "DELETE FROM schema_migrations WHERE version = 2"],
-    ["an unknown future ledger row", "INSERT INTO schema_migrations (version, name, applied_at) VALUES (8, 'future', '2026-09-16T00:00:00.000Z')"],
+    ["an unknown future ledger row", "INSERT INTO schema_migrations (version, name, applied_at) VALUES (9, 'future', '2026-09-16T00:00:00.000Z')"],
     ["a missing required index", "DROP INDEX operation_group_history_idx"]
   ])("rejects %s instead of trusting user_version", async (_case, mutation) => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
@@ -165,7 +183,7 @@ describe("database migrations", () => {
       PRAGMA user_version = 1;
     `);
 
-    expect(applyMigrations(database)).toBe(7);
+    expect(applyMigrations(database)).toBe(8);
     expect(database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all()).toEqual([
       { version: 1, name: "initial schema" },
       { version: 2, name: "merge history" },
@@ -173,7 +191,8 @@ describe("database migrations", () => {
       { version: 4, name: "operation group undo state" },
       { version: 5, name: "lineage membership generation marker" },
       { version: 6, name: "person code and children completeness" },
-      { version: 7, name: "parent completion metadata" }
+      { version: 7, name: "parent completion metadata" },
+      { version: 8, name: "fact source links" }
     ]);
     expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
     expect(database.prepare("SELECT name FROM pragma_table_info('lineage_membership') WHERE name = 'generation_marker'").pluck().get()).toBe("generation_marker");

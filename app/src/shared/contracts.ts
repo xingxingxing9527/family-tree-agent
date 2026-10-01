@@ -565,7 +565,12 @@ export interface AuditOperationGroupDto {
   kind: string;
   createdAt: string;
   status: "available" | "undone" | "blocked";
-  affectedEntities: Array<{ entityType: string; entityId: string }>;
+  affectedEntities: Array<{
+    entityType: string;
+    entityId: string;
+    originKind?: "explicit" | "spouse_default";
+    inferredFromMarriage?: ParentChildMarriageSourceReadModel | null;
+  }>;
   undoable: boolean;
   reason: string | null;
   undoneAt: string | null;

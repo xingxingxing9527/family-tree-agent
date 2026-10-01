@@ -19,6 +19,20 @@ export type MutationIntent =
   | { type: "parentChild.add"; draft: ParentChildDraft }
   | { type: "parentChild.remove"; relationId: string; expectedVersion: number }
   | {
+    type: "parentChild.correct";
+    relationId: string;
+    expectedVersion: number;
+    replacement: {
+      knownParentId: string;
+      childId: string;
+      parentRole: "father" | "mother";
+      completionPolicy: "spouse-default";
+      selectedSpouseId?: string;
+      skipCompletion?: boolean;
+      sourceDescription: string;
+    };
+  }
+  | {
     type: "parentFamily.add";
     knownParentId: string;
     childId: string;
@@ -50,6 +64,8 @@ export interface MutationChange {
   originKind: MutationOriginKind;
   selectedByDefault: boolean;
   dependsOnChangeIds: string[];
+  /** Server-generated all-or-none selection group. */
+  selectionGroupId?: string;
 }
 
 export interface MutationIssue {

@@ -2,6 +2,9 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { MAX_WORKSPACE_PEOPLE, WORKSPACE_PEOPLE_LIMIT_MESSAGE, countActiveWorkspacePeople } from "../../database/workspace-people-limit.js";
+import { PersonRepository } from "../../database/repositories/person-repository.js";
+import { RelationRepository } from "../../database/repositories/relation-repository.js";
+import type { ParentChildMarriageSourceReadModel } from "../../../shared/contracts.js";
 
 export type UndoErrorCode = "NOT_FOUND" | "NOT_UNDOABLE" | "CONFLICT" | "ALREADY_UNDONE";
 
@@ -17,10 +20,17 @@ export interface AuditOperationGroup {
   kind: string;
   createdAt: string;
   status: "available" | "undone" | "blocked";
-  affectedEntities: Array<{ entityType: string; entityId: string }>;
+  affectedEntities: AuditAffectedEntity[];
   undoable: boolean;
   reason: string | null;
   undoneAt: string | null;
+}
+
+interface AuditAffectedEntity {
+  entityType: string;
+  entityId: string;
+  originKind?: "explicit" | "spouse_default";
+  inferredFromMarriage?: ParentChildMarriageSourceReadModel | null;
 }
 
 export interface UndoReceipt {
@@ -189,7 +199,7 @@ export class UndoService {
       ORDER BY created_at DESC, id DESC
     `).all(this.workspaceId) as OperationRow[];
     return groups.map((group) => {
-      const affectedEntities = this.rawAudit(group.id).map((row) => ({ entityType: row.entity_type, entityId: row.entity_id }));
+      const affectedEntities = this.rawAudit(group.id).map((row) => this.affectedEntity(row));
       if (group.undone_at) return {
         id: group.id, kind: group.kind, createdAt: group.created_at, status: "undone" as const,
         affectedEntities, undoable: false, reason: "This operation group was already undone", undoneAt: group.undone_at
@@ -253,6 +263,43 @@ export class UndoService {
       WHERE workspace_id = ? AND operation_group_id = ?
       ORDER BY rowid DESC
     `).all(this.workspaceId, operationGroupId) as AuditRow[];
+  }
+
+  private affectedEntity(row: AuditRow): AuditAffectedEntity {
+    const fallback = { entityType: row.entity_type, entityId: row.entity_id };
+    if (row.entity_type !== "parent_child") return fallback;
+    try {
+      const snapshot = JSON.parse(row.after_json ?? row.before_json ?? "null") as {
+        originKind?: unknown;
+        inferredFromMarriageId?: unknown;
+      } | null;
+      if (!snapshot || snapshot.originKind !== "spouse_default") return fallback;
+      const marriageId = typeof snapshot.inferredFromMarriageId === "string" ? snapshot.inferredFromMarriageId : null;
+      return {
+        ...fallback,
+        originKind: "spouse_default",
+        inferredFromMarriage: this.parentCompletionMarriageSource(marriageId)
+      };
+    } catch {
+      return fallback;
+    }
+  }
+
+  private parentCompletionMarriageSource(marriageId: string | null): ParentChildMarriageSourceReadModel | null {
+    if (!marriageId) return null;
+    const marriage = new RelationRepository(this.database, this.workspaceId).getMarriage(marriageId, { includeArchived: true });
+    if (!marriage) return null;
+    const people = new PersonRepository(this.database, this.workspaceId);
+    const spouseA = people.get(marriage.spouseAId, { includeArchived: true });
+    const spouseB = people.get(marriage.spouseBId, { includeArchived: true });
+    if (!spouseA || !spouseB) return null;
+    return {
+      spouseAName: spouseA.displayName,
+      spouseBName: spouseB.displayName,
+      status: marriage.status,
+      start: marriage.start,
+      end: marriage.end
+    };
   }
 
   private preflight(group: OperationRow): PreparedAudit[] {

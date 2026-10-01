@@ -196,7 +196,7 @@ export class FactCommandService {
   private apply(ctx: TransactionContext, command: FactCommand, ids: Readonly<Record<string, string>>, recordSource = true): string {
     switch (command.type) {
       case "person.create": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
         const person = ctx.people.create(ctx, {
           id: command.draft.id,
           displayName: command.draft.displayName,
@@ -206,48 +206,58 @@ export class FactCommandService {
           notes: command.draft.notes
         });
         this.syncAliases(ctx, person.id, command.draft.aliases);
+        if (createdSource) ctx.factSources.link("person", person.id, createdSource.id, ctx.operationGroupId);
         return person.id;
       }
       case "person.update": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
         const { aliases, ...personPatch } = command.patch;
         const person = ctx.people.update(ctx, ids.person!, personPatch);
         this.syncAliases(ctx, person.id, aliases);
+        if (createdSource) ctx.factSources.link("person", person.id, createdSource.id, ctx.operationGroupId);
         return person.id;
       }
       case "parentChild.add": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
-        return ctx.relations.createParentChild(ctx, {
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
+        const relation = ctx.relations.createParentChild(ctx, {
           id: command.draft.id,
           parentId: ids.parentId!,
           childId: ids.childId!,
           parentRole: command.draft.parentRole,
           originKind: command.draft.originKind,
           inferredFromMarriageId: command.draft.originKind === "spouse_default" ? ids.inferredMarriageId ?? null : null
-        }).id;
+        });
+        if (createdSource) ctx.factSources.link("parent_child", relation.id, createdSource.id, ctx.operationGroupId);
+        return relation.id;
       }
       case "marriage.add": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
-        return ctx.relations.createMarriage(ctx, {
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
+        const marriage = ctx.relations.createMarriage(ctx, {
           id: command.draft.id,
           spouseAId: ids.spouseAId!,
           spouseBId: ids.spouseBId!,
           start: command.draft.start,
           status: command.draft.status,
           end: command.draft.end
-        }).id;
+        });
+        if (createdSource) ctx.factSources.link("marriage", marriage.id, createdSource.id, ctx.operationGroupId);
+        return marriage.id;
       }
       case "marriage.divorce": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
-        return ctx.relations.divorceMarriage(ctx, ids.marriage!, command.endDate).id;
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
+        const marriage = ctx.relations.divorceMarriage(ctx, ids.marriage!, command.endDate);
+        if (createdSource) ctx.factSources.link("marriage", marriage.id, createdSource.id, ctx.operationGroupId);
+        return marriage.id;
       }
       case "person.childrenCompleteness.set": {
-        if (recordSource) ctx.sources.create(ctx, command.source);
-        return this.completeness.setChildrenCompleteness(ctx, {
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
+        const completeness = this.completeness.setChildrenCompleteness(ctx, {
           personId: ids.person!,
           complete: command.complete,
           expectedVersion: command.expectedVersion
-        }).id;
+        });
+        if (createdSource) ctx.factSources.link("person_completeness", completeness.id, createdSource.id, ctx.operationGroupId);
+        return completeness.id;
       }
       case "fact.softDelete": {
         if (ids.entityType === "person") return ctx.people.archive(ctx, ids.entityId!).id;

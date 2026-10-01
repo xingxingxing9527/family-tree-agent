@@ -51,7 +51,13 @@ export function useStagedMutation(
     try {
       const result = await api.confirm({ draftId: preview.id, draftVersion: preview.version, selectedChangeIds, acknowledgedWarningCodes });
       if (!result.ok) {
-        if (requestIsCurrent(generation)) setError(result.error.message);
+        if (requestIsCurrent(generation)) {
+          const details = result.error.details;
+          const stale = Boolean(details && typeof details === "object" && !Array.isArray(details)
+            && (details as { code?: unknown }).code === "PARENT_COMPLETION_STALE");
+          setError(stale ? "父母补全依据已发生变化，请刷新人物资料后重新生成预览" : result.error.message);
+          if (stale) setPreview(null);
+        }
         return false;
       }
       try {

@@ -540,15 +540,18 @@ describe("FamilyRelationsPanel", () => {
 
     await waitFor(() => expect(mutations.stage).toHaveBeenCalledTimes(1));
     expect(vi.mocked(mutations.stage).mock.calls[0]?.[0].intents).toEqual([
-      { type: "parentChild.remove", relationId: "edge-father", expectedVersion: 3 },
       {
-        type: "parentFamily.add",
-        knownParentId: "replacement",
-        childId: "current",
-        parentRole: "father",
-        completionPolicy: "spouse-default",
-        skipCompletion: true,
-        sourceDescription: "人物中心关系更正"
+        type: "parentChild.correct",
+        relationId: "edge-father",
+        expectedVersion: 3,
+        replacement: {
+          knownParentId: "replacement",
+          childId: "current",
+          parentRole: "father",
+          completionPolicy: "spouse-default",
+          skipCompletion: true,
+          sourceDescription: "人物中心关系更正"
+        }
       }
     ]);
   });

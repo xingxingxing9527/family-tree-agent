@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState, type JSX } from "react";
 import type { AuditOperationGroupDto, DataManagementApi } from "../../../../shared/contracts";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
+import { formatPartialDate } from "../people/format-partial-date";
 
 export interface AuditHistoryProps {
   api: DataManagementApi;
@@ -12,6 +13,25 @@ const statusLabel: Record<AuditOperationGroupDto["status"], string> = {
   available: "可撤销",
   undone: "已撤销",
   blocked: "不可撤销"
+};
+
+type AffectedEntity = AuditOperationGroupDto["affectedEntities"][number];
+
+const affectedEntityLabel = (entity: AffectedEntity): string => {
+  if (entity.entityType !== "parent_child" || entity.originKind !== "spouse_default") {
+    return `${entity.entityType}:${entity.entityId}`;
+  }
+  const source = entity.inferredFromMarriage;
+  if (!source) return "系统自动补全亲子关系（来源婚姻详情暂不可用）";
+  const status = source.status === "active" ? "存续" : "已离婚";
+  const date = source.start
+    ? source.status === "active" && source.end === null
+      ? `${formatPartialDate(source.start)} 至今`
+      : source.end
+        ? `${formatPartialDate(source.start)} 至 ${formatPartialDate(source.end)}`
+        : formatPartialDate(source.start)
+    : null;
+  return `系统自动补全亲子关系：${source.spouseAName} 与 ${source.spouseBName}；${status}${date ? `；${date}` : ""}`;
 };
 
 export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistoryProps): JSX.Element {
@@ -67,7 +87,9 @@ export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistor
     {groups.length === 0 ? <p>暂无操作记录</p> : <ul>
       {groups.map((group) => <li key={group.id}>
         <p>{group.kind} · {group.createdAt} · {statusLabel[group.status]}</p>
-        <p>影响：{group.affectedEntities.length ? group.affectedEntities.map((entity) => `${entity.entityType}:${entity.entityId}`).join("、") : "无"}</p>
+        {group.affectedEntities.length
+          ? <><p>影响：</p><ul>{group.affectedEntities.map((entity) => <li key={`${entity.entityType}:${entity.entityId}`}>{affectedEntityLabel(entity)}</li>)}</ul></>
+          : <p>影响：无</p>}
         {group.reason && <p>{group.reason}</p>}
         {group.undoable && <button type="button" aria-label={`撤销 ${group.id}`} disabled={busyId !== null} onClick={() => { setPendingUndo(group); setConfirmed(false); }}>{busyId === group.id ? "撤销中" : "撤销"}</button>}
       </li>)}
@@ -76,7 +98,7 @@ export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistor
       <h3>确认撤销操作</h3>
       <p>操作：{pendingUndo.kind}</p>
       <p>将影响以下实体：</p>
-      <ul>{pendingUndo.affectedEntities.map((entity) => <li key={`${entity.entityType}:${entity.entityId}`}>{entity.entityType}:{entity.entityId}</li>)}</ul>
+      <ul>{pendingUndo.affectedEntities.map((entity) => <li key={`${entity.entityType}:${entity.entityId}`}>{affectedEntityLabel(entity)}</li>)}</ul>
       <label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />我确认撤销以上 {pendingUndo.affectedEntities.length} 个受影响实体</label>
       <div className="button-row"><button type="button" className="button danger-button" disabled={!confirmed || busyId !== null} onClick={() => void undo(pendingUndo.id)}>确认撤销</button><button type="button" className="button secondary-button" disabled={busyId !== null} onClick={() => { setPendingUndo(null); setConfirmed(false); }}>取消</button></div>
     </section></div>}

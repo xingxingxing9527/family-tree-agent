@@ -16,6 +16,7 @@ import { PartialDateField } from "../people/PartialDateField";
 
 type ParentRole = "father" | "mother";
 type ParentFamilyIntent = Extract<MutationIntent, { type: "parentFamily.add" }>;
+type ParentCorrectionIntent = Extract<MutationIntent, { type: "parentChild.correct" }>;
 type RelativePurpose = "父亲" | "母亲" | "配偶" | "子女" | "更正人物";
 
 export interface RelativeQuickCreateRequest {
@@ -257,15 +258,22 @@ export function FamilyRelationsPanel({
     const relation = correction.relation;
     const parentRole = relation.role === "child" ? correction.parentRole : relation.role;
     if (!parentRole) return;
-    const replacementIntent = relation.role === "child"
-      ? familyIntent(detail.person.id, correction.replacementId, parentRole, "人物中心关系更正")
-      : familyIntent(correction.replacementId, detail.person.id, parentRole, "人物中心关系更正");
-    replacementIntent.skipCompletion = true;
-    void planAndStage([replacementIntent], [{
-      type: "parentChild.remove",
+    const replacement = relation.role === "child"
+      ? { knownParentId: detail.person.id, childId: correction.replacementId }
+      : { knownParentId: correction.replacementId, childId: detail.person.id };
+    const intent: ParentCorrectionIntent = {
+      type: "parentChild.correct",
       relationId: relation.relationId,
-      expectedVersion: relation.rowVersion
-    }]);
+      expectedVersion: relation.rowVersion,
+      replacement: {
+        ...replacement,
+        parentRole,
+        completionPolicy: "spouse-default",
+        skipCompletion: true,
+        sourceDescription: "人物中心关系更正"
+      }
+    };
+    void staged.stage([intent]);
   };
 
   const updateMarriage = (key: number, patch: Partial<MarriageEventDraft>): void => {

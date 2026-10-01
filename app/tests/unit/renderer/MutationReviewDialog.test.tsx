@@ -3,6 +3,10 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
+import { StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
+import { applyMigrations } from "../../../src/main/database/migrations";
+import { openDatabase } from "../../../src/main/database/open-database";
 import type { MutationPreview } from "../../../src/shared/mutations";
 import { MutationReviewDialog } from "../../../src/renderer/src/features/mutations/MutationReviewDialog";
 
@@ -99,63 +103,63 @@ describe("MutationReviewDialog", () => {
     expect(screen.getByLabelText("选择 自动母亲")).not.toBeChecked();
   });
 
-  it("preserves correction provenance and prunes transitive dependent selections", () => {
-    const preview: MutationPreview = {
-      id: "draft-correction",
-      workspaceId: "workspace-1",
-      version: 1,
-      expiresAt: "2026-10-01T00:30:00.000Z",
-      expectedVersions: { "old-edge": 3 },
-      changes: [
-        {
-          id: "remove-old",
-          disposition: "update",
-          entityType: "parentChild",
-          entityId: "old-edge",
-          summary: "移除系统补全的旧父亲",
-          fieldChanges: [{ field: "relation", before: { originKind: "spouse_default", inferredFromMarriageId: "marriage-1" }, after: null }],
-          originKind: "spouse_default",
-          selectedByDefault: true,
-          dependsOnChangeIds: []
-        },
-        {
-          id: "replacement",
-          disposition: "create",
-          entityType: "parentChild",
-          entityId: "new-edge",
-          summary: "录入更正后的父亲",
-          fieldChanges: [],
-          originKind: "explicit",
-          selectedByDefault: true,
-          dependsOnChangeIds: ["remove-old"]
-        },
-        {
-          id: "automatic",
-          disposition: "create",
-          entityType: "parentChild",
-          entityId: "auto-edge",
-          summary: "根据婚姻补全母亲",
-          fieldChanges: [],
-          originKind: "spouse_default",
-          selectedByDefault: true,
-          dependsOnChangeIds: ["replacement"]
+  it("toggles and confirms a real staged correction only as one all-or-none group", () => {
+    const database = openDatabase(":memory:");
+    try {
+      applyMigrations(database);
+      const workspaceId = "workspace-1";
+      const facts = new FactCommandService(database, workspaceId);
+      const source = (sourceKey: string) => ({ sourceKey, title: sourceKey, kind: "test" });
+      for (const [id, displayName] of [["old", "错误父亲"], ["replacement", "正确父亲"], ["child", "孩子"]] as const) {
+        facts.execute({ type: "person.create", draft: { id, workspaceId, displayName, gender: "unknown" }, source: source(`person:${id}`) });
+      }
+      facts.execute({
+        type: "parentChild.add",
+        draft: { id: "old-edge", workspaceId, parentId: "old", childId: "child", parentRole: "father" },
+        source: source("old-edge")
+      });
+      const service = new StagedMutationService(database, workspaceId);
+      const preview = service.stage({ intents: [{
+        type: "parentChild.correct",
+        relationId: "old-edge",
+        expectedVersion: 1,
+        replacement: {
+          knownParentId: "replacement",
+          childId: "child",
+          parentRole: "father",
+          completionPolicy: "spouse-default",
+          skipCompletion: true,
+          sourceDescription: "人物中心关系更正"
         }
-      ],
-      issues: [],
-      canConfirm: true
-    };
-    const confirm = vi.fn();
-    render(<MutationReviewDialog preview={preview} onCancel={vi.fn()} onConfirm={confirm} />);
+      }] });
+      const [removal, replacement] = preview.changes;
+      expect(removal?.selectionGroupId).toBeTruthy();
+      expect(replacement?.selectionGroupId).toBe(removal?.selectionGroupId);
+      const confirm = vi.fn((selectedChangeIds: string[], acknowledgedWarningCodes: string[]) => service.confirm({
+        draftId: preview.id,
+        draftVersion: preview.version,
+        selectedChangeIds,
+        acknowledgedWarningCodes
+      }));
+      render(<MutationReviewDialog preview={preview} onCancel={vi.fn()} onConfirm={confirm} />);
 
-    expect(screen.getAllByText("系统自动补全")).toHaveLength(2);
-    expect(screen.getByText("人工录入")).toBeVisible();
-    fireEvent.click(screen.getByLabelText("选择 移除系统补全的旧父亲"));
+      const removalSelection = screen.getByLabelText(`选择 ${removal!.summary}`);
+      const replacementSelection = screen.getByLabelText(`选择 ${replacement!.summary}`);
+      fireEvent.click(replacementSelection);
+      expect(removalSelection).not.toBeChecked();
+      expect(replacementSelection).not.toBeChecked();
+      expect(screen.getByRole("button", { name: "确认写入" })).toBeDisabled();
 
-    expect(screen.getByLabelText("选择 录入更正后的父亲")).not.toBeChecked();
-    expect(screen.getByLabelText("选择 录入更正后的父亲")).toBeDisabled();
-    expect(screen.getByLabelText("选择 根据婚姻补全母亲")).not.toBeChecked();
-    expect(screen.getByLabelText("选择 根据婚姻补全母亲")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "确认写入" })).toBeDisabled();
-    expect(confirm).not.toHaveBeenCalled();
+      fireEvent.click(removalSelection);
+      expect(removalSelection).toBeChecked();
+      expect(replacementSelection).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
+
+      expect(confirm).toHaveBeenCalledWith([removal!.id, replacement!.id], []);
+      expect(database.prepare("SELECT parent_id FROM parent_child WHERE child_id='child' AND deleted_at IS NULL").pluck().all())
+        .toEqual(["replacement"]);
+    } finally {
+      database.close();
+    }
   });
 });

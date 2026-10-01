@@ -26,6 +26,19 @@ function pruneUnsafeSelections(preview: MutationPreview, selected: Set<string>):
   return next;
 }
 
+function toggleSelectionGroup(preview: MutationPreview, selected: Set<string>, id: string, checked: boolean): Set<string> {
+  const next = new Set(selected);
+  const change = preview.changes.find((entry) => entry.id === id);
+  const targets = change?.selectionGroupId
+    ? preview.changes.filter((entry) => entry.selectionGroupId === change.selectionGroupId && actionableDisposition(entry.disposition))
+    : change ? [change] : [];
+  for (const target of targets) {
+    if (checked) next.add(target.id);
+    else next.delete(target.id);
+  }
+  return pruneUnsafeSelections(preview, next);
+}
+
 export function MutationReviewDialog({ preview, busy = false, onCancel, onConfirm }: {
   preview: MutationPreview;
   busy?: boolean;
@@ -40,7 +53,13 @@ export function MutationReviewDialog({ preview, busy = false, onCancel, onConfir
   const warnings = useMemo(() => preview.issues.filter((issue) => issue.severity === "warning" && selected.has(issue.changeId)), [preview, selected]);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
   const warningCodes = [...new Set(warnings.map((warning) => warning.code))];
-  const ready = preview.canConfirm && selected.size > 0 && warningCodes.every((code) => acknowledged.has(code));
+  const completeGroups = preview.changes.every((change) => {
+    if (!change.selectionGroupId || !actionableDisposition(change.disposition)) return true;
+    const group = preview.changes.filter((entry) => entry.selectionGroupId === change.selectionGroupId && actionableDisposition(entry.disposition));
+    const selectedCount = group.filter((entry) => selected.has(entry.id)).length;
+    return selectedCount === 0 || selectedCount === group.length;
+  });
+  const ready = preview.canConfirm && selected.size > 0 && completeGroups && warningCodes.every((code) => acknowledged.has(code));
 
   return <div className="modal-backdrop"><section className="confirmation-dialog mutation-review" role="dialog" aria-modal="true" aria-label="确认写入">
     <h2>确认写入</h2>
@@ -59,11 +78,7 @@ export function MutationReviewDialog({ preview, busy = false, onCancel, onConfir
           type="checkbox"
           checked={selected.has(change.id)}
           disabled={busy || !dependencyReady}
-          onChange={(event) => setSelected((current) => {
-            const next = new Set(current);
-            if (event.target.checked) next.add(change.id); else next.delete(change.id);
-            return pruneUnsafeSelections(preview, next);
-          })}
+          onChange={(event) => setSelected((current) => toggleSelectionGroup(preview, current, change.id, event.target.checked))}
         />}
         <span className={`mutation-origin mutation-origin-${change.originKind ?? "explicit"}`}>{change.originKind === "spouse_default" ? "系统自动补全" : "人工录入"}</span>
         <span>{change.summary}</span>
