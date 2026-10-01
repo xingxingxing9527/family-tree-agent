@@ -7,6 +7,8 @@ import type {
   ChildrenCountStatusDto,
   FactMutationReceipt,
   MarriageDraft,
+  ParentCompletionPlanDto,
+  ParentCompletionScanDto,
   ParentChildDraft,
   PersonDetailReadModel,
   PersonDraft,
@@ -25,7 +27,9 @@ export const FACT_CHANNELS = {
   childrenCountStatus: "people:children-count-status",
   addParentChild: "relations:add-parent-child",
   addMarriage: "relations:add-marriage",
-  divorce: "relations:divorce"
+  divorce: "relations:divorce",
+  planParentCompletion: "relations:plan-parent-completion",
+  scanParentCompletions: "relations:scan-parent-completions"
 } as const;
 
 export interface FactsGateway {
@@ -38,6 +42,8 @@ export interface FactsGateway {
   addParentChild(input: { draft: ParentChildDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
   addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
   divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
+  planParentCompletion(input: { knownParentId: string; childId: string; parentRole: "father" | "mother"; selectedSpouseId?: string }): Promise<AppResult<ParentCompletionPlanDto>>;
+  scanParentCompletions(): Promise<AppResult<ParentCompletionScanDto>>;
 }
 
 type IpcMainLike = Pick<IpcMain, "handle">;
@@ -52,7 +58,9 @@ const schemas = {
   getChildrenCountStatus: RPC_INPUT_SCHEMAS.people.getChildrenCountStatus,
   parentChild: RPC_INPUT_SCHEMAS.relations.addParentChild,
   marriage: RPC_INPUT_SCHEMAS.relations.addMarriage,
-  divorce: RPC_INPUT_SCHEMAS.relations.divorce
+  divorce: RPC_INPUT_SCHEMAS.relations.divorce,
+  planParentCompletion: RPC_INPUT_SCHEMAS.relations.planParentCompletion,
+  scanParentCompletions: RPC_INPUT_SCHEMAS.relations.scanParentCompletions
 } as const;
 
 const denied = (): AppResult<never> => ({ ok: false, error: { code: "PATH_DENIED", message: "IPC sender was denied" } });
@@ -116,4 +124,6 @@ export function registerFactsIpc(ipc: IpcMainLike, mainWindowId: () => number | 
   ipc.handle(FACT_CHANNELS.addParentChild, parsedHandler(trusted, schemas.parentChild, (input) => run(() => facts.addParentChild(input))));
   ipc.handle(FACT_CHANNELS.addMarriage, parsedHandler(trusted, schemas.marriage, (input) => run(() => facts.addMarriage(input))));
   ipc.handle(FACT_CHANNELS.divorce, parsedHandler(trusted, schemas.divorce, (input) => run(() => facts.divorce(input))));
+  ipc.handle(FACT_CHANNELS.planParentCompletion, parsedHandler(trusted, schemas.planParentCompletion, (input) => run(() => facts.planParentCompletion(input))));
+  ipc.handle(FACT_CHANNELS.scanParentCompletions, parsedHandler(trusted, schemas.scanParentCompletions, () => run(() => facts.scanParentCompletions())));
 }

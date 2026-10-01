@@ -330,6 +330,73 @@ export interface ParentChildDraft {
   sourceDescription: string;
 }
 
+export type ParentCompletionStatusDto = "suggested" | "no_candidate" | "ambiguous" | "unchanged" | "conflict";
+export type ParentCompletionBasisDto = "unique_spouse" | "birth_interval" | "administrator_selected" | null;
+export type ParentCompletionScanClassification = "safe" | "ambiguous" | "no-candidate" | "conflict";
+
+export interface ParentCompletionRelationDto {
+  parentId: string;
+  parentName: string;
+  childId: string;
+  childName: string;
+  parentRole: "father" | "mother";
+  inferredFromMarriageId?: string | null;
+}
+
+export interface ParentCompletionMarriageEpisodeDto {
+  id: string;
+  status: "active" | "divorced";
+  start: PartialDate | null;
+  end: PartialDate | null;
+  rowVersion: number;
+}
+
+export interface ParentCompletionCandidateDto {
+  personId: string;
+  personName: string;
+  intervalRelation: "inside" | "outside" | "unknown";
+  marriageEpisodes: ParentCompletionMarriageEpisodeDto[];
+  reason: string;
+  evidenceIds: string[];
+}
+
+export interface ParentCompletionIssueDto {
+  code: "PARENT_COMPLETION_NO_CANDIDATE" | "PARENT_COMPLETION_AMBIGUOUS" | "PARENT_COMPLETION_INVALID_SELECTION" | "PARENT_ROLE_OCCUPIED" | "PARENT_GENDER_MISMATCH";
+  severity: "info" | "warning" | "error";
+  message: string;
+  evidenceIds: string[];
+}
+
+export type ParentCompletionEvidenceDto =
+  | { entityType: "person"; id: string; rowVersion: number; displayName: string; birth: PartialDate | null }
+  | { entityType: "parent_child"; id: string; rowVersion: number; parentId: string; childId: string; parentRole: "father" | "mother" }
+  | { entityType: "marriage"; id: string; rowVersion: number; spouseAId: string; spouseBId: string; status: "active" | "divorced"; start: PartialDate | null; end: PartialDate | null };
+
+export interface ParentCompletionPlanDto {
+  status: ParentCompletionStatusDto;
+  basis: ParentCompletionBasisDto;
+  explicit: ParentCompletionRelationDto;
+  suggested?: ParentCompletionRelationDto;
+  candidates: ParentCompletionCandidateDto[];
+  issues: ParentCompletionIssueDto[];
+  evidence: ParentCompletionEvidenceDto[];
+}
+
+export interface ParentCompletionScanItemDto {
+  childId: string;
+  childName: string;
+  knownParentId: string;
+  knownParentName: string;
+  parentRole: "father" | "mother";
+  classification: ParentCompletionScanClassification;
+  plan: ParentCompletionPlanDto;
+}
+
+export interface ParentCompletionScanDto {
+  counts: { total: number; safe: number; ambiguous: number; noCandidate: number; conflict: number };
+  items: ParentCompletionScanItemDto[];
+}
+
 export interface LineageApi {
   createLineage(input: { name: string; founderPersonId: string; description: string | null }): Promise<AppResult<FactMutationReceipt>>;
   updateLineage(input: { lineageId: string; expectedVersion: number; patch: { name?: string; founderPersonId?: string; description?: string | null } }): Promise<AppResult<FactMutationReceipt>>;
@@ -511,6 +578,8 @@ export interface FamilyAgentApi {
     addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
     planRelativePath(input: RelativePathPlanInput): Promise<AppResult<RelativePathPlan>>;
+    planParentCompletion(input: { knownParentId: string; childId: string; parentRole: "father" | "mother"; selectedSpouseId?: string }): Promise<AppResult<ParentCompletionPlanDto>>;
+    scanParentCompletions(): Promise<AppResult<ParentCompletionScanDto>>;
   };
   lineages: LineageApi;
   imports: ImportApi;

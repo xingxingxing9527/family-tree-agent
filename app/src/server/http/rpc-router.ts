@@ -23,7 +23,9 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
       addParentChild: entry(RPC_INPUT_SCHEMAS.relations.addParentChild, (input) => service.relations.addParentChild(input)),
       addMarriage: entry(RPC_INPUT_SCHEMAS.relations.addMarriage, (input) => service.relations.addMarriage(input)),
       divorce: entry(RPC_INPUT_SCHEMAS.relations.divorce, (input) => service.relations.divorce(input)),
-      planRelativePath: entry(RPC_INPUT_SCHEMAS.relations.planRelativePath, (input) => service.relations.planRelativePath(input))
+      planRelativePath: entry(RPC_INPUT_SCHEMAS.relations.planRelativePath, (input) => service.relations.planRelativePath(input)),
+      planParentCompletion: entry(RPC_INPUT_SCHEMAS.relations.planParentCompletion, (input) => service.relations.planParentCompletion(input)),
+      scanParentCompletions: entry(RPC_INPUT_SCHEMAS.relations.scanParentCompletions, () => service.relations.scanParentCompletions())
     },
     lineages: {
       createLineage: entry(RPC_INPUT_SCHEMAS.lineages.createLineage, (input) => service.lineages.createLineage(input)),

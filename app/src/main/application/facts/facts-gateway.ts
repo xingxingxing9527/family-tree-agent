@@ -6,6 +6,8 @@ import type {
   ChildrenCountStatusDto,
   FactMutationReceipt,
   MarriageDraft as PublicMarriageDraft,
+  ParentCompletionPlanDto,
+  ParentCompletionScanDto,
   ParentChildDraft as PublicParentChildDraft,
   PersonDetailReadModel,
   PersonDraft as PublicPersonDraft,
@@ -23,6 +25,7 @@ import type { SourceDraft } from "./fact-commands.js";
 import { FactCommandError, FactCommandService } from "./fact-command-service.js";
 import { FactQueries } from "./fact-queries.js";
 import type { FactsGateway } from "../../ipc/facts-ipc.js";
+import { ParentCompletionService, ParentCompletionServiceError } from "../relations/parent-completion-service.js";
 
 export interface OpenWorkspaceContext {
   workspaceId: string;
@@ -216,6 +219,14 @@ export class WorkspaceFactsGateway implements FactsGateway {
     }, { confirmWarnings: true })));
   }
 
+  async planParentCompletion(input: { knownParentId: string; childId: string; parentRole: "father" | "mother"; selectedSpouseId?: string }): Promise<AppResult<ParentCompletionPlanDto>> {
+    return this.withWorkspace((database, workspaceId) => new ParentCompletionService(new FactQueries(database, workspaceId)).plan(input).plan);
+  }
+
+  async scanParentCompletions(): Promise<AppResult<ParentCompletionScanDto>> {
+    return this.withWorkspace((database, workspaceId) => new ParentCompletionService(new FactQueries(database, workspaceId)).scan());
+  }
+
   private marriageReadModel(queries: FactQueries, personId: string, marriage: MarriageRecord): PersonDetailReadModel["marriages"][number] | null {
     const spouseId = marriage.spouseAId === personId ? marriage.spouseBId : marriage.spouseAId;
     const spouse = queries.getPerson(spouseId);
@@ -241,6 +252,7 @@ export class WorkspaceFactsGateway implements FactsGateway {
       return { ok: true, value: operation(database, context.workspaceId) };
     } catch (error) {
       if (error instanceof GatewayError) return failure(error.code, error.message, error.details);
+      if (error instanceof ParentCompletionServiceError) return failure(error.code, error.message, { entityId: error.entityId });
       if (error instanceof FactCommandError) {
         const first = error.issues[0];
         const code: AppErrorCode = first?.code === "CONFLICT" ? "CONFLICT" : first?.code === "NOT_FOUND" ? "NOT_FOUND" : "VALIDATION";

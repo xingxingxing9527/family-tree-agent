@@ -146,6 +146,77 @@ describe("typed family RPC API", () => {
     } });
   });
 
+  it("plans and scans parent completion through the allowlisted read API without exposing private state", async () => {
+    const father = await rpc("people", "save", { draft: { ...personDraft("王建国"), gender: "male" }, confirmWarnings: true });
+    const mother = await rpc("people", "save", { draft: { ...personDraft("李秀兰"), gender: "female" }, confirmWarnings: true });
+    const child = await rpc("people", "save", { draft: personDraft("王强"), confirmWarnings: true });
+    const fatherId = father.body.value.entityId as string;
+    const motherId = mother.body.value.entityId as string;
+    const childId = child.body.value.entityId as string;
+    await rpc("relations", "addMarriage", {
+      draft: { spouseAId: fatherId, spouseBId: motherId, start: null, sourceDescription: "结婚证" },
+      confirmWarnings: true
+    });
+    await rpc("relations", "addParentChild", {
+      draft: { parentId: fatherId, childId, parentRole: "father", sourceDescription: "出生证" },
+      confirmWarnings: true
+    });
+
+    const planned = await rpc("relations", "planParentCompletion", {
+      knownParentId: fatherId,
+      childId,
+      parentRole: "father"
+    });
+    const scanned = await rpc("relations", "scanParentCompletions", {});
+
+    expect(planned.response.statusCode).toBe(200);
+    expect(planned.body).toMatchObject({
+      ok: true,
+      value: {
+        status: "suggested",
+        suggested: { parentId: motherId, parentName: "李秀兰", childId, childName: "王强", parentRole: "mother" },
+        candidates: [{ personId: motherId, personName: "李秀兰", marriageEpisodes: [{ status: "active" }], reason: expect.any(String) }],
+        evidence: expect.any(Array)
+      }
+    });
+    expect(scanned.body).toMatchObject({
+      ok: true,
+      value: {
+        counts: { total: 1, safe: 1, ambiguous: 0, noCandidate: 0, conflict: 0 },
+        items: [{ childId, childName: "王强", classification: "safe" }]
+      }
+    });
+    expect(JSON.stringify({ planned: planned.body, scanned: scanned.body })).not.toMatch(/planningFingerprint|databasePath|mediaPath|[A-Z]:\\/u);
+  });
+
+  it.each([
+    { knownParentId: "", childId: "child", parentRole: "father" },
+    { knownParentId: "known", childId: "child", parentRole: "father", selectedSpouseId: "" },
+    { knownParentId: "same", childId: "same", parentRole: "mother" }
+  ])("rejects invalid parent completion identifiers before service execution", async (input) => {
+    const planned = await rpc("relations", "planParentCompletion", input);
+    expect(planned.response.statusCode).toBe(400);
+    expect(planned.body).toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+  });
+
+  it.each([
+    ["planParentCompletion", { knownParentId: "missing-parent", childId: "missing-child", parentRole: "father" }],
+    ["scanParentCompletions", {}]
+  ] as const)("holds relations.%s behind workspace replacement exclusivity", async (method, input) => {
+    const lease = await runtime.mutationGate.acquireExclusive();
+    let settled = false;
+    const pending = rpc("relations", method, input).then((result) => {
+      settled = true;
+      return result;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+
+    lease.release();
+
+    expect((await pending).response.statusCode).toBe(200);
+  });
+
   it("does not serialize filesystem paths", async () => {
     const snapshot = await rpc("query", "workspaceSnapshot", null);
     expect(snapshot.response.statusCode).toBe(200);

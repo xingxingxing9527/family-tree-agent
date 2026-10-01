@@ -105,6 +105,13 @@ export const RPC_INPUT_SCHEMAS = {
     addMarriage: z.object({ draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict()
       .refine((value) => value.spouseAId !== value.spouseBId, { message: "People must be different" }), confirmWarnings: z.boolean() }).strict(),
     divorce: z.object({ marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
+    planParentCompletion: z.object({
+      knownParentId: id,
+      childId: id,
+      parentRole: z.enum(["father", "mother"]),
+      selectedSpouseId: id.optional()
+    }).strict().refine((value) => value.knownParentId !== value.childId, { message: "People must be different" }),
+    scanParentCompletions: noInputSchema,
     planRelativePath: z.object({
       anchorId: id,
       targetId: id,

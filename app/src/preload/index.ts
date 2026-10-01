@@ -23,7 +23,9 @@ const desktopApi: DesktopApi = {
     addParentChild: (input) => ipcRenderer.invoke("relations:add-parent-child", input),
     addMarriage: (input) => ipcRenderer.invoke("relations:add-marriage", input),
     divorce: (input) => ipcRenderer.invoke("relations:divorce", input),
-    planRelativePath: (input) => ipcRenderer.invoke("relations:plan-relative-path", input)
+    planRelativePath: (input) => ipcRenderer.invoke("relations:plan-relative-path", input),
+    planParentCompletion: (input) => ipcRenderer.invoke("relations:plan-parent-completion", input),
+    scanParentCompletions: () => ipcRenderer.invoke("relations:scan-parent-completions", {})
   },
   lineages: {
     createLineage: (input) => ipcRenderer.invoke("lineages:create", input),

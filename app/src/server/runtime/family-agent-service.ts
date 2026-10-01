@@ -99,7 +99,9 @@ export class FamilyAgentService implements FamilyAgentApi {
       addParentChild: (input) => gated(() => facts.addParentChild(input)),
       addMarriage: (input) => gated(() => facts.addMarriage(input)),
       divorce: (input) => gated(() => facts.divorce(input)),
-      planRelativePath: (input) => gated(() => this.planRelativePath(input))
+      planRelativePath: (input) => gated(() => this.planRelativePath(input)),
+      planParentCompletion: (input) => gated(() => facts.planParentCompletion(input)),
+      scanParentCompletions: () => gated(() => facts.scanParentCompletions())
     };
     this.lineages = {
       createLineage: (input) => gated(() => lineages.createLineage(input)),

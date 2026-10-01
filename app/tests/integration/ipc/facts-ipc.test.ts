@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppResult, FactMutationReceipt, PersonDetailReadModel, PersonListItem } from "../../../src/shared/contracts";
+import type { AppResult, FactMutationReceipt, ParentCompletionPlanDto, ParentCompletionScanDto, PersonDetailReadModel, PersonListItem } from "../../../src/shared/contracts";
 import { FACT_CHANNELS, registerFactsIpc, type FactsGateway } from "../../../src/main/ipc/facts-ipc";
+import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
 
 type Handler = (event: { sender: { id: number } }, payload?: unknown) => Promise<unknown> | unknown;
 
@@ -29,6 +30,20 @@ const mutation: AppResult<FactMutationReceipt> = {
   value: { entityId: "person-1", saved: true, warnings: [] }
 };
 
+const completionPlan: ParentCompletionPlanDto = {
+  status: "no_candidate",
+  basis: null,
+  explicit: { parentId: "person-1", parentName: "张敏", childId: "child-1", childName: "孩子", parentRole: "mother" },
+  candidates: [],
+  issues: [],
+  evidence: []
+};
+
+const completionScan: ParentCompletionScanDto = {
+  counts: { total: 0, safe: 0, ambiguous: 0, noCandidate: 0, conflict: 0 },
+  items: []
+};
+
 function gateway(): FactsGateway {
   return {
     listPeople: vi.fn().mockResolvedValue({ ok: true, value: [person] }),
@@ -39,13 +54,15 @@ function gateway(): FactsGateway {
     getChildrenCountStatus: vi.fn().mockResolvedValue({ ok: true, value: { count: 0, completeness: "partial" } }),
     addParentChild: vi.fn().mockResolvedValue(mutation),
     addMarriage: vi.fn().mockResolvedValue(mutation),
-    divorce: vi.fn().mockResolvedValue(mutation)
+    divorce: vi.fn().mockResolvedValue(mutation),
+    planParentCompletion: vi.fn().mockResolvedValue({ ok: true, value: completionPlan }),
+    scanParentCompletions: vi.fn().mockResolvedValue({ ok: true, value: completionScan })
   };
 }
 
-function setup(facts = gateway()): { facts: FactsGateway; handlers: Map<string, Handler> } {
+function setup(facts = gateway(), gate?: WorkspaceMutationGate): { facts: FactsGateway; handlers: Map<string, Handler> } {
   const handlers = new Map<string, Handler>();
-  registerFactsIpc({ handle: (channel, handler) => handlers.set(channel, handler as Handler) }, () => 7, facts);
+  registerFactsIpc({ handle: (channel, handler) => handlers.set(channel, handler as Handler) }, () => 7, facts, gate);
   return { facts, handlers };
 }
 
@@ -65,7 +82,11 @@ describe("facts IPC contracts", () => {
     [FACT_CHANNELS.addParentChild, { draft: { parentId: "same", childId: "same", parentRole: "father", sourceDescription: "手录" }, confirmWarnings: false }],
     [FACT_CHANNELS.addMarriage, { draft: { spouseAId: "a", spouseBId: "b", start: null }, confirmWarnings: false }],
     [FACT_CHANNELS.divorce, { marriageId: "m", endDate: { calendar: "lunar", year: 2024, month: 2, day: 31, leapMonth: false, precision: "day" }, expectedVersion: 1 }],
-    [FACT_CHANNELS.divorce, { marriageId: "m", endDate: { calendar: "solar", year: 2024, month: 2, day: 30, leapMonth: false, precision: "day" }, expectedVersion: 1 }]
+    [FACT_CHANNELS.divorce, { marriageId: "m", endDate: { calendar: "solar", year: 2024, month: 2, day: 30, leapMonth: false, precision: "day" }, expectedVersion: 1 }],
+    [FACT_CHANNELS.planParentCompletion, { knownParentId: "", childId: "child", parentRole: "father" }],
+    [FACT_CHANNELS.planParentCompletion, { knownParentId: "known", childId: "child", parentRole: "father", selectedSpouseId: "" }],
+    [FACT_CHANNELS.planParentCompletion, { knownParentId: "same", childId: "same", parentRole: "mother" }],
+    [FACT_CHANNELS.scanParentCompletions, { unexpected: true }]
   ])("rejects malformed payloads on %s before invoking the gateway", async (channel, payload) => {
     const { facts, handlers } = setup();
     const result = await handlers.get(channel)!({ sender: { id: 7 } }, payload);
@@ -85,6 +106,26 @@ describe("facts IPC contracts", () => {
     const result = await handlers.get(FACT_CHANNELS.peopleList)!({ sender: { id: 7 } }, { query: "敏敏", limit: 20, offset: 0 });
     expect(result).toEqual({ ok: true, value: [person] });
     expect(facts.listPeople).toHaveBeenCalledWith({ query: "敏敏", limit: 20, offset: 0 });
+  });
+
+  it.each([
+    [FACT_CHANNELS.planParentCompletion, { knownParentId: "person-1", childId: "child-1", parentRole: "mother", selectedSpouseId: "spouse-1" }, completionPlan],
+    [FACT_CHANNELS.scanParentCompletions, {}, completionScan]
+  ] as const)("runs %s through the workspace operation gate", async (channel, payload, expected) => {
+    const gate = new WorkspaceMutationGate();
+    const lease = await gate.acquireExclusive();
+    const { handlers } = setup(gateway(), gate);
+    let settled = false;
+    const pending = Promise.resolve(handlers.get(channel)!({ sender: { id: 7 } }, payload)).then((result) => {
+      settled = true;
+      return result;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    lease.release();
+
+    await expect(pending).resolves.toEqual({ ok: true, value: expected });
   });
 
   it("sanitizes unexpected exceptions without returning SQL, paths, or stacks", async () => {
