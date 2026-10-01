@@ -237,6 +237,47 @@ describe("QueryToolRegistry", () => {
     expect(database.prepare("SELECT COUNT(*) AS count FROM operation_group").get()).toEqual(operationCount);
   });
 
+  it("returns provenance only for parent and child relatives", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "parents-marriage", workspaceId, spouseAId: "father", spouseBId: "spouse" },
+      source: source("parents-marriage")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "mother-child-a", workspaceId, parentId: "spouse", childId: "child-a", parentRole: "mother",
+        originKind: "spouse_default", inferredFromMarriageId: "parents-marriage"
+      },
+      source: source("mother-child-a")
+    });
+
+    const parents = registry.tools.list_relatives({ personId: "child-a", kinds: ["parent"] });
+    const children = registry.tools.list_relatives({ personId: "spouse", kinds: ["child"] });
+    const spouses = registry.tools.list_relatives({ personId: "father", kinds: ["spouse"] });
+
+    expect(parents).toHaveLength(2);
+    expect(parents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        relationId: "father-child-a", kind: "parent", rowVersion: 1,
+        originKind: "explicit", inferredFromMarriageId: null
+      }),
+      expect.objectContaining({
+        relationId: "mother-child-a", kind: "parent", rowVersion: 1,
+        originKind: "spouse_default", inferredFromMarriageId: "parents-marriage"
+      })
+    ]));
+    expect(children).toEqual([expect.objectContaining({
+      relationId: "mother-child-a", kind: "child", rowVersion: 1,
+      originKind: "spouse_default", inferredFromMarriageId: "parents-marriage"
+    })]);
+    expect(spouses).toEqual([expect.objectContaining({ relationId: "parents-marriage", kind: "spouse" })]);
+    expect(spouses[0]).not.toHaveProperty("rowVersion");
+    expect(spouses[0]).not.toHaveProperty("originKind");
+    expect(spouses[0]).not.toHaveProperty("inferredFromMarriageId");
+  });
+
   it("calculates the same relationship bidirectionally with inspectable paths", () => {
     const downward = registry.tools.calculate_relationship({ viewpointId: "father", targetId: "child-a" });
     const upward = registry.tools.calculate_relationship({ viewpointId: "child-a", targetId: "father" });

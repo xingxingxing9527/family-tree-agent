@@ -17,6 +17,7 @@ export type MutationIntent =
   | { type: "person.create"; draft: PersonDraft }
   | { type: "person.update"; personId: string; expectedVersion: number; patch: PersonPatch }
   | { type: "parentChild.add"; draft: ParentChildDraft }
+  | { type: "parentChild.remove"; relationId: string; expectedVersion: number }
   | {
     type: "parentFamily.add";
     knownParentId: string;

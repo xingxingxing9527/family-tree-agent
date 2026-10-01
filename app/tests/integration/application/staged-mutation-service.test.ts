@@ -7,6 +7,7 @@ import { FactCommandService } from "../../../src/main/application/facts/fact-com
 import { MutationValidationError, StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import { RPC_INPUT_SCHEMAS } from "../../../src/shared/api-schemas";
 import type { PartialDate } from "../../../src/shared/domain";
 
 const workspaceId = "workspace-1";
@@ -287,6 +288,128 @@ describe("StagedMutationService", () => {
       disposition: "blocked",
       selectedByDefault: false
     }]);
+  });
+
+  it("strictly validates parent relation removal intents at the public boundary", () => {
+    const schema = RPC_INPUT_SCHEMAS.mutations.stage;
+    expect(schema.safeParse({ intents: [{ type: "parentChild.remove", relationId: "relation", expectedVersion: 1 }] }).success).toBe(true);
+    for (const input of [
+      { intents: [{ type: "parentChild.remove", relationId: "", expectedVersion: 1 }] },
+      { intents: [{ type: "parentChild.remove", relationId: "relation", expectedVersion: 0 }] },
+      { intents: [{ type: "parentChild.remove", relationId: "relation", expectedVersion: 1.5 }] },
+      { intents: [{ type: "parentChild.remove", relationId: "relation", expectedVersion: 1, cascade: true }] },
+      { intents: [{ type: "parentChild.remove", relationId: "relation", expectedVersion: 1 }], extra: true }
+    ]) expect(schema.safeParse(input).success, JSON.stringify(input)).toBe(false);
+  });
+
+  it("previews removal as a relation update with before and after fields", () => {
+    seedFamily();
+    new FactCommandService(database, workspaceId).execute({
+      type: "parentChild.add",
+      draft: {
+        id: "inferred", workspaceId, parentId: "spouse", childId: "child", parentRole: "mother",
+        originKind: "spouse_default", inferredFromMarriageId: "marriage"
+      },
+      source: source("inferred")
+    });
+
+    const preview = service.stage({ intents: [{ type: "parentChild.remove", relationId: "inferred", expectedVersion: 1 }] });
+
+    expect(preview.changes).toEqual([expect.objectContaining({
+      disposition: "update",
+      entityType: "parentChild",
+      entityId: "inferred",
+      summary: expect.stringMatching(/移除.*亲子关系/u),
+      fieldChanges: [{
+        field: "relation",
+        before: {
+          parentId: "spouse",
+          childId: "child",
+          parentRole: "mother",
+          originKind: "spouse_default",
+          inferredFromMarriageId: "marriage"
+        },
+        after: null
+      }]
+    })]);
+  });
+
+  it("requires the exact parent relation row version when confirming removal", () => {
+    seedFamily();
+    createParent("stale-parent", "known", "father");
+    const preview = service.stage({ intents: [{ type: "parentChild.remove", relationId: "stale-parent", expectedVersion: 1 }] });
+    database.prepare("UPDATE parent_child SET row_version = 2 WHERE id = 'stale-parent'").run();
+
+    expect(() => service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: [preview.changes[0]!.id],
+      acknowledgedWarningCodes: []
+    })).toThrowError(expect.objectContaining({ code: "CONFLICT" } satisfies Partial<MutationValidationError>));
+    expect(database.prepare("SELECT deleted_at, row_version FROM parent_child WHERE id='stale-parent'").get())
+      .toEqual({ deleted_at: null, row_version: 2 });
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(0);
+  });
+
+  it("removes an inferred parent without cascading to its marriage or people", () => {
+    seedFamily();
+    new FactCommandService(database, workspaceId).execute({
+      type: "parentChild.add",
+      draft: {
+        id: "inferred", workspaceId, parentId: "spouse", childId: "child", parentRole: "mother",
+        originKind: "spouse_default", inferredFromMarriageId: "marriage"
+      },
+      source: source("inferred")
+    });
+    const peopleBefore = database.prepare("SELECT id, row_version, deleted_at FROM person ORDER BY id").all();
+    const marriageBefore = database.prepare("SELECT id, row_version, deleted_at FROM marriage").all();
+    const preview = service.stage({ intents: [{ type: "parentChild.remove", relationId: "inferred", expectedVersion: 1 }] });
+
+    const receipt = service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: [preview.changes[0]!.id],
+      acknowledgedWarningCodes: []
+    });
+
+    expect(database.prepare("SELECT deleted_at, row_version FROM parent_child WHERE id='inferred'").get())
+      .toEqual({ deleted_at: expect.stringMatching(/T/u), row_version: 2 });
+    expect(database.prepare("SELECT id, row_version, deleted_at FROM person ORDER BY id").all()).toEqual(peopleBefore);
+    expect(database.prepare("SELECT id, row_version, deleted_at FROM marriage").all()).toEqual(marriageBefore);
+    expect(database.prepare("SELECT entity_type, entity_id, action FROM audit_log WHERE operation_group_id=?").all(receipt.operationGroupId))
+      .toEqual([{ entity_type: "parent_child", entity_id: "inferred", action: "archive" }]);
+  });
+
+  it("supports remove plus parentFamily.add in one atomic correction draft", () => {
+    createPerson("old", "错误父亲", "male");
+    createPerson("known", "正确父亲", "male");
+    createPerson("child", "孩子");
+    new FactCommandService(database, workspaceId).execute({
+      type: "parentChild.add",
+      draft: { id: "old-edge", workspaceId, parentId: "old", childId: "child", parentRole: "father" },
+      source: source("old-edge")
+    });
+
+    const preview = service.stage({ intents: [
+      { type: "parentChild.remove", relationId: "old-edge", expectedVersion: 1 },
+      {
+        type: "parentFamily.add", knownParentId: "known", childId: "child", parentRole: "father",
+        completionPolicy: "spouse-default", skipCompletion: true, sourceDescription: "更正父亲"
+      }
+    ] });
+    expect(preview.changes).toMatchObject([
+      { disposition: "update", entityId: "old-edge" },
+      { disposition: "create", entityType: "parentChild", originKind: "explicit" }
+    ]);
+
+    const receipt = service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: preview.changes.map(({ id }) => id),
+      acknowledgedWarningCodes: []
+    });
+    expect(database.prepare("SELECT parent_id FROM parent_child WHERE child_id='child' AND deleted_at IS NULL").pluck().all()).toEqual(["known"]);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE id=? AND kind='mutation.confirm'").pluck().get(receipt.operationGroupId)).toBe(1);
   });
 
   it("accepts more than the legacy one-hundred intent limit up to the bounded batch limit", () => {

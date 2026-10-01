@@ -70,6 +70,9 @@ export interface RelatedPersonReadModel {
   relationId: string;
   person: PersonListItem;
   role: "father" | "mother" | "child";
+  rowVersion: number;
+  originKind: "explicit" | "spouse_default";
+  inferredFromMarriageId: string | null;
 }
 
 export interface MarriageReadModel {
@@ -120,13 +123,23 @@ export interface PersonQueryReadModel extends PersonReadModel {
 
 export type RelativeKind = "parent" | "spouse" | "child";
 
-export interface RelativeReadModel {
+interface RelativeReadModelBase {
   relationId: string;
-  kind: RelativeKind;
   person: PersonCandidate;
-  parentRole: "father" | "mother" | null;
-  marriageStatus: "active" | "divorced" | null;
 }
+
+export type RelativeReadModel = RelativeReadModelBase & ({
+  kind: "parent" | "child";
+  parentRole: "father" | "mother" | null;
+  marriageStatus: null;
+  rowVersion: number;
+  originKind: "explicit" | "spouse_default";
+  inferredFromMarriageId: string | null;
+} | {
+  kind: "spouse";
+  parentRole: null;
+  marriageStatus: "active" | "divorced" | null;
+});
 
 export interface RelationshipSignatureDto {
   steps: string[];

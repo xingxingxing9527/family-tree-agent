@@ -56,6 +56,7 @@ const mutationIntent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("person.create"), draft: personDraft }).strict(),
   z.object({ type: z.literal("person.update"), personId: id, expectedVersion, patch: personPatch }).strict(),
   z.object({ type: z.literal("parentChild.add"), draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict() }).strict(),
+  z.object({ type: z.literal("parentChild.remove"), relationId: id, expectedVersion }).strict(),
   z.object({
     type: z.literal("parentFamily.add"),
     knownParentId: id,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { WorkspaceFactsGateway } from "../../../src/main/application/facts/facts-gateway";
+import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 import type { PersonDraft } from "../../../src/shared/contracts";
 
 describe("WorkspaceFactsGateway", () => {
@@ -88,6 +89,65 @@ describe("WorkspaceFactsGateway", () => {
     });
     const correctedDetail = await gateway.getPerson({ personId: child.value.entityId });
     expect(correctedDetail).toMatchObject({ ok: true, value: { person: { birth: { year: 1988, month: 6 } } } });
+  });
+
+  it("returns parent-child row versions and provenance from both sides without adding them to marriages", async () => {
+    const database = openDatabase(databasePath);
+    const facts = new FactCommandService(database, "workspace-1");
+    const source = (key: string) => ({ sourceKey: key, title: key, kind: "test" });
+    for (const [id, displayName] of [["father", "父亲"], ["mother", "母亲"], ["child", "孩子"]] as const) {
+      facts.execute({
+        type: "person.create",
+        draft: { id, workspaceId: "workspace-1", displayName, gender: "unknown" },
+        source: source(`person:${id}`)
+      });
+    }
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "marriage", workspaceId: "workspace-1", spouseAId: "father", spouseBId: "mother" },
+      source: source("marriage")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "inferred-parent", workspaceId: "workspace-1", parentId: "mother", childId: "child", parentRole: "mother",
+        originKind: "spouse_default", inferredFromMarriageId: "marriage"
+      },
+      source: source("inferred-parent")
+    });
+    database.close();
+
+    const child = await gateway.getPerson({ personId: "child" });
+    const mother = await gateway.getPerson({ personId: "mother" });
+
+    expect(child).toMatchObject({
+      ok: true,
+      value: {
+        parents: [{
+          relationId: "inferred-parent",
+          rowVersion: 1,
+          originKind: "spouse_default",
+          inferredFromMarriageId: "marriage",
+          role: "mother"
+        }]
+      }
+    });
+    expect(mother).toMatchObject({
+      ok: true,
+      value: {
+        children: [{
+          relationId: "inferred-parent",
+          rowVersion: 1,
+          originKind: "spouse_default",
+          inferredFromMarriageId: "marriage",
+          role: "child"
+        }],
+        marriages: [{ id: "marriage" }]
+      }
+    });
+    if (!mother.ok) throw new Error("mother detail fixture failed");
+    expect(mother.value.marriages[0]).not.toHaveProperty("originKind");
+    expect(mother.value.marriages[0]).not.toHaveProperty("inferredFromMarriageId");
   });
 
   it("returns a sanitized not-found result when no workspace is open", async () => {

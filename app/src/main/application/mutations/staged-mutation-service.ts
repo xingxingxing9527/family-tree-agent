@@ -11,6 +11,7 @@ import type { ParentCompletionPlanDto } from "../../../shared/contracts.js";
 import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { LineageRepository } from "../../database/repositories/lineage-repository.js";
 import { PersonRepository } from "../../database/repositories/person-repository.js";
+import { RelationRepository } from "../../database/repositories/relation-repository.js";
 import { createUnitOfWork, type TransactionContext } from "../../database/unit-of-work.js";
 import { FactCommandError, FactCommandService } from "../facts/fact-command-service.js";
 import type { FactCommand, SourceDraft } from "../facts/fact-commands.js";
@@ -99,7 +100,7 @@ export class StagedMutationService {
     const validated = this.previewChanges(changes);
     const expectedVersions = Object.fromEntries(input.intents.flatMap((intent) => {
       if ("expectedVersion" in intent) {
-        const id = "personId" in intent ? intent.personId : "marriageId" in intent ? intent.marriageId : "lineageId" in intent ? intent.lineageId : "membershipId" in intent ? intent.membershipId : null;
+        const id = "personId" in intent ? intent.personId : "marriageId" in intent ? intent.marriageId : "relationId" in intent ? intent.relationId : "lineageId" in intent ? intent.lineageId : "membershipId" in intent ? intent.membershipId : null;
         return id ? [[id, intent.expectedVersion] as const] : [];
       }
       return [];
@@ -332,6 +333,29 @@ export class StagedMutationService {
         return [make({ disposition: "create", entityType: "parentChild", entityId: generatedEntityId, summary: "创建亲子关系", fieldChanges: [] }, {
           type: "parentChild.add", draft: { id: generatedEntityId, workspaceId: this.workspaceId, parentId: intent.draft.parentId, childId: intent.draft.childId, parentRole: intent.draft.parentRole },
           source: source(intent.draft.sourceDescription, draftId, id)
+        }, { id })];
+      }
+      case "parentChild.remove": {
+        const id = randomUUID();
+        const relation = new RelationRepository(this.database, this.workspaceId).getParentChild(intent.relationId);
+        const before = relation ? {
+          parentId: relation.parentId,
+          childId: relation.childId,
+          parentRole: relation.parentRole,
+          originKind: relation.originKind,
+          inferredFromMarriageId: relation.inferredFromMarriageId
+        } : null;
+        return [make({
+          disposition: "update",
+          entityType: "parentChild",
+          entityId: intent.relationId,
+          summary: "移除亲子关系",
+          fieldChanges: [{ field: "relation", before, after: null }]
+        }, {
+          type: "fact.softDelete",
+          entityType: "parent_child",
+          entityId: intent.relationId,
+          expectedVersion: intent.expectedVersion
         }, { id })];
       }
       case "parentFamily.add": return this.compileParentFamily(draftId, intent, make);

@@ -12,7 +12,16 @@ export function listRelatives(
   if (kinds.has("parent")) {
     for (const relation of queries.listParentChild().filter((candidate) => candidate.childId === input.personId)) {
       const person = personCandidate(queries, relation.parentId);
-      if (person) relatives.push({ relationId: relation.id, kind: "parent", person, parentRole: relation.parentRole, marriageStatus: null });
+      if (person) relatives.push({
+        relationId: relation.id,
+        kind: "parent",
+        person,
+        parentRole: relation.parentRole,
+        marriageStatus: null,
+        rowVersion: relation.rowVersion,
+        originKind: relation.originKind,
+        inferredFromMarriageId: relation.inferredFromMarriageId
+      });
     }
   }
   if (kinds.has("spouse")) {
@@ -25,7 +34,16 @@ export function listRelatives(
   if (kinds.has("child")) {
     for (const relation of queries.listParentChild().filter((candidate) => candidate.parentId === input.personId)) {
       const person = personCandidate(queries, relation.childId);
-      if (person) relatives.push({ relationId: relation.id, kind: "child", person, parentRole: null, marriageStatus: null });
+      if (person) relatives.push({
+        relationId: relation.id,
+        kind: "child",
+        person,
+        parentRole: null,
+        marriageStatus: null,
+        rowVersion: relation.rowVersion,
+        originKind: relation.originKind,
+        inferredFromMarriageId: relation.inferredFromMarriageId
+      });
     }
   }
   const rank: Record<RelativeKind, number> = { parent: 0, spouse: 1, child: 2 };

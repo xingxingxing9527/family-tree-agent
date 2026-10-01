@@ -7,6 +7,7 @@ import { DraftService } from "../../../src/main/application/chat/draft-service";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 import { ImportCommitter } from "../../../src/main/application/import/import-committer";
 import { ImportPlanner, ImportPlanStore } from "../../../src/main/application/import/import-planner";
+import { StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
 import type { ParsedImport } from "../../../src/main/application/import/import-types";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
@@ -146,6 +147,63 @@ describe("conservative operation-group undo", () => {
     expect(new RelationRepository(database, workspaceId).getParentChild("undo-inferred"))
       .toMatchObject({ originKind: "spouse_default", inferredFromMarriageId: "undo-marriage", deletedAt: null });
     expect(marriage.operationGroupId).not.toBe(archived.operationGroupId);
+  });
+
+  it("undoes one atomic parent correction by restoring the original provenance and removing the replacement", () => {
+    for (const [id, name] of [["old-father", "错误父亲"], ["mother", "母亲"], ["new-father", "正确父亲"], ["child", "孩子"]] as const) {
+      facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`correction:${id}`) });
+    }
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "original-marriage", workspaceId, spouseAId: "old-father", spouseBId: "mother" },
+      source: source("correction:marriage")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "original-edge", workspaceId, parentId: "old-father", childId: "child", parentRole: "father",
+        originKind: "spouse_default", inferredFromMarriageId: "original-marriage"
+      },
+      source: source("correction:original-edge")
+    });
+    const staged = new StagedMutationService(database, workspaceId);
+    const preview = staged.stage({ intents: [
+      { type: "parentChild.remove", relationId: "original-edge", expectedVersion: 1 },
+      {
+        type: "parentChild.add",
+        draft: { parentId: "new-father", childId: "child", parentRole: "father", sourceDescription: "管理员更正" }
+      }
+    ] });
+
+    const confirmed = staged.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: preview.changes.map(({ id }) => id),
+      acknowledgedWarningCodes: []
+    });
+    const replacementId = preview.changes[1]!.entityId!;
+    expect(database.prepare("SELECT id, parent_id, origin_kind FROM parent_child WHERE child_id='child' AND deleted_at IS NULL").all())
+      .toEqual([{ id: replacementId, parent_id: "new-father", origin_kind: "explicit" }]);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE id=? AND kind='mutation.confirm'").pluck().get(confirmed.operationGroupId)).toBe(1);
+    expect(database.prepare("SELECT entity_id, action FROM audit_log WHERE operation_group_id=? AND entity_type='parent_child' ORDER BY id").all(confirmed.operationGroupId))
+      .toEqual(expect.arrayContaining([
+        { entity_id: "original-edge", action: "archive" },
+        { entity_id: replacementId, action: "create" }
+      ]));
+
+    undo.undoOperationGroup(confirmed.operationGroupId);
+
+    expect(database.prepare("SELECT id, parent_id, origin_kind, inferred_from_marriage_id, row_version FROM parent_child WHERE child_id='child' AND deleted_at IS NULL").all())
+      .toEqual([{
+        id: "original-edge",
+        parent_id: "old-father",
+        origin_kind: "spouse_default",
+        inferred_from_marriage_id: "original-marriage",
+        row_version: 1
+      }]);
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE id=?").pluck().get(replacementId)).toBe(0);
+    expect(database.prepare("SELECT row_version, deleted_at FROM marriage WHERE id='original-marriage'").get())
+      .toEqual({ row_version: 1, deleted_at: null });
   });
 
   it("preflights the entire group so a later row-version mismatch changes nothing", () => {

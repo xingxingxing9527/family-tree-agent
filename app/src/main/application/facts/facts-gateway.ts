@@ -100,7 +100,14 @@ export class WorkspaceFactsGateway implements FactsGateway {
       const listItem = (record: PersonRecord): PersonListItem => toListItem(record, queries.listAliases(record.id).map((alias) => alias.name));
       const related = (edge: ParentChildRecord, relatedId: string, role: RelatedPersonReadModel["role"]): RelatedPersonReadModel | null => {
         const record = queries.getPerson(relatedId);
-        return record ? { relationId: edge.id, person: listItem(record), role } : null;
+        return record ? {
+          relationId: edge.id,
+          person: listItem(record),
+          role,
+          rowVersion: edge.rowVersion,
+          originKind: edge.originKind,
+          inferredFromMarriageId: edge.inferredFromMarriageId
+        } : null;
       };
       const parents = edges
         .filter((edge) => edge.childId === person.id)
