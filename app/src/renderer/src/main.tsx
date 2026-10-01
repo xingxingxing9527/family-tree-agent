@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles/tokens.css";
 import type { FamilyAgentApi } from "../../shared/contracts";
 import { ApiProvider } from "./app/ApiContext";
+import { createHttpApiClient } from "./api/http-client";
 
 declare global {
   interface Window {
@@ -11,8 +12,7 @@ declare global {
   }
 }
 
-const api = window.desktopApi;
-if (!api) throw new Error("FamilyAgent API is unavailable");
+const api = window.desktopApi ?? createHttpApiClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
