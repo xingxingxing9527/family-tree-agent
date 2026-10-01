@@ -59,6 +59,7 @@ test("creates a five-person family with divorce, remarriage, tree evidence, ques
   await openArea(page, workspace.id, "people");
   for (const person of people) await addPerson(page, person.name, person.gender);
 
+  await page.getByText("高级关系录入", { exact: true }).click();
   await addParentChild(page, "闭环王建国", "闭环王强");
   await addParentChild(page, "闭环王建国", "闭环王小雨");
   await addMarriage(page, "闭环王建国", "闭环赵秀兰", "闭环原婚姻");
@@ -66,7 +67,7 @@ test("creates a five-person family with divorce, remarriage, tree evidence, ques
   await page.getByRole("button", { name: "登记离婚" }).click();
   await page.getByRole("button", { name: "确认离婚" }).click();
   await confirmStagedWrite(page);
-  await expect(page.getByText("已离婚", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "婚姻历史" }).getByText("已离婚", { exact: true })).toBeVisible();
   await addMarriage(page, "闭环王建国", "闭环李华", "闭环再婚");
 
   const snapshot = await rpc<{ people: Array<{ id: string; displayName: string }> }>(request, "query", "workspaceSnapshot");

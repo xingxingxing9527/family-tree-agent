@@ -66,6 +66,12 @@ function marriageRange(start: PartialDate | null, end: PartialDate | null): stri
   return `${formatPartialDate(start)} 至 ${formatPartialDate(end)}`;
 }
 
+function provenanceDate(value: PartialDate | null): string {
+  if (value === null) return "未记录";
+  const precision = value.precision === "day" ? "日精度" : "月精度";
+  return `${formatPartialDate(value)}（${precision}）`;
+}
+
 export function FamilyRelationsPanel({
   detail,
   peopleApi,
@@ -312,10 +318,13 @@ export function FamilyRelationsPanel({
 
   const inferredMarriage = (relation: RelatedPersonReadModel): string | null => {
     if (!relation.inferredFromMarriageId) return null;
-    const known = detail.marriages.find(({ id }) => id === relation.inferredFromMarriageId);
-    return known
-      ? `来源婚姻：与${known.spouse.displayName}，${marriageRange(known.start, known.end)}`
-      : `来源婚姻：${relation.inferredFromMarriageId}`;
+    const source = relation.inferredFromMarriage;
+    if (!source) return "来源婚姻：已确认婚姻记录（详情暂不可用）";
+    const status = source.status === "active" ? "当前婚姻" : "已离婚";
+    const range = source.status === "active" && source.end === null
+      ? `${provenanceDate(source.start)} 至今`
+      : `${provenanceDate(source.start)} 至 ${provenanceDate(source.end)}`;
+    return `来源婚姻：${source.spouseAName} 与 ${source.spouseBName}；${status}；${range}`;
   };
 
   const relationRow = (relation: RelatedPersonReadModel, label: string): JSX.Element => <article className="family-relation-row" key={relation.relationId}>

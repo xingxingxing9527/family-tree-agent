@@ -146,9 +146,14 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
 
   const parentChild: BenchmarkParentChild[] = [];
   const normalMarriagePairs = new Map<string, [string, string]>();
+  const parentCompletionMarriagePairs = new Map<string, [string, string]>();
   let relationIndex = 0;
   for (let lineageIndex = 0; lineageIndex < LINEAGE_COUNT; lineageIndex += 1) {
     const start = lineageIndex * PEOPLE_PER_LINEAGE;
+    const parentCompletionSpouse = people
+      .slice(start + 2, start + GENERATION_SIZE)
+      .find(({ gender }) => gender === "female");
+    if (!parentCompletionSpouse) throw new Error(`Missing parent-completion spouse fixture for lineage ${lineageIndex + 1}`);
     let descendantOrdinal = 0;
     for (let localIndex = GENERATION_SIZE; localIndex < PEOPLE_PER_LINEAGE; localIndex += 1) {
       const child = people[start + localIndex]!;
@@ -178,6 +183,12 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
         });
       }
       if (familyShape === "marriedParents") normalMarriagePairs.set(pairKey(father.id, mother.id), [father.id, mother.id]);
+      if (familyShape === "singleParent") {
+        parentCompletionMarriagePairs.set(
+          pairKey(father.id, parentCompletionSpouse.id),
+          [father.id, parentCompletionSpouse.id]
+        );
+      }
       descendantOrdinal += 1;
     }
   }
@@ -185,6 +196,22 @@ export function buildBenchmarkBlueprint(seed = BENCHMARK_SEED): BenchmarkBluepri
   const marriages: BenchmarkMarriage[] = [];
   let marriageIndex = 0;
   for (const [spouseAId, spouseBId] of [...normalMarriagePairs.values()].sort(([left], [right]) => left.localeCompare(right))) {
+    marriages.push({
+      id: stableId(0x55000000, ++marriageIndex),
+      spouseAId,
+      spouseBId,
+      status: "active",
+      remarriageAnchorId: null
+    });
+  }
+  for (const [spouseAId, spouseBId] of [...parentCompletionMarriagePairs.values()].sort(([left], [right]) => left.localeCompare(right))) {
+    marriages.push({
+      id: stableId(0x55000000, ++marriageIndex),
+      spouseAId,
+      spouseBId,
+      status: "divorced",
+      remarriageAnchorId: null
+    });
     marriages.push({
       id: stableId(0x55000000, ++marriageIndex),
       spouseAId,
@@ -480,6 +507,17 @@ export function benchmarkInvariants(blueprint: BenchmarkBlueprint): Record<strin
     parentsByChild.set(relation.childId, current);
   }
   const marriedPairs = new Set(blueprint.marriages.map((entry) => pairKey(entry.spouseAId, entry.spouseBId)));
+  const marriageEpisodeCounts = new Map<string, number>();
+  for (const marriage of blueprint.marriages) {
+    const key = pairKey(marriage.spouseAId, marriage.spouseBId);
+    marriageEpisodeCounts.set(key, (marriageEpisodeCounts.get(key) ?? 0) + 1);
+  }
+  const repeatedMarriagePairs = new Set(
+    [...marriageEpisodeCounts].filter(([, count]) => count > 1).map(([key]) => key)
+  );
+  const parentsWithRepeatedMarriage = new Set(blueprint.marriages
+    .filter((marriage) => repeatedMarriagePairs.has(pairKey(marriage.spouseAId, marriage.spouseBId)))
+    .flatMap((marriage) => [marriage.spouseAId, marriage.spouseBId]));
   const remarriedPeople = new Set(blueprint.marriages.flatMap((entry) => entry.remarriageAnchorId ? [entry.remarriageAnchorId] : []));
   return {
     people: blueprint.people.length,
@@ -488,6 +526,11 @@ export function benchmarkInvariants(blueprint: BenchmarkBlueprint): Record<strin
     divorces: blueprint.marriages.filter(({ status }) => status === "divorced").length,
     remarriedPeople: remarriedPeople.size,
     singleParentGroups: [...parentsByChild.values()].filter((relations) => relations.length === 1).length,
+    parentCompletionCandidateChildren: [...parentsByChild.values()]
+      .filter((relations) => relations.length === 1 && parentsWithRepeatedMarriage.has(relations[0]!.parentId)).length,
+    repeatedParentCompletionMarriageEpisodes: [...marriageEpisodeCounts]
+      .filter(([, count]) => count > 1)
+      .reduce((total, [, count]) => total + count, 0),
     unmarriedCoParentGroups: [...parentsByChild.values()].filter((relations) => relations.length === 2 && !marriedPairs.has(pairKey(relations[0]!.parentId, relations[1]!.parentId))).length,
     aliases: blueprint.aliases.length,
     wikiEntries: blueprint.wikiEntries.length,

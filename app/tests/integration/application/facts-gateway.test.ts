@@ -104,7 +104,15 @@ describe("WorkspaceFactsGateway", () => {
     }
     facts.execute({
       type: "marriage.add",
-      draft: { id: "marriage", workspaceId: "workspace-1", spouseAId: "father", spouseBId: "mother" },
+      draft: {
+        id: "marriage",
+        workspaceId: "workspace-1",
+        spouseAId: "father",
+        spouseBId: "mother",
+        status: "divorced",
+        start: { calendar: "lunar", year: 1986, month: 8, day: null, leapMonth: true, precision: "month" },
+        end: { calendar: "solar", year: 2001, month: 3, day: 4, leapMonth: false, precision: "day" }
+      },
       source: source("marriage")
     });
     facts.execute({
@@ -128,6 +136,13 @@ describe("WorkspaceFactsGateway", () => {
           rowVersion: 1,
           originKind: "spouse_default",
           inferredFromMarriageId: "marriage",
+          inferredFromMarriage: {
+            spouseAName: "父亲",
+            spouseBName: "母亲",
+            status: "divorced",
+            start: { calendar: "lunar", year: 1986, month: 8, day: null, leapMonth: true, precision: "month" },
+            end: { calendar: "solar", year: 2001, month: 3, day: 4, leapMonth: false, precision: "day" }
+          },
           role: "mother"
         }]
       }
@@ -140,6 +155,13 @@ describe("WorkspaceFactsGateway", () => {
           rowVersion: 1,
           originKind: "spouse_default",
           inferredFromMarriageId: "marriage",
+          inferredFromMarriage: {
+            spouseAName: "父亲",
+            spouseBName: "母亲",
+            status: "divorced",
+            start: { calendar: "lunar", year: 1986, month: 8, day: null, leapMonth: true, precision: "month" },
+            end: { calendar: "solar", year: 2001, month: 3, day: 4, leapMonth: false, precision: "day" }
+          },
           role: "child"
         }],
         marriages: [{ id: "marriage" }]

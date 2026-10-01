@@ -2,7 +2,7 @@
 
 日期：2026-10-01
 
-状态：已由用户确认，可进入实施
+状态：implemented（已实施并通过验收）
 
 关联规格：[家谱智能体 Web MVP 产品与技术设计](./2026-10-01-family-agent-web-mvp-design.md)
 

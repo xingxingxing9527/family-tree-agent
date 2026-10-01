@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import {
   BENCHMARK_SEED,
@@ -10,7 +11,9 @@ import {
   materializeBenchmarkWorkspace
 } from "../../scripts/generate-benchmark-workspace";
 import { parseImport } from "../../src/main/application/import/workbook-parser";
+import { FactQueries } from "../../src/main/application/facts/fact-queries";
 import { QueryToolRegistry } from "../../src/main/application/query/query-tool-registry";
+import { ParentCompletionService } from "../../src/main/application/relations/parent-completion-service";
 import {
   PERFORMANCE_GATES,
   REQUIRED_RELATIONSHIP_DISTRIBUTION,
@@ -29,7 +32,7 @@ describe("1000-person beta performance fixture", () => {
 
     expect(BENCHMARK_SEED).toBe(20260916);
     expect(digest(first)).toBe(digest(second));
-    expect(digest(first)).toBe("166974a1ca85726f7db37a4e5b166777c716612da332420ac09e31e5d7cb9fce");
+    expect(digest(first)).toBe("32a512d5c3a10824ffd300f73155eff8776defb3c7db9adfd0a9cdd93b23ae1d");
   });
 
   it("contains every required stress shape without binary payloads", () => {
@@ -39,9 +42,11 @@ describe("1000-person beta performance fixture", () => {
       people: 1000,
       generations: 10,
       lineages: 8,
-      divorces: 100,
+      divorces: 108,
       remarriedPeople: 100,
       singleParentGroups: 80,
+      parentCompletionCandidateChildren: 80,
+      repeatedParentCompletionMarriageEpisodes: 16,
       unmarriedCoParentGroups: 128,
       aliases: 250,
       wikiEntries: 80,
@@ -61,6 +66,7 @@ describe("1000-person beta performance fixture", () => {
       personDetailP95Ms: 500,
       relationshipP95Ms: 1000,
       treeProjectionP95Ms: 1000,
+      parentCompletionScanP95Ms: 1000,
       importPreviewMs: 10_000
     });
     const pairs = buildFixedRelationshipPairs(blueprint);
@@ -235,6 +241,49 @@ describe("1000-person beta performance fixture", () => {
         });
         expect(Object.fromEntries(Object.entries(Object.groupBy(classified, (category) => category))
           .map(([category, entries]) => [category, entries.length]))).toEqual(REQUIRED_RELATIONSHIP_DISTRIBUTION);
+      } finally {
+        workspace.database.close();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("scans the fixed 1000-person fixture six times with a stable digest and zero persistent writes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "family-agent-parent-completion-performance-test-"));
+    try {
+      const workspace = await materializeBenchmarkWorkspace(join(root, "workspace"), BENCHMARK_SEED);
+      try {
+        const criticalTables = ["person", "parent_child", "marriage", "source", "operation_group", "audit_log"] as const;
+        const snapshot = (): Record<string, { count: number; digestSha256: string }> => Object.fromEntries(
+          criticalTables.map((table) => {
+            const rows = workspace.database.prepare(`SELECT * FROM ${table} ORDER BY id`).all();
+            return [table, { count: rows.length, digestSha256: digest(rows) }];
+          })
+        );
+        const before = snapshot();
+        const service = new ParentCompletionService(new FactQueries(workspace.database, workspace.blueprint.workspaceId));
+        const warm = service.scan();
+        const warmDigest = digest(warm);
+        const samples: number[] = [];
+        const measuredDigests: string[] = [];
+
+        for (let index = 0; index < 6; index += 1) {
+          const started = performance.now();
+          const scan = service.scan();
+          samples.push(performance.now() - started);
+          measuredDigests.push(digest(scan));
+        }
+
+        const sorted = [...samples].sort((left, right) => left - right);
+        const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1]!;
+        expect(warm.counts).toEqual({ total: 80, safe: 80, ambiguous: 0, noCandidate: 0, conflict: 0 });
+        expect(warm.items).toHaveLength(80);
+        expect(warm.items.every(({ plan }) => plan.candidates.length === 1 && plan.candidates[0]!.marriageEpisodes.length === 2)).toBe(true);
+        expect(new Set(measuredDigests)).toEqual(new Set([warmDigest]));
+        expect(samples).toHaveLength(6);
+        expect(p95).toBeLessThan(1_000);
+        expect(snapshot()).toEqual(before);
       } finally {
         workspace.database.close();
       }

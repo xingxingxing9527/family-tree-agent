@@ -491,9 +491,22 @@ describe("FamilyRelationsPanel", () => {
   });
 
   it("stages removal without calling a direct relationship mutation", async () => {
-    const personDetail = detail({
-      parents: [related("edge-father", father, "father", "spouse_default", "marriage-source")]
-    });
+    const inferredFromMarriage = {
+      spouseAName: "中心人物",
+      spouseBName: "候选母亲",
+      status: "divorced" as const,
+      start: { calendar: "lunar" as const, year: 1986, month: 8, day: null, leapMonth: true, precision: "month" as const },
+      end: { calendar: "solar" as const, year: 2001, month: 3, day: 4, leapMonth: false, precision: "day" as const }
+    };
+    const automaticParent = {
+      ...related("edge-father", father, "father", "spouse_default", "marriage-source-parent"),
+      inferredFromMarriage
+    } as RelatedPersonReadModel;
+    const automaticChild = {
+      ...related("edge-child", daughter, "child", "spouse_default", "marriage-source-child"),
+      inferredFromMarriage
+    } as RelatedPersonReadModel;
+    const personDetail = detail({ parents: [automaticParent], children: [automaticChild] });
     const { mutations, relationsApi } = renderPanel(personDetail);
 
     fireEvent.click(screen.getByRole("button", { name: "移除父亲 现有父亲" }));
@@ -502,8 +515,18 @@ describe("FamilyRelationsPanel", () => {
       intents: [{ type: "parentChild.remove", relationId: "edge-father", expectedVersion: 3 }]
     }));
     expect(relationsApi.addParentChild).not.toHaveBeenCalled();
-    expect(screen.getByText("系统自动补全")).toBeVisible();
-    expect(screen.getByText(/来源婚姻.*marriage-source/u)).toBeVisible();
+    expect(screen.getAllByText("系统自动补全")).toHaveLength(2);
+    expect(screen.getAllByText(/来源婚姻：中心人物 与 候选母亲；已离婚；农历 1986年闰8月（月精度） 至 公历 2001年3月4日（日精度）/u)).toHaveLength(2);
+    expect(screen.queryByText(/marriage-source/u)).not.toBeInTheDocument();
+  });
+
+  it("keeps a legacy source id private when the optional readable marriage summary is absent", () => {
+    renderPanel(detail({
+      parents: [related("edge-father", father, "father", "spouse_default", "private-marriage-id")]
+    }));
+
+    expect(screen.getByText("来源婚姻：已确认婚姻记录（详情暂不可用）")).toBeVisible();
+    expect(screen.queryByText(/private-marriage-id/u)).not.toBeInTheDocument();
   });
 
   it("stages a correction as one remove-plus-replacement draft only after replacement is known", async () => {

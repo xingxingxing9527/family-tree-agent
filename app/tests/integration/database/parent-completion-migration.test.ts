@@ -54,6 +54,21 @@ describe("parent completion provenance migration", () => {
     }
   });
 
+  it("creates the nullable marriage foreign key and its partial lookup index", () => {
+    const database = versionSixDatabaseWithParent();
+    try {
+      applyMigrations(database);
+      expect(database.prepare("SELECT [table], [from], [to], on_delete FROM pragma_foreign_key_list('parent_child') WHERE [from] = 'inferred_from_marriage_id'").get())
+        .toEqual({ table: "marriage", from: "inferred_from_marriage_id", to: "id", on_delete: "NO ACTION" });
+      expect(database.prepare("SELECT name, [unique], partial FROM pragma_index_list('parent_child') WHERE name = 'parent_child_inferred_marriage_idx'").get())
+        .toEqual({ name: "parent_child_inferred_marriage_idx", unique: 0, partial: 1 });
+      expect(database.prepare("SELECT name FROM pragma_index_info('parent_child_inferred_marriage_idx') ORDER BY seqno").pluck().all())
+        .toEqual(["workspace_id", "inferred_from_marriage_id"]);
+    } finally {
+      database.close();
+    }
+  });
+
   it("keeps version-six parent audit snapshots undoable as explicit facts", () => {
     const database = versionSixDatabaseWithParent();
     const before = {
@@ -147,6 +162,89 @@ describe("parent completion provenance migration", () => {
       })).toThrowError(expect.objectContaining<Partial<FactCommandError>>({
         issues: expect.arrayContaining([expect.objectContaining({ code: "NOT_FOUND" })])
       }));
+    } finally {
+      database.close();
+    }
+  });
+
+  it.each([
+    ["another workspace", "foreign", "WORKSPACE_MISMATCH"],
+    ["archived", "archived", "NOT_FOUND"]
+  ] as const)("rejects a spouse-default parent whose inferred marriage is %s", (_label, kind, issueCode) => {
+    const database = openDatabase(":memory:");
+    applyMigrations(database);
+    const facts = new FactCommandService(database, workspaceId);
+    const otherWorkspaceId = "workspace-other";
+    const now = "2026-10-01T00:00:00.000Z";
+    try {
+      for (const [id, name] of [["parent", "父母"], ["spouse", "配偶"], ["child", "孩子"]] as const) {
+        facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`person:${id}`) });
+      }
+      if (kind === "foreign") {
+        database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES ('foreign-a', ?, '外部甲', 'unknown', ?, ?), ('foreign-b', ?, '外部乙', 'unknown', ?, ?)")
+          .run(otherWorkspaceId, now, now, otherWorkspaceId, now, now);
+        database.prepare("INSERT INTO marriage (id, workspace_id, spouse_a_id, spouse_b_id, marriage_status, created_at, updated_at) VALUES ('source-marriage', ?, 'foreign-a', 'foreign-b', 'active', ?, ?)")
+          .run(otherWorkspaceId, now, now);
+      } else {
+        facts.execute({ type: "marriage.add", draft: { id: "source-marriage", workspaceId, spouseAId: "parent", spouseBId: "spouse" }, source: source("marriage") });
+        createUnitOfWork(database, workspaceId).run("archive-marriage", (ctx) => ctx.relations.archiveMarriage(ctx, "source-marriage"));
+      }
+
+      expect(() => facts.execute({
+        type: "parentChild.add",
+        draft: {
+          id: `rejected-${kind}`,
+          workspaceId,
+          parentId: "parent",
+          childId: "child",
+          parentRole: "father",
+          originKind: "spouse_default",
+          inferredFromMarriageId: "source-marriage"
+        },
+        source: source(`rejected-${kind}`)
+      })).toThrowError(expect.objectContaining<Partial<FactCommandError>>({
+        issues: expect.arrayContaining([expect.objectContaining({ code: issueCode })])
+      }));
+    } finally {
+      database.close();
+    }
+  });
+
+  it("accepts a divorced inferred marriage from the same workspace", () => {
+    const database = openDatabase(":memory:");
+    applyMigrations(database);
+    const facts = new FactCommandService(database, workspaceId);
+    try {
+      for (const [id, name] of [["parent", "父母"], ["spouse", "前配偶"], ["child", "孩子"]] as const) {
+        facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`person:${id}`) });
+      }
+      facts.execute({
+        type: "marriage.add",
+        draft: {
+          id: "divorced-marriage",
+          workspaceId,
+          spouseAId: "parent",
+          spouseBId: "spouse",
+          status: "divorced",
+          end: { calendar: "solar", year: 2001, month: 3, day: null, leapMonth: false, precision: "month" }
+        },
+        source: source("divorced-marriage")
+      });
+      facts.execute({
+        type: "parentChild.add",
+        draft: {
+          id: "divorced-provenance",
+          workspaceId,
+          parentId: "parent",
+          childId: "child",
+          parentRole: "father",
+          originKind: "spouse_default",
+          inferredFromMarriageId: "divorced-marriage"
+        },
+        source: source("divorced-provenance")
+      });
+      expect(new RelationRepository(database, workspaceId).getParentChild("divorced-provenance"))
+        .toMatchObject({ originKind: "spouse_default", inferredFromMarriageId: "divorced-marriage" });
     } finally {
       database.close();
     }

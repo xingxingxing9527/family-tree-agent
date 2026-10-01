@@ -97,16 +97,29 @@ export class WorkspaceFactsGateway implements FactsGateway {
       const aliases = queries.listAliases(person.id).map((alias) => alias.name);
       const edges = queries.listParentChild();
       const marriages = queries.listMarriages();
+      const marriageById = new Map(marriages.map((marriage) => [marriage.id, marriage]));
       const listItem = (record: PersonRecord): PersonListItem => toListItem(record, queries.listAliases(record.id).map((alias) => alias.name));
       const related = (edge: ParentChildRecord, relatedId: string, role: RelatedPersonReadModel["role"]): RelatedPersonReadModel | null => {
         const record = queries.getPerson(relatedId);
+        const sourceMarriage = edge.inferredFromMarriageId === null ? null : marriageById.get(edge.inferredFromMarriageId) ?? null;
+        const spouseA = sourceMarriage === null ? null : queries.getPerson(sourceMarriage.spouseAId);
+        const spouseB = sourceMarriage === null ? null : queries.getPerson(sourceMarriage.spouseBId);
         return record ? {
           relationId: edge.id,
           person: listItem(record),
           role,
           rowVersion: edge.rowVersion,
           originKind: edge.originKind,
-          inferredFromMarriageId: edge.inferredFromMarriageId
+          inferredFromMarriageId: edge.inferredFromMarriageId,
+          inferredFromMarriage: sourceMarriage !== null && spouseA !== null && spouseB !== null
+            ? {
+                spouseAName: spouseA.displayName,
+                spouseBName: spouseB.displayName,
+                status: sourceMarriage.status,
+                start: sourceMarriage.start,
+                end: sourceMarriage.end
+              }
+            : null
         } : null;
       };
       const parents = edges

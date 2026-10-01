@@ -66,6 +66,14 @@ export interface PersonListItem extends PersonReadModel {
   aliases: string[];
 }
 
+export interface ParentChildMarriageSourceReadModel {
+  spouseAName: string;
+  spouseBName: string;
+  status: "active" | "divorced";
+  start: PartialDate | null;
+  end: PartialDate | null;
+}
+
 export interface RelatedPersonReadModel {
   relationId: string;
   person: PersonListItem;
@@ -73,6 +81,8 @@ export interface RelatedPersonReadModel {
   rowVersion: number;
   originKind: "explicit" | "spouse_default";
   inferredFromMarriageId: string | null;
+  /** Human-readable provenance for new clients; the id remains for older clients. */
+  inferredFromMarriage?: ParentChildMarriageSourceReadModel | null;
 }
 
 export interface MarriageReadModel {

@@ -7,10 +7,12 @@ import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import { getHeapStatistics } from "node:v8";
 import ExcelJS from "exceljs";
+import { FactQueries } from "../src/main/application/facts/fact-queries.js";
 import { ImportPlanner, ImportPlanStore } from "../src/main/application/import/import-planner.js";
 import { IMPORT_TEMPLATE_COLUMNS, parseImport } from "../src/main/application/import/workbook-parser.js";
 import { QueryToolRegistry } from "../src/main/application/query/query-tool-registry.js";
 import { projectWorkspaceTree } from "../src/main/application/query/workspace-projection.js";
+import { ParentCompletionService } from "../src/main/application/relations/parent-completion-service.js";
 import { layoutWithElk } from "../src/renderer/src/features/tree/layout-with-elk.js";
 import {
   BENCHMARK_SEED,
@@ -33,6 +35,7 @@ export const PERFORMANCE_GATES = Object.freeze({
   personDetailP95Ms: 500,
   relationshipP95Ms: 1_000,
   treeProjectionP95Ms: 1_000,
+  parentCompletionScanP95Ms: 1_000,
   importPreviewMs: 10_000
 });
 
@@ -41,14 +44,18 @@ const PERFORMANCE_SOURCE_FILES = [
   "scripts/performance-relationship-classification.ts",
   "scripts/run-performance-gates-constrained.ps1",
   "scripts/run-performance-gates.ts",
+  "src/main/application/facts/fact-queries.ts",
   "src/main/application/import/import-planner.ts",
   "src/main/application/import/workbook-parser.ts",
   "src/main/application/query/persisted-kinship-facts.ts",
   "src/main/application/query/query-tool-registry.ts",
   "src/main/application/query/workspace-projection.ts",
+  "src/main/application/relations/parent-completion-service.ts",
   "src/main/domain/kinship/conflict-annotation.ts",
   "src/main/domain/kinship/path-search.ts",
   "src/main/domain/kinship/relationship-calculator.ts",
+  "src/main/domain/relations/parent-completion-planner.ts",
+  "src/main/domain/relations/partial-date-interval.ts",
   "src/renderer/src/features/tree/layout-with-elk.ts"
 ] as const;
 
@@ -298,6 +305,50 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     const personDetailSamples = measureSync(personIds, (personId) => registry.tools.get_person({ personId }));
     process.stdout.write("[performance] 200 person details measured\n");
 
+    const criticalTables = ["person", "parent_child", "marriage", "source", "operation_group", "audit_log"] as const;
+    const criticalSnapshot = (): Record<string, { count: number; digestSha256: string }> => Object.fromEntries(
+      criticalTables.map((table) => {
+        const rows = database.prepare(`SELECT * FROM ${table} ORDER BY id`).all();
+        return [table, {
+          count: rows.length,
+          digestSha256: createHash("sha256").update(JSON.stringify(rows)).digest("hex")
+        }];
+      })
+    );
+    const parentCompletionBefore = criticalSnapshot();
+    const parentCompletionService = new ParentCompletionService(new FactQueries(database, workspaceId));
+    const parentCompletionWarm = parentCompletionService.scan();
+    const parentCompletionWarmDigest = createHash("sha256")
+      .update(JSON.stringify(parentCompletionWarm))
+      .digest("hex");
+    const parentCompletionDigests: string[] = [];
+    const parentCompletionSamples = measureSync(Array.from({ length: 6 }), () => {
+      const scan = parentCompletionService.scan();
+      parentCompletionDigests.push(createHash("sha256").update(JSON.stringify(scan)).digest("hex"));
+      return scan;
+    });
+    const parentCompletionAfter = criticalSnapshot();
+    const parentCompletionZeroWrites = JSON.stringify(parentCompletionAfter) === JSON.stringify(parentCompletionBefore);
+    const expectedParentCompletionRows = benchmarkInvariants(blueprint).parentCompletionCandidateChildren;
+    if (parentCompletionWarm.counts.total !== expectedParentCompletionRows
+      || parentCompletionWarm.counts.safe !== expectedParentCompletionRows
+      || parentCompletionWarm.counts.ambiguous !== 0
+      || parentCompletionWarm.counts.noCandidate !== 0
+      || parentCompletionWarm.counts.conflict !== 0) {
+      throw new Error(`Parent completion scan workload changed: ${JSON.stringify(parentCompletionWarm.counts)}`);
+    }
+    if (!parentCompletionWarm.items.every(({ plan }) =>
+      plan.candidates.length === 1 && plan.candidates[0]!.marriageEpisodes.length === 2)) {
+      throw new Error("Parent completion scan no longer exercises one candidate with two marriage episodes per row");
+    }
+    if (new Set([parentCompletionWarmDigest, ...parentCompletionDigests]).size !== 1) {
+      throw new Error("Parent completion scan produced an unstable digest");
+    }
+    if (!parentCompletionZeroWrites) {
+      throw new Error("Parent completion scan mutated a critical persistence table");
+    }
+    process.stdout.write(`[performance] 6 parent-completion scans measured; digest=${parentCompletionWarmDigest}; zeroWrites=true\n`);
+
     const relationshipPairs = buildFixedRelationshipPairs(blueprint);
     registry.tools.calculate_relationship({
       viewpointId: relationshipPairs[0]!.viewpointId,
@@ -353,6 +404,7 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
       personDetailP95: gate(personDetailSamples, PERFORMANCE_GATES.personDetailP95Ms),
       relationshipP95: gate(relationshipSamples, PERFORMANCE_GATES.relationshipP95Ms),
       treeProjectionP95: gate(treeProjectionSamples, PERFORMANCE_GATES.treeProjectionP95Ms),
+      parentCompletionScanP95: gate(parentCompletionSamples, PERFORMANCE_GATES.parentCompletionScanP95Ms),
       importPreview: gate(importSamples, PERFORMANCE_GATES.importPreviewMs)
     };
     const cpuInfo = cpus();
@@ -363,7 +415,7 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     }
     const source = await performanceSourceEvidence(sourceCommit);
     const report = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       generatedAt: new Date().toISOString(),
       seed: BENCHMARK_SEED,
       source,
@@ -384,6 +436,18 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
         personSearch: { executionPath: "QueryToolRegistry.search_people", sampleCount: searchQueries.length, limit: 20 },
         personDetail: { executionPath: "QueryToolRegistry.get_person", sampleCount: personIds.length },
         treeProjection: { executionPath: "projectWorkspaceTree", sampleCount: treeProjectionSamples.length, view: "full", collapseDepth: 4 },
+        parentCompletionScan: {
+          executionPath: "ParentCompletionService.scan",
+          warmupCount: 1,
+          sampleCount: parentCompletionSamples.length,
+          samplesMs: parentCompletionSamples.map(round),
+          resultDigestSha256: parentCompletionWarmDigest,
+          counts: parentCompletionWarm.counts,
+          candidateMarriageEpisodes: 2,
+          zeroWrites: parentCompletionZeroWrites,
+          criticalTablesBefore: parentCompletionBefore,
+          criticalTablesAfter: parentCompletionAfter
+        },
         relationships: {
           executionPath: "QueryToolRegistry.calculate_relationship",
           classification: "selected production result after SQLite materialization",
