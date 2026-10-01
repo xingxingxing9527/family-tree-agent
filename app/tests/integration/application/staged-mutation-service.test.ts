@@ -327,6 +327,7 @@ describe("StagedMutationService", () => {
     const selectedChangeIds = preview.changes
       .filter(({ disposition, originKind }) => disposition === "create" && originKind === "spouse_default")
       .map(({ id }) => id);
+    const confirmGroupsBefore = database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get() as number;
 
     const receipt = service.confirm({
       draftId: preview.id,
@@ -336,8 +337,14 @@ describe("StagedMutationService", () => {
     });
 
     expect(selectedChangeIds).toHaveLength(2);
+    const confirmGroupsAfter = database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get() as number;
+    expect(confirmGroupsAfter - confirmGroupsBefore).toBe(1);
     expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE id=? AND kind='mutation.confirm'").pluck().get(receipt.operationGroupId)).toBe(1);
     expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE origin_kind='spouse_default' AND deleted_at IS NULL").pluck().get()).toBe(2);
+    expect(database.prepare("SELECT entity_id FROM audit_log WHERE operation_group_id=? AND entity_type='parent_child' ORDER BY entity_id").pluck().all(receipt.operationGroupId))
+      .toEqual([...receipt.changedEntityIds].sort());
+    expect(database.prepare("SELECT source_key FROM source WHERE source_key LIKE ? ORDER BY source_key").pluck().all(`mutation:${preview.id}:%`))
+      .toEqual(selectedChangeIds.map((changeId) => `mutation:${preview.id}:${changeId}`).sort());
     expect(new ParentCompletionService(new FactQueries(database, workspaceId)).scan().items).toEqual([]);
   });
 

@@ -38,6 +38,7 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [completedGeneration, setCompletedGeneration] = useState(0);
   const requestGeneration = useRef(0);
   const mounted = useRef(true);
 
@@ -53,6 +54,7 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
         return;
       }
       setScan(result.value);
+      setCompletedGeneration(generation);
       setSelected(new Set(result.value.items
         .filter(({ classification }) => classification === "safe")
         .map(({ childId }) => childId)));
@@ -88,9 +90,13 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
     () => safeItems.filter(({ childId }) => selected.has(childId)),
     [safeItems, selected]
   );
+  const scanActionable = scan !== null
+    && !loading
+    && !staged.busy
+    && completedGeneration === requestGeneration.current;
 
   const stageRepairs = (): void => {
-    if (selectedSafeItems.length === 0 || staged.busy) return;
+    if (loading || staged.busy || completedGeneration !== requestGeneration.current || selectedSafeItems.length === 0) return;
     const intents: MutationIntent[] = selectedSafeItems.map(({ knownParentId, childId, parentRole }) => ({
       type: "parentFamily.add",
       knownParentId,
@@ -102,10 +108,20 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
     void staged.stage(intents);
   };
 
-  return <div className="modal-backdrop"><section className="confirmation-dialog parent-completion-repair" role="dialog" aria-modal="true" aria-label="修复未完整父母关系">
+  const refresh = (): void => {
+    staged.reset();
+    void load();
+  };
+
+  const selectAllSafe = (): void => {
+    if (loading || staged.busy || completedGeneration !== requestGeneration.current) return;
+    setSelected(new Set(safeItems.map(({ childId }) => childId)));
+  };
+
+  return <section className="parent-completion-repair" role="region" aria-labelledby="parent-completion-repair-title">
     <div className="section-heading-row">
       <div>
-        <h2>检查未完整父母关系</h2>
+        <h2 id="parent-completion-repair-title">检查未完整父母关系</h2>
         <p className="text-secondary">扫描只读取现有事实。只有生成预览并确认后才会写入。</p>
       </div>
       <button className="button secondary-button" type="button" disabled={loading || staged.busy} onClick={onClose}>关闭修复面板</button>
@@ -135,8 +151,9 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
                   type="checkbox"
                   aria-label={`选择修复 ${item.childName}`}
                   checked={safe && selected.has(item.childId)}
-                  disabled={!safe || staged.busy}
+                  disabled={!safe || !scanActionable}
                   onChange={(event) => setSelected((current) => {
+                    if (loading || staged.busy || completedGeneration !== requestGeneration.current) return current;
                     const next = new Set(current);
                     if (event.target.checked) next.add(item.childId); else next.delete(item.childId);
                     return next;
@@ -157,9 +174,9 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
         </ol>}
 
       <div className="button-row parent-completion-actions">
-        <button className="button secondary-button" type="button" disabled={loading || staged.busy} onClick={() => void load()}>刷新未完整父母关系</button>
-        <button className="button secondary-button" type="button" disabled={safeItems.length === 0 || staged.busy} onClick={() => setSelected(new Set(safeItems.map(({ childId }) => childId)))}>全选安全项</button>
-        <button className="button primary-button" type="button" disabled={selectedSafeItems.length === 0 || staged.busy} onClick={stageRepairs}>生成修复预览</button>
+        <button className="button secondary-button" type="button" disabled={loading || staged.busy} onClick={refresh}>刷新未完整父母关系</button>
+        <button className="button secondary-button" type="button" disabled={!scanActionable || safeItems.length === 0} onClick={selectAllSafe}>全选安全项</button>
+        <button className="button primary-button" type="button" disabled={!scanActionable || selectedSafeItems.length === 0} onClick={stageRepairs}>生成修复预览</button>
       </div>
     </>}
 
@@ -169,5 +186,5 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
       onCancel={staged.cancel}
       onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)}
     />}
-  </section></div>;
+  </section>;
 }

@@ -13,6 +13,7 @@ import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import type { PersonRecord } from "../../../src/main/database/repositories/person-repository";
 import type { MarriageRecord, ParentChildRecord } from "../../../src/main/database/repositories/relation-repository";
+import { ParentCompletionPlanner } from "../../../src/main/domain/relations/parent-completion-planner";
 import type { PartialDate } from "../../../src/shared/domain";
 import { MAX_MUTATION_CHANGES, MAX_MUTATION_INTENTS } from "../../../src/shared/mutations";
 
@@ -209,10 +210,9 @@ describe("ParentCompletionService", () => {
     const peopleRead = vi.spyOn(FactQueries.prototype, "listPeople");
     const parentsRead = vi.spyOn(FactQueries.prototype, "listParentChild");
     const marriagesRead = vi.spyOn(FactQueries.prototype, "listMarriages");
-    const startedAt = performance.now();
+    const planner = vi.spyOn(ParentCompletionPlanner.prototype, "plan");
 
     const scan = new ParentCompletionService(queries).scan();
-    const elapsedMs = performance.now() - startedAt;
 
     expect(scan.counts).toEqual({ total: 200, safe: 100, ambiguous: 50, noCandidate: 50, conflict: 0 });
     expect(scan.items).toHaveLength(200);
@@ -220,11 +220,18 @@ describe("ParentCompletionService", () => {
     expect(scan.items.filter(({ childId }) => childId === "child-001")).toHaveLength(1);
     expect(scan.items.find(({ childId }) => childId === "child-001")?.plan.candidates[0]?.marriageEpisodes)
       .toHaveLength(2);
-    expect(elapsedMs).toBeLessThan(1_000);
     expect(tableCounts()).toEqual(before);
     expect(peopleRead).toHaveBeenCalledTimes(1);
     expect(parentsRead).toHaveBeenCalledTimes(1);
     expect(marriagesRead).toHaveBeenCalledTimes(1);
+    expect(planner).toHaveBeenCalledTimes(200);
+    for (const [input] of planner.mock.calls) {
+      expect(input.existingParents).toHaveLength(1);
+      expect(input.existingParents.every(({ childId }) => childId === input.childId)).toBe(true);
+      expect(input.marriages.length).toBeLessThanOrEqual(2);
+      expect(input.marriages.every(({ spouseAId, spouseBId }) => spouseAId === input.knownParentId || spouseBId === input.knownParentId)).toBe(true);
+      expect(input.people.length).toBeLessThanOrEqual(4);
+    }
 
     const selected = scan.items.filter(({ classification }) => classification === "safe");
     const intents = selected.map(({ knownParentId, childId, parentRole }) => ({

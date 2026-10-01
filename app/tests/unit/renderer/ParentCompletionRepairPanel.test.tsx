@@ -15,6 +15,12 @@ import { PeoplePage } from "../../../src/renderer/src/features/people/PeoplePage
 
 afterEach(cleanup);
 
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
+
 const person = (id: string, displayName: string): PersonListItem => ({
   id,
   personCode: `P-${id}`,
@@ -212,7 +218,7 @@ function renderPage(api: FamilyAgentApi): void {
 
 async function openRepairPanel(): Promise<void> {
   fireEvent.click(await screen.findByRole("button", { name: "检查未完整父母关系" }));
-  await screen.findByRole("dialog", { name: "修复未完整父母关系" });
+  await screen.findByRole("heading", { name: "检查未完整父母关系" });
 }
 
 describe("ParentCompletionRepairPanel", () => {
@@ -244,8 +250,12 @@ describe("ParentCompletionRepairPanel", () => {
     expect(api.mutations.confirm).not.toHaveBeenCalled();
   });
 
-  it("selects only safe rows by default and stages all selected repairs as one draft only after preview is requested", async () => {
-    const api = pageApi();
+  it("selects only safe rows by default, stages one draft, and re-scans to the updated empty state after confirmation", async () => {
+    const empty: ParentCompletionScanDto = {
+      counts: { total: 0, safe: 0, ambiguous: 0, noCandidate: 0, conflict: 0 },
+      items: []
+    };
+    const api = pageApi([mixedScan(), empty]);
     renderPage(api);
     await openRepairPanel();
 
@@ -299,6 +309,88 @@ describe("ParentCompletionRepairPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
     await waitFor(() => expect(api.mutations.confirm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.relations.scanParentCompletions).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("没有需要检查的未完整父母关系。")).toBeVisible();
+    expect(screen.queryByText("赵安全")).not.toBeInTheDocument();
+  });
+
+  it("makes stale scan results inert during a pending refresh and discards the old preview before accepting the new generation", async () => {
+    const pending = deferred<Awaited<ReturnType<FamilyAgentApi["relations"]["scanParentCompletions"]>>>();
+    const api = pageApi();
+    vi.mocked(api.relations.scanParentCompletions)
+      .mockReset()
+      .mockResolvedValueOnce({ ok: true, value: mixedScan() })
+      .mockReturnValueOnce(pending.promise);
+    renderPage(api);
+    await openRepairPanel();
+    await screen.findByText("总计 5");
+
+    fireEvent.click(screen.getByRole("button", { name: "生成修复预览" }));
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(api.mutations.stage).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新未完整父母关系" }));
+
+    expect(screen.queryByRole("dialog", { name: "确认写入" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择修复 赵安全" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "选择修复 孙安全" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "全选安全项" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "生成修复预览" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "全选安全项" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成修复预览" }));
+    expect(api.mutations.stage).toHaveBeenCalledTimes(1);
+
+    pending.resolve({
+      ok: true,
+      value: { counts: { total: 0, safe: 0, ambiguous: 0, noCandidate: 0, conflict: 0 }, items: [] }
+    });
+    expect(await screen.findByText("没有需要检查的未完整父母关系。")).toBeVisible();
+    expect(screen.queryByText("赵安全")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "确认写入" })).not.toBeInTheDocument();
+  });
+
+  it("maps a known mother repair to a mother parent-family intent without fixing or reversing the role", async () => {
+    const motherItem = item("mother-safe", "母系孩子", "safe", "候选父亲");
+    motherItem.knownParentName = "已知母亲-母系孩子";
+    motherItem.parentRole = "mother";
+    motherItem.plan.explicit.parentName = motherItem.knownParentName;
+    motherItem.plan.explicit.parentRole = "mother";
+    motherItem.plan.suggested!.parentRole = "father";
+    const api = pageApi([{
+      counts: { total: 1, safe: 1, ambiguous: 0, noCandidate: 0, conflict: 0 },
+      items: [motherItem]
+    }]);
+    renderPage(api);
+    await openRepairPanel();
+
+    expect(await screen.findByText("当前已知母亲：已知母亲-母系孩子")).toBeVisible();
+    expect(screen.getByText("候选父亲：候选父亲")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "生成修复预览" }));
+
+    await waitFor(() => expect(api.mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({
+      knownParentId: "known-mother-safe",
+      childId: "mother-safe",
+      parentRole: "mother"
+    })] }));
+  });
+
+  it("exposes the repair surface as a named region and leaves MutationReviewDialog as the only modal", async () => {
+    const api = pageApi();
+    renderPage(api);
+    await openRepairPanel();
+
+    expect(screen.getByRole("region", { name: "检查未完整父母关系" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "修复未完整父母关系" })).not.toBeInTheDocument();
+    const close = screen.getByRole("button", { name: "关闭修复面板" });
+    expect(close.tabIndex).toBe(0);
+    close.focus();
+    expect(close).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成修复预览" }));
+    const dialogs = await screen.findAllByRole("dialog");
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toHaveAccessibleName("确认写入");
+    expect(dialogs[0]).toHaveAttribute("aria-modal", "true");
   });
 
   it("shows an explicit empty state and scans again only on manual refresh", async () => {
