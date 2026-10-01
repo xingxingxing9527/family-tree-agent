@@ -30,6 +30,11 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
       updateMembership: entry(RPC_INPUT_SCHEMAS.lineages.updateMembership, (input) => service.lineages.updateMembership(input)),
       removeMembership: entry(RPC_INPUT_SCHEMAS.lineages.removeMembership, (input) => service.lineages.removeMembership(input))
     },
+    imports: {
+      parse: entry(RPC_INPUT_SCHEMAS.imports.parse, (input) => service.imports.parse(input)),
+      commit: entry(RPC_INPUT_SCHEMAS.imports.commit, (input) => service.imports.commit(input)),
+      exportTemplate: entry(RPC_INPUT_SCHEMAS.imports.exportTemplate, () => service.imports.exportTemplate())
+    },
     merges: {
       findDuplicateCandidates: entry(RPC_INPUT_SCHEMAS.merges.findDuplicateCandidates, (input) => service.merges.findDuplicateCandidates(input)),
       preview: entry(RPC_INPUT_SCHEMAS.merges.preview, (input) => service.merges.preview(input)),
@@ -63,14 +68,20 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
       revise: entry(RPC_INPUT_SCHEMAS.chat.revise, (input) => service.chat.revise(input))
     },
     modelSettings: {
-      status: entry(RPC_INPUT_SCHEMAS.modelSettings.status, () => service.modelSettings.status()),
-      saveKey: entry(RPC_INPUT_SCHEMAS.modelSettings.saveKey, (input) => service.modelSettings.saveKey(input)),
-      clearKey: entry(RPC_INPUT_SCHEMAS.modelSettings.clearKey, () => service.modelSettings.clearKey())
+      status: entry(RPC_INPUT_SCHEMAS.modelSettings.status, () => service.modelSettings.status())
+    },
+    media: {
+      import: entry(RPC_INPUT_SCHEMAS.media.import, (input) => service.media.import(input)),
+      attach: entry(RPC_INPUT_SCHEMAS.media.attach, (input) => service.media.attach(input)),
+      listForPerson: entry(RPC_INPUT_SCHEMAS.media.listForPerson, (input) => service.media.listForPerson(input))
     },
     dataManagement: {
       listAudit: entry(RPC_INPUT_SCHEMAS.dataManagement.listAudit, () => service.dataManagement.listAudit()),
       undoOperationGroup: entry(RPC_INPUT_SCHEMAS.dataManagement.undoOperationGroup, (input) => service.dataManagement.undoOperationGroup(input)),
-      listRestoreTargets: entry(RPC_INPUT_SCHEMAS.dataManagement.listRestoreTargets, () => service.dataManagement.listRestoreTargets())
+      createBackup: entry(RPC_INPUT_SCHEMAS.dataManagement.createBackup, () => service.dataManagement.createBackup()),
+      listRestoreTargets: entry(RPC_INPUT_SCHEMAS.dataManagement.listRestoreTargets, () => service.dataManagement.listRestoreTargets()),
+      inspectBackup: entry(RPC_INPUT_SCHEMAS.dataManagement.inspectBackup, (input) => service.dataManagement.inspectBackup(input)),
+      restoreBackup: entry(RPC_INPUT_SCHEMAS.dataManagement.restoreBackup, (input) => service.dataManagement.restoreBackup(input))
     }
   };
 }

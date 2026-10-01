@@ -402,7 +402,7 @@ export interface ImportApi {
     fieldMapping?: Record<string, string>;
   }): Promise<AppResult<ImportPlanDto>>;
   commit(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
-  exportTemplate(): Promise<AppResult<{ saved: boolean }>>;
+  exportTemplate(): Promise<AppResult<{ saved: boolean; download?: DownloadDescriptor }>>;
 }
 
 export interface MergeDecisionDto {
@@ -471,7 +471,7 @@ export interface AuditOperationGroupDto {
 export interface DataManagementApi {
   listAudit(): Promise<AppResult<AuditOperationGroupDto[]>>;
   undoOperationGroup(input: { operationGroupId: string }): Promise<AppResult<{ operationGroupId: string; undoneAt: string; restoredEntities: number }>>;
-  createBackup(): Promise<AppResult<{ saved: boolean; verified?: true; createdAt?: string; schemaVersion?: number; counts?: BackupCountsDto }>>;
+  createBackup(): Promise<AppResult<{ saved: boolean; verified?: true; createdAt?: string; schemaVersion?: number; counts?: BackupCountsDto; download?: DownloadDescriptor }>>;
   listRestoreTargets(): Promise<AppResult<WorkspaceSummary[]>>;
   selectRestoreFile(): Promise<AppResult<{ selected: boolean; fileToken?: string; fileName?: string }>>;
   inspectBackup(input: { fileToken: string; targetWorkspaceId: string }): Promise<AppResult<BackupInspectionDto>>;
@@ -517,6 +517,19 @@ export interface FamilyAgentApi {
     clearKey(): Promise<AppResult<null>>;
   };
   dataManagement: DataManagementApi;
+}
+
+export type UploadKind = "import" | "media" | "backup";
+export interface UploadedFileToken {
+  fileToken: string;
+  fileName: string;
+  kind: UploadKind;
+  expiresAt: string;
+}
+export interface DownloadDescriptor {
+  downloadUrl: string;
+  fileName: string;
+  expiresAt: string;
 }
 
 export type DesktopApi = FamilyAgentApi;

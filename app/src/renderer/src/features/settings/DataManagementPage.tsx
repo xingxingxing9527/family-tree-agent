@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState, type JSX } from "react";
+import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { BackupInspectionDto, DataManagementApi, WorkspaceSummary } from "../../../../shared/contracts";
+import { startDownload, uploadFile } from "../../api/file-client";
+import { isHttpApiGroup } from "../../api/http-client";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 import { AuditHistory } from "./AuditHistory";
 import { PrivacyWarning } from "./PrivacyWarning";
@@ -20,6 +22,8 @@ export function DataManagementPage({ api, refreshToken, prepareMutation }: DataM
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshWarning, setRefreshWarning] = useState<PreparedMutationRefresh | null>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+  const isWeb = isHttpApiGroup(api as object);
   const selectedTarget = useMemo(() => targets.find((target) => target.id === targetId) ?? null, [targetId, targets]);
 
   useEffect(() => {
@@ -43,12 +47,34 @@ export function DataManagementPage({ api, refreshToken, prepareMutation }: DataM
   };
   const selectRestore = async (): Promise<void> => {
     setError(null); setInspection(null); setConfirmed(false);
+    if (isWeb) {
+      restoreInputRef.current?.click();
+      return;
+    }
     try {
       const result = await api.selectRestoreFile();
       if (!result.ok) { setError(result.error.message); return; }
       if (!result.value.selected || !result.value.fileToken || !result.value.fileName) { setFileToken(""); setFileName(""); return; }
       setFileToken(result.value.fileToken); setFileName(result.value.fileName);
     } catch { setError("无法选择备份文件"); }
+  };
+  const uploadRestore = async (file: File): Promise<void> => {
+    setError(null); setInspection(null); setConfirmed(false);
+    try {
+      const uploaded = await uploadFile("backup", file);
+      if (!uploaded.ok) { setError(uploaded.error.message); return; }
+      setFileToken(uploaded.value.fileToken);
+      setFileName(uploaded.value.fileName);
+    } catch { setError("无法上传备份文件"); }
+  };
+  const createBackup = async (): Promise<void> => {
+    setError(null); setMessage(null);
+    try {
+      const result = await api.createBackup();
+      if (!result.ok) { setError(result.error.message); return; }
+      if (result.value.download) startDownload(result.value.download);
+      setMessage("备份已创建并验证");
+    } catch { setError("操作失败，请稍后重试"); }
   };
   const inspect = async (): Promise<void> => {
     if (!fileToken || !targetId) return;
@@ -93,11 +119,22 @@ export function DataManagementPage({ api, refreshToken, prepareMutation }: DataM
     <section aria-labelledby="backup-export-title">
       <h2 id="backup-export-title">备份与导出</h2>
       <PrivacyWarning />
-      <button type="button" onClick={() => void run(() => api.createBackup(), "备份已创建并验证")}>创建备份</button>
+      <button type="button" onClick={() => void createBackup()}>创建备份</button>
       <button type="button" onClick={() => void run(() => api.exportWorkspace(), "资料已导出")}>导出资料</button>
     </section>
     <section aria-labelledby="restore-title">
       <h2 id="restore-title">恢复备份</h2>
+      {isWeb && <input
+        ref={restoreInputRef}
+        type="file"
+        accept=".zip,application/zip"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void uploadRestore(file);
+        }}
+      />}
       <button type="button" onClick={() => void selectRestore()}>选择备份文件</button>
       <output>{fileName || "未选择备份文件"}</output>
       <label>恢复目标谱册

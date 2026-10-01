@@ -1,5 +1,7 @@
-import React, { useMemo, useState, type FormEvent, type JSX } from "react";
+import React, { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type JSX } from "react";
 import type { ImportApi, ImportCommitReportDto, ImportPlanDto, ImportSheetDto } from "../../../../shared/contracts";
+import { startDownload, uploadFile } from "../../api/file-client";
+import { isHttpApiGroup } from "../../api/http-client";
 import { FieldMappingStep } from "./FieldMappingStep";
 import { ImportPreview } from "./ImportPreview";
 import "./import.css";
@@ -18,6 +20,8 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
   const [report, setReport] = useState<ImportCommitReportDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const webMode = isHttpApiGroup(api);
   const isCsv = /\.csv$/i.test(fileName);
   const selectedActionIds = useMemo(() => plan?.actions
     .filter((action) => (action.kind === "create" || action.kind === "update") && !excluded.has(action.id) && action.dependsOnActionIds.every((dependency) => !excluded.has(dependency)))
@@ -53,6 +57,7 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
 
   const selectFile = async (): Promise<void> => {
     if (busy) return;
+    if (webMode) { fileInput.current?.click(); return; }
     setError(null); setBusy(true);
     try {
       const result = await api.selectFile();
@@ -61,12 +66,25 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
     } catch { setError("无法选择导入文件"); }
     finally { setBusy(false); }
   };
+  const uploadSelected = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const result = await uploadFile("import", file);
+      if (!result.ok) { setError(result.error.message); return; }
+      setFileToken(result.value.fileToken); setFileName(result.value.fileName); setPlan(null); setReport(null);
+    } catch { setError("无法上传导入文件"); }
+    finally { setBusy(false); }
+  };
   const exportTemplate = async (): Promise<void> => {
     if (busy) return;
     setBusy(true); setError(null);
     try {
       const result = await api.exportTemplate();
       if (!result.ok) setError(result.error.message);
+      else if (result.value.download) startDownload(result.value.download);
     } catch { setError("无法导出模板"); }
     finally { setBusy(false); }
   };
@@ -83,6 +101,7 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
       {error && <div className="error-banner" role="alert">{error}</div>}
       <form className="import-card" onSubmit={(event) => void preview(event)}>
         <label><span>导入文件</span><output className="field-control" aria-label="已选导入文件">{fileName || "未选择"}</output></label>
+        <input ref={fileInput} hidden type="file" accept=".xlsx,.csv" onChange={(event) => void uploadSelected(event)} />
         <button className="button secondary-button" type="button" disabled={busy} onClick={() => void selectFile()}>选择导入文件</button>
         <label><span>来源键</span><input className="field-control" aria-label="来源键" required value={sourceKey} onChange={(event) => setSourceKey(event.target.value)} /></label>
         {isCsv && <FieldMappingStep entityType={csvEntityType} mapping={mapping} onEntityTypeChange={setCsvEntityType} onMappingChange={setMapping} />}

@@ -98,6 +98,17 @@ export const RPC_INPUT_SCHEMAS = {
     updateMembership: z.object({ membershipId: id, expectedVersion, patch: membershipPatch }).strict(),
     removeMembership: z.object({ membershipId: id, expectedVersion }).strict()
   },
+  imports: {
+    parse: z.object({
+      fileToken: uuid,
+      sourceKey: z.string().max(500).refine((value) => value.trim().length > 0),
+      csvEntityType: z.enum(["People", "ParentChild", "Marriages"]).optional(),
+      fieldMapping: z.record(z.string().min(1).max(100), z.string().min(1).max(200)).optional()
+    }).strict(),
+    commit: z.object({ planId: id, selectedActionIds: z.array(id).max(10_000) }).strict()
+      .refine((value) => new Set(value.selectedActionIds).size === value.selectedActionIds.length),
+    exportTemplate: noInputSchema
+  },
   merges: {
     findDuplicateCandidates: z.object({ personId: id }).strict(),
     preview: z.object({ primaryPersonId: id, secondaryPersonId: id }).strict(),
@@ -135,10 +146,18 @@ export const RPC_INPUT_SCHEMAS = {
     saveKey: z.object({ key: z.string().trim().min(1).max(512) }).strict(),
     clearKey: noInputSchema
   },
+  media: {
+    import: z.object({ fileToken: uuid }).strict(),
+    attach: z.object({ mediaAssetId: uuid, personId: id, caption: z.string().trim().max(500).optional() }).strict(),
+    listForPerson: z.object({ personId: id }).strict()
+  },
   dataManagement: {
     listAudit: noInputSchema,
     undoOperationGroup: z.object({ operationGroupId: uuid }).strict(),
-    listRestoreTargets: noInputSchema
+    createBackup: noInputSchema,
+    listRestoreTargets: noInputSchema,
+    inspectBackup: z.object({ fileToken: uuid, targetWorkspaceId: uuid }).strict(),
+    restoreBackup: z.object({ restoreToken: uuid, targetWorkspaceId: uuid, confirmReplace: z.literal(true) }).strict()
   }
 } as const;
 

@@ -4,11 +4,12 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DataManagementApi } from "../../../src/shared/contracts";
+import { createHttpApiClient } from "../../../src/renderer/src/api/http-client";
 import { AuditHistory } from "../../../src/renderer/src/features/settings/AuditHistory";
 import { DataManagementPage } from "../../../src/renderer/src/features/settings/DataManagementPage";
 import { PrivacyWarning } from "../../../src/renderer/src/features/settings/PrivacyWarning";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const workspaceId = "11111111-1111-4111-8111-111111111111";
 const fileToken = "22222222-2222-4222-8222-222222222222";
 const restoreToken = "33333333-3333-4333-8333-333333333333";
@@ -76,6 +77,24 @@ describe("data-management settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "导出资料" }));
     await waitFor(() => expect(value.createBackup).toHaveBeenCalledWith());
     expect(value.exportWorkspace).toHaveBeenCalledWith();
+  });
+
+  it("uses a browser file upload instead of a native file picker on the Web", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/rpc/dataManagement/listRestoreTargets")) return new Response(JSON.stringify({ ok: true, value: [] }), { status: 200 });
+      if (url.endsWith("/api/rpc/dataManagement/listAudit")) return new Response(JSON.stringify({ ok: true, value: [] }), { status: 200 });
+      if (url.endsWith("/api/files/backup")) return new Response(JSON.stringify({ ok: true, value: { fileToken, fileName: "family.zip", kind: "backup", expiresAt: "2026-09-16T00:15:00.000Z" } }), { status: 200 });
+      return new Response(JSON.stringify({ ok: false, error: { code: "VALIDATION", message: "unexpected request" } }), { status: 400 });
+    });
+    const { container } = render(<DataManagementPage api={createHttpApiClient().dataManagement} />);
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    fireEvent.change(input!, { target: { files: [new File(["PK\u0003\u0004"], "family.zip", { type: "application/zip" })] } });
+
+    expect(await screen.findByText("family.zip")).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith("/api/files/backup", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain("/api/rpc/dataManagement/selectRestoreFile");
   });
 
   it("turns rejected data-management operations into a sanitized visible failure", async () => {

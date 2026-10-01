@@ -2,6 +2,7 @@ import staticPlugin from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppResult } from "../shared/contracts.js";
 import { registerRpcRoutes } from "./http/rpc-router.js";
+import { registerFileRoutes, type FileTransferStores } from "./http/file-routes.js";
 import type { FamilyAgentService } from "./runtime/family-agent-service.js";
 import type { FamilyRuntime } from "./runtime/family-runtime.js";
 
@@ -10,6 +11,7 @@ export type WebServer = FastifyInstance;
 export interface WebServerOptions {
   runtime: FamilyRuntime;
   service?: FamilyAgentService;
+  fileTransfers?: FileTransferStores;
   webRoot?: string;
   logger?: boolean;
 }
@@ -56,6 +58,7 @@ export function createWebServer(options: WebServerOptions): WebServer {
   });
 
   if (options.service) registerRpcRoutes(server, options.service);
+  if (options.fileTransfers) registerFileRoutes(server, options.runtime, options.fileTransfers);
 
   if (options.webRoot) {
     void server.register(staticPlugin, { root: options.webRoot, wildcard: false });
@@ -67,6 +70,8 @@ export function createWebServer(options: WebServerOptions): WebServer {
 
   server.addHook("onClose", async () => {
     await options.service?.dispose();
+    await options.fileTransfers?.uploads.dispose();
+    options.fileTransfers?.downloads.dispose();
     await options.runtime.dispose();
   });
   return server;
