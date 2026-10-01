@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import ExcelJS from "exceljs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createWebServer, type WebServer } from "../../../src/server/create-web-server.js";
 import { openDatabase } from "../../../src/main/database/open-database.js";
@@ -124,6 +125,30 @@ describe("browser file routes", () => {
     const downloaded = await server.inject({ method: "GET", url });
     expect(downloaded.statusCode).toBe(200);
     expect(downloaded.rawPayload.subarray(0, 2).toString("ascii")).toBe("PK");
+  });
+
+  it("downloads distinct current-family and blank Chinese workbooks", async () => {
+    const saved = await server.inject({
+      method: "POST",
+      url: "/api/rpc/people/save",
+      payload: { input: { draft: { displayName: "王强", aliases: [], gender: "unknown", birth: null, death: null, notes: null, sourceDescription: "工作簿导出测试" }, confirmWarnings: true } }
+    });
+    expect(saved.json()).toMatchObject({ ok: true });
+
+    const current = await server.inject({ method: "POST", url: "/api/rpc/imports/exportCurrentWorkbook", payload: { input: null } });
+    const blank = await server.inject({ method: "POST", url: "/api/rpc/imports/exportBlankWorkbook", payload: { input: null } });
+    expect(current.json()).toMatchObject({ ok: true, value: { saved: true, download: { fileName: expect.stringContaining("当前家谱") } } });
+    expect(blank.json()).toMatchObject({ ok: true, value: { saved: true, download: { fileName: expect.stringContaining("空白") } } });
+
+    const currentBytes = await server.inject({ method: "GET", url: current.json().value.download.downloadUrl as string });
+    const blankBytes = await server.inject({ method: "GET", url: blank.json().value.download.downloadUrl as string });
+    const currentWorkbook = new ExcelJS.Workbook();
+    const blankWorkbook = new ExcelJS.Workbook();
+    await currentWorkbook.xlsx.load(currentBytes.rawPayload);
+    await blankWorkbook.xlsx.load(blankBytes.rawPayload);
+    expect(currentWorkbook.getWorksheet("人物信息")?.getCell("B2").value).toBe("王强");
+    expect(blankWorkbook.getWorksheet("人物信息")?.getCell("A2").value).toBe("N001");
+    expect(blankWorkbook.getWorksheet("人物信息")?.getCell("B2").value).toBe("");
   });
 
   it("uploads, verifies and restores a backup through the browser API", async () => {

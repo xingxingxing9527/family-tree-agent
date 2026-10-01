@@ -7,6 +7,7 @@ import { BackupService } from "../../main/application/backup/backup-service.js";
 import { ImportCommitter } from "../../main/application/import/import-committer.js";
 import { ImportPlanAccessError, ImportPlanner, ImportPlanStore } from "../../main/application/import/import-planner.js";
 import { exportImportTemplate, parseImport } from "../../main/application/import/workbook-parser.js";
+import { exportBlankWorkbook, exportCurrentFamilyWorkbook } from "../../main/application/import/chinese-workbook-exporter.js";
 import { applyMigrations } from "../../main/database/migrations/index.js";
 import { openDatabase, type WorkspaceDatabase } from "../../main/database/open-database.js";
 import { WorkspaceChatGateway } from "../../main/ipc/chat-ipc.js";
@@ -110,7 +111,9 @@ export class FamilyAgentService implements FamilyAgentApi {
       selectFile: () => unavailable(),
       parse: (input) => gated(() => this.parseUploadedImport(input, options.uploads)),
       commit: (input) => gated(() => this.commitImport(input)),
-      exportTemplate: () => this.exportTemplate(options.downloads)
+      exportTemplate: () => this.exportTemplate(options.downloads),
+      exportCurrentWorkbook: () => gated(() => this.exportChineseWorkbook("current", options.downloads)),
+      exportBlankWorkbook: () => gated(() => this.exportChineseWorkbook("blank", options.downloads))
     };
     this.merges = {
       findDuplicateCandidates: (input) => gated(() => merges.findDuplicateCandidates(input)),
@@ -234,7 +237,7 @@ export class FamilyAgentService implements FamilyAgentApi {
     const claimed = await uploads.claim(input.fileToken, "import");
     if (!claimed.ok) return { ok: false, error: { code: "PATH_DENIED", message: "Import upload expired or has the wrong purpose" } };
     try {
-      const parsed = await parseImport(claimed.path, input.sourceKey, { csvEntityType: input.csvEntityType, fieldMapping: input.fieldMapping });
+      const parsed = await parseImport(claimed.path, input.sourceKey, { csvEntityType: input.csvEntityType, fieldMapping: input.fieldMapping, expectedWorkspaceId: context.workspaceId });
       parsed.fileName = claimed.fileName;
       const database = openDatabase(context.databasePath);
       try {
@@ -275,6 +278,23 @@ export class FamilyAgentService implements FamilyAgentApi {
       return { ok: true, value: { saved: true, download } };
     } catch { return failure("INTERNAL", "Unable to create import template"); }
     finally { await rm(path, { force: true }); }
+  }
+
+  private async exportChineseWorkbook(kind: "current" | "blank", downloads?: DownloadStore): Promise<AppResult<{ saved: boolean; download?: import("../../shared/contracts.js").DownloadDescriptor }>> {
+    if (!downloads) return unavailable();
+    const context = this.runtime.workspaceManager.getOpenWorkspaceDetails();
+    if (!context) return failure("NOT_FOUND", "No workspace is open");
+    const database = openDatabase(context.databasePath);
+    try {
+      applyMigrations(database);
+      const bytes = kind === "current"
+        ? await exportCurrentFamilyWorkbook({ database, workspaceId: context.workspaceId, workspaceName: context.workspaceName })
+        : await exportBlankWorkbook({ database, workspaceId: context.workspaceId, workspaceName: context.workspaceName });
+      const suffix = kind === "current" ? "当前家谱" : "空白导入模板";
+      const download = downloads.createDownload({ fileName: `${context.workspaceName}-${suffix}.xlsx`, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes });
+      return { ok: true, value: { saved: true, download } };
+    } catch { return failure("INTERNAL", "Unable to create Chinese family workbook"); }
+    finally { database.close(); }
   }
 
   private async importMedia(fileToken: string, uploads?: UploadStore): ReturnType<FamilyAgentApi["media"]["import"]> {

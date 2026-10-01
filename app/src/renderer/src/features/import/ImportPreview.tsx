@@ -8,6 +8,8 @@ interface ImportPreviewProps {
 }
 
 const display = (value: unknown): string => value === null ? "空" : typeof value === "object" ? JSON.stringify(value) : String(value);
+const sheetLabel: Record<string, string> = { People: "人物信息", ParentChild: "亲子关系", Marriages: "婚姻关系" };
+const kindLabel: Record<string, string> = { create: "新增", update: "更新", unchanged: "保持不变", blocked: "阻断" };
 
 export function ImportPreview({ plan, excludedActionIds, onToggleAction }: ImportPreviewProps): JSX.Element {
   const [severity, setSeverity] = useState<"all" | "error" | "warning">("all");
@@ -34,17 +36,18 @@ export function ImportPreview({ plan, excludedActionIds, onToggleAction }: Impor
           const selectable = action.kind === "create" || action.kind === "update";
           const missingPrerequisites = action.dependsOnActionIds.filter((id) => excludedActionIds.has(id));
           const disabled = !selectable || missingPrerequisites.length > 0;
+          const sourceSheet = sheetLabel[action.sourceRow.sheet] ?? action.sourceRow.sheet;
           return (
             <article className="import-action" key={action.id}>
               <label>
                 <input
                   type="checkbox"
-                  aria-label={`包含 ${action.sourceRow.sheet} 第 ${action.sourceRow.row} 行`}
+                  aria-label={`包含 ${sourceSheet} 第 ${action.sourceRow.row} 行`}
                   checked={selectable && !excludedActionIds.has(action.id) && missingPrerequisites.length === 0}
                   disabled={disabled}
                   onChange={() => onToggleAction(action.id)}
                 />
-                <strong>{action.sourceRow.sheet} 第 {action.sourceRow.row} 行</strong> — {action.kind}
+                <strong>{sourceSheet} 第 {action.sourceRow.row} 行</strong> — {kindLabel[action.kind] ?? action.kind}
               </label>
               {missingPrerequisites.length > 0 && <p className="text-secondary">需要先包含所依赖的人物行。</p>}
               {action.changes.length > 0 && <ul>{action.changes.map((change) => <li key={change.field}>{change.field}: {display(change.before)} → {display(change.after)}</li>)}</ul>}

@@ -35,7 +35,9 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
     imports: {
       parse: entry(RPC_INPUT_SCHEMAS.imports.parse, (input) => service.imports.parse(input)),
       commit: entry(RPC_INPUT_SCHEMAS.imports.commit, (input) => service.imports.commit(input)),
-      exportTemplate: entry(RPC_INPUT_SCHEMAS.imports.exportTemplate, () => service.imports.exportTemplate())
+      exportTemplate: entry(RPC_INPUT_SCHEMAS.imports.exportTemplate, () => service.imports.exportTemplate()),
+      exportCurrentWorkbook: entry(RPC_INPUT_SCHEMAS.imports.exportCurrentWorkbook, () => service.imports.exportCurrentWorkbook()),
+      exportBlankWorkbook: entry(RPC_INPUT_SCHEMAS.imports.exportBlankWorkbook, () => service.imports.exportBlankWorkbook())
     },
     merges: {
       findDuplicateCandidates: entry(RPC_INPUT_SCHEMAS.merges.findDuplicateCandidates, (input) => service.merges.findDuplicateCandidates(input)),

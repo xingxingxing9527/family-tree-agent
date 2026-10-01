@@ -74,15 +74,15 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
     try {
       const result = await uploadFile("import", file);
       if (!result.ok) { setError(result.error.message); return; }
-      setFileToken(result.value.fileToken); setFileName(result.value.fileName); setPlan(null); setReport(null);
+      setFileToken(result.value.fileToken); setFileName(result.value.fileName); setSourceKey((current) => current || `upload:${result.value.fileName}`); setPlan(null); setReport(null);
     } catch { setError("无法上传导入文件"); }
     finally { setBusy(false); }
   };
-  const exportTemplate = async (): Promise<void> => {
+  const exportWorkbook = async (kind: "current" | "blank"): Promise<void> => {
     if (busy) return;
     setBusy(true); setError(null);
     try {
-      const result = await api.exportTemplate();
+      const result = kind === "current" ? await api.exportCurrentWorkbook() : await api.exportBlankWorkbook();
       if (!result.ok) setError(result.error.message);
       else if (result.value.download) startDownload(result.value.download);
     } catch { setError("无法导出模板"); }
@@ -108,9 +108,10 @@ export function ImportPage({ api, onCommitted = () => undefined }: ImportPagePro
         <button className="button primary-button" type="submit" disabled={busy || !fileToken}>解析并预览</button>
       </form>
       <section className="import-card template-export">
-        <h2>固定模板</h2>
-        <p className="text-secondary">选择保存位置后将创建固定 XLSX 模板。</p>
-        <button className="button secondary-button" type="button" disabled={busy} onClick={() => void exportTemplate()}>导出模板</button>
+        <h2>中文 Excel</h2>
+        <p className="text-secondary">继续维护已有家谱时导出当前家谱；首次录入或只想查看格式时下载空白模板。</p>
+        <button className="button secondary-button" type="button" disabled={busy} onClick={() => void exportWorkbook("current")}>导出当前家谱表格</button>
+        <button className="button secondary-button" type="button" disabled={busy} onClick={() => void exportWorkbook("blank")}>下载空白导入模板</button>
       </section>
       {plan && <>
         <ImportPreview plan={plan} excludedActionIds={excluded} onToggleAction={toggle} />

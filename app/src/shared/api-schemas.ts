@@ -123,7 +123,9 @@ export const RPC_INPUT_SCHEMAS = {
     }).strict(),
     commit: z.object({ planId: id, selectedActionIds: z.array(id).max(10_000) }).strict()
       .refine((value) => new Set(value.selectedActionIds).size === value.selectedActionIds.length),
-    exportTemplate: noInputSchema
+    exportTemplate: noInputSchema,
+    exportCurrentWorkbook: noInputSchema,
+    exportBlankWorkbook: noInputSchema
   },
   merges: {
     findDuplicateCandidates: z.object({ personId: id }).strict(),

@@ -8,6 +8,7 @@ import { ImportPlanStore } from "./import-planner.js";
 import type { ImportAction, ImportCommitReport, ImportPersonPayload, ImportPlan } from "./import-types.js";
 
 const priority: Readonly<Record<ImportAction["entityType"], number>> = { person: 0, parentChild: 1, marriage: 2 };
+const permanentPersonCode = (candidate: string): boolean => /^P\d{6}$/u.test(candidate);
 
 export class ImportCommitter {
   private readonly people: PersonRepository;
@@ -79,10 +80,14 @@ export class ImportCommitter {
       const payload = action.payload as ImportPersonPayload;
       const identity = this.identities.get(sourceKey, payload.externalId);
       if (action.kind === "create") {
+        if (permanentPersonCode(payload.externalId)) throw new Error(`Unknown permanent person code: ${payload.externalId}`);
         if (identity) throw new Error(`Import identity changed since preview: ${payload.externalId}`);
         continue;
       }
-      if (!identity || identity.personId !== action.entityId) throw new Error(`Import identity changed since preview: ${payload.externalId}`);
+      if (permanentPersonCode(payload.externalId)) {
+        const permanent = this.people.list().find((person) => person.personCode === payload.externalId);
+        if (!permanent || permanent.id !== action.entityId) throw new Error(`Permanent person code changed since preview: ${payload.externalId}`);
+      } else if (!identity || identity.personId !== action.entityId) throw new Error(`Import identity changed since preview: ${payload.externalId}`);
       const person = action.entityId ? this.people.get(action.entityId) : null;
       if (!person || person.rowVersion !== action.expectedRowVersion) throw new Error(`Person changed since preview: ${payload.externalId}`);
     }
@@ -131,7 +136,7 @@ export class ImportCommitter {
         },
         source: commandSource
       }, { confirmWarnings: true, recordSource: false });
-      ctx.importIdentities.update(ctx, { sourceId, sourceKey, externalPersonId: payload.externalId, raw: action.sourceRow.raw });
+      if (!permanentPersonCode(payload.externalId)) ctx.importIdentities.update(ctx, { sourceId, sourceKey, externalPersonId: payload.externalId, raw: action.sourceRow.raw });
       return result.changedEntityIds[0]!;
     }
 
@@ -167,6 +172,11 @@ export class ImportCommitter {
   }
 
   private requireImportedPerson(sourceKey: string, externalId: string): string {
+    if (permanentPersonCode(externalId)) {
+      const person = this.people.list().find((candidate) => candidate.personCode === externalId);
+      if (!person) throw new Error(`Permanent person code is unavailable: ${externalId}`);
+      return person.id;
+    }
     const identity = this.identities.get(sourceKey, externalId);
     if (!identity || !this.people.get(identity.personId)) throw new Error(`External person reference is unavailable: ${externalId}`);
     return identity.personId;

@@ -36,7 +36,9 @@ const desktopApi: DesktopApi = {
     selectFile: () => ipcRenderer.invoke("imports:select-file", {}),
     parse: (input) => ipcRenderer.invoke("imports:parse", input),
     commit: (input) => ipcRenderer.invoke("imports:commit", input),
-    exportTemplate: () => ipcRenderer.invoke("imports:export-template", {})
+    exportTemplate: () => ipcRenderer.invoke("imports:export-template", {}),
+    exportCurrentWorkbook: () => ipcRenderer.invoke("imports:export-current-workbook", {}),
+    exportBlankWorkbook: () => ipcRenderer.invoke("imports:export-blank-workbook", {})
   },
   merges: {
     findDuplicateCandidates: (input) => ipcRenderer.invoke("merges:candidates", input),

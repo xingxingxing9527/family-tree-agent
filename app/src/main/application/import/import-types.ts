@@ -1,6 +1,7 @@
 import type { PartialDate } from "../../../shared/domain.js";
 import type { Gender } from "../../database/repositories/person-repository.js";
 import type { MarriageStatus, ParentRole } from "../../database/repositories/relation-repository.js";
+import type { WorkbookMetadata } from "./workbook-metadata.js";
 
 export type ImportSheet = "People" | "ParentChild" | "Marriages";
 export type ImportEntityType = "person" | "parentChild" | "marriage";
@@ -18,6 +19,7 @@ export interface ParsedImport {
   sourceKey: string;
   fileName: string;
   rows: ParsedImportRow[];
+  metadata?: WorkbookMetadata;
 }
 
 export interface ImportIssue {
@@ -107,4 +109,5 @@ export interface ImportCommitReport {
 export interface ParseImportOptions {
   csvEntityType?: ImportSheet;
   fieldMapping?: Record<string, string>;
+  expectedWorkspaceId?: string;
 }

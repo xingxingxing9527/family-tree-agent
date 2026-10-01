@@ -94,6 +94,7 @@ interface PlannedMarriageEpisode {
 const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
 const value = (raw: unknown): string => raw === null || raw === undefined ? "" : String(raw);
 const actionId = (row: ParsedImportRow, type: ImportAction["entityType"]): string => `${row.sheet}:${row.row}:${type}`;
+const permanentPersonCode = (candidate: string): boolean => /^P\d{6}$/u.test(candidate);
 
 export class ImportPlanner {
   private readonly identities: ImportIdentityRepository;
@@ -196,6 +197,19 @@ export class ImportPlanner {
     const errorIssues = rowIssues.filter((issue) => issue.severity === "error");
     if (errorIssues.length > 0) {
       return { externalId, issues: this.attachIssues(id, rowIssues), action: this.action(id, row, "person", "blocked", payload, rowIssues) };
+    }
+
+    if (permanentPersonCode(externalId)) {
+      const person = this.people.list().find((candidate) => candidate.personCode === externalId);
+      if (!person) {
+        rowIssues.push(issueFor(row, "error", "UNKNOWN_PERMANENT_CODE", "The permanent person code is unknown in this family", { externalId }));
+        return { externalId, issues: this.attachIssues(id, rowIssues), action: this.action(id, row, "person", "blocked", payload, rowIssues) };
+      }
+      const changes = this.personChanges(person, payload);
+      const kind: ImportActionKind = changes.length === 0 ? "unchanged" : "update";
+      const action = this.action(id, row, "person", kind, payload, rowIssues, person.id, person.rowVersion);
+      action.changes = changes;
+      return { externalId, action, issues: this.attachIssues(id, rowIssues) };
     }
 
     const identity = this.identities.get(sourceKey, externalId);
@@ -400,6 +414,12 @@ export class ImportPlanner {
     if (planned && planned.action.kind !== "blocked") {
       if (planned.action.entityId) return planned.action.entityId;
       if (planned.action.payload.type === "person") return planned.action.payload.newEntityId;
+    }
+    if (permanentPersonCode(externalId)) {
+      const person = this.people.list().find((candidate) => candidate.personCode === externalId);
+      if (person) return person.id;
+      issues.push(issueFor(row, "error", "UNKNOWN_PERMANENT_CODE", "The permanent person code is unknown in this family", { column, value: externalId }));
+      return null;
     }
     const identity = this.identities.get(sourceKey, externalId);
     if (identity && this.people.get(identity.personId)) return identity.personId;

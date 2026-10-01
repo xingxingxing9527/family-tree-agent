@@ -38,7 +38,7 @@ describe("ImportPreview", () => {
     render(<ImportPreview plan={plan} excludedActionIds={new Set()} onToggleAction={onToggleAction} />);
 
     expect(screen.getByText("displayName: 旧姓名 → 新姓名")).toBeVisible();
-    fireEvent.click(screen.getByRole("checkbox", { name: "包含 People 第 2 行" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "包含 人物信息 第 2 行" }));
     expect(onToggleAction).toHaveBeenCalledWith("People:2:person");
 
     fireEvent.change(screen.getByLabelText("问题筛选"), { target: { value: "error" } });
@@ -63,7 +63,7 @@ describe("ImportPreview", () => {
     }] };
     render(<ImportPreview plan={dependent} excludedActionIds={new Set(["People:2:person"])} onToggleAction={vi.fn()} />);
 
-    expect(screen.getByRole("checkbox", { name: "包含 ParentChild 第 2 行" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "包含 亲子关系 第 2 行" })).toBeDisabled();
     expect(screen.getByText(/需要先包含/)).toBeVisible();
   });
 
@@ -98,5 +98,19 @@ describe("ImportPreview", () => {
     fireEvent.click(screen.getByRole("button", { name: "选择导入文件" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("无法选择导入文件");
     expect(screen.queryByText(/private|family\.xlsx/u)).not.toBeInTheDocument();
+  });
+
+  it("offers separate current-family and blank Chinese workbook downloads", async () => {
+    const api = {
+      selectFile: vi.fn(), parse: vi.fn(), commit: vi.fn(), exportTemplate: vi.fn(),
+      exportCurrentWorkbook: vi.fn().mockResolvedValue({ ok: false, error: { code: "INTERNAL", message: "测试结束" } }),
+      exportBlankWorkbook: vi.fn().mockResolvedValue({ ok: false, error: { code: "INTERNAL", message: "测试结束" } })
+    } as never;
+    render(<ImportPage api={api} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "导出当前家谱表格" }));
+    await waitFor(() => expect(api.exportCurrentWorkbook).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "下载空白导入模板" }));
+    await waitFor(() => expect(api.exportBlankWorkbook).toHaveBeenCalledOnce());
   });
 });

@@ -410,6 +410,8 @@ export interface ImportApi {
   }): Promise<AppResult<ImportPlanDto>>;
   commit(input: { planId: string; selectedActionIds: string[] }): Promise<AppResult<ImportCommitReportDto>>;
   exportTemplate(): Promise<AppResult<{ saved: boolean; download?: DownloadDescriptor }>>;
+  exportCurrentWorkbook(): Promise<AppResult<{ saved: boolean; download?: DownloadDescriptor }>>;
+  exportBlankWorkbook(): Promise<AppResult<{ saved: boolean; download?: DownloadDescriptor }>>;
 }
 
 export interface MergeDecisionDto {
