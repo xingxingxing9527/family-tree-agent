@@ -171,6 +171,9 @@ export function projectWorkspaceTree(
   const generations = new GenerationService();
   const generationByPerson = new Map<string, GenerationDisplay>();
   const generationMarkerByPerson = new Map<string, string | null>();
+  const lineageRoleByPerson = new Map<string, ProjectionMembershipRow["lineage_role"]>();
+  for (const membership of memberships) if (membership.is_primary === 1) lineageRoleByPerson.set(membership.person_id, membership.lineage_role);
+  for (const lineage of lineages) if (!lineageRoleByPerson.has(lineage.founder_person_id)) lineageRoleByPerson.set(lineage.founder_person_id, "blood");
   for (const lineage of lineages) {
     const lineageMemberships = membershipsByLineage.get(lineage.id) ?? [];
     const displays = generations.calculate({
@@ -201,7 +204,8 @@ export function projectWorkspaceTree(
       birthYear: person.birth?.year ?? null,
       deathYear: person.death?.year ?? null,
       generation: generationByPerson.get(person.id) ?? null,
-      generationMarker: generationMarkerByPerson.get(person.id) ?? null
+      generationMarker: generationMarkerByPerson.get(person.id) ?? null,
+      lineageRole: lineageRoleByPerson.get(person.id) ?? null
     })),
     unions
   }, (viewpointId, targetPersonId) => primaryTerms && viewpointId === input.viewpointId

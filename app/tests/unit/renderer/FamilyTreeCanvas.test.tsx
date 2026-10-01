@@ -37,13 +37,13 @@ const topology: TreeProjectionTopology = {
       id: "person:parent-a",
       kind: "person",
       personId: "parent-a",
-      display: { displayName: "甲", birthYear: 1960, deathYear: null, generation: null }
+      display: { displayName: "甲", birthYear: 1960, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" }
     },
     {
       id: "person:parent-b",
       kind: "person",
       personId: "parent-b",
-      display: { displayName: "乙", birthYear: 1962, deathYear: null, generation: null }
+      display: { displayName: "乙", birthYear: 1962, deathYear: null, generation: null, generationMarker: null, lineageRole: "married_in" }
     },
     {
       id: "marriage:one",
@@ -61,7 +61,7 @@ const topology: TreeProjectionTopology = {
       id: "person:child",
       kind: "person",
       personId: "child",
-      display: { displayName: "孩子", birthYear: 1990, deathYear: null, generation: null }
+      display: { displayName: "孩子", birthYear: 1990, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" }
     }
   ],
   edges: [
@@ -80,6 +80,11 @@ describe("family tree layout", () => {
     expect(position("person:parent-b").y).toBeLessThan(position("marriage:one").y);
     expect(position("marriage:one").y).toBeLessThan(position("person:child").y);
     expect(laidOut.edges.map((edge) => edge.id)).toEqual(["parent:a", "parent:b", "child:one"]);
+    expect(laidOut.edges.filter((edge) => edge.id.startsWith("parent:")).every((edge) => edge.data?.visualRole === "marriage")).toBe(true);
+    expect(laidOut.edges.find((edge) => edge.id === "child:one")?.data?.visualRole).toBe("descent");
+    const centerY = (id: string, height: number) => position(id).y + height / 2;
+    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-a", 112));
+    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-b", 112));
   });
 });
 
@@ -109,6 +114,8 @@ describe("FamilyTreeCanvas", () => {
     expect(parentCard).toHaveStyle({ backgroundColor: "#ffffff", color: "#0f172a" });
     expect(screen.getByText("甲")).toHaveStyle({ fontSize: "15px" });
     expect(screen.getByText("父亲")).toBeVisible();
+    expect(parentCard).toHaveTextContent("本层子女");
+    expect(screen.getByRole("group", { name: "人物：乙" })).toHaveTextContent("配偶");
     expect(screen.getByText("第 1 代（系统推导）")).toBeVisible();
     expect(screen.getByRole("group", { name: "家庭联合：已结束婚姻" })).toHaveClass("family-union-node", "ended");
     expect(screen.getByText("已结束婚姻")).toBeVisible();
@@ -127,8 +134,26 @@ describe("FamilyTreeCanvas", () => {
     await waitFor(() => expect(layout).toHaveBeenCalledTimes(1));
     rerender(<FamilyTreeCanvas projection={second} layout={layout} />);
 
-    expect(await screen.findByText("配偶")).toBeVisible();
+    expect(await screen.findByRole("group", { name: "人物：甲" })).toHaveTextContent("配偶");
     expect(layout).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an unresolved remarriage assignment instead of guessing", async () => {
+    const unresolved: TreeProjection = {
+      topology: {
+        ...topology,
+        nodes: topology.nodes.map((node) => node.kind === "union" ? {
+          ...node,
+          display: { ...node.display, kind: "unassigned", marriageStatus: null, marriageStart: null, marriageEnd: null, warnings: ["ambiguous marriage episode"] }
+        } : node),
+        edges: topology.edges.map((edge) => ({ ...edge, marriageStatus: null }))
+      },
+      viewpointId: null,
+      labels: {}
+    };
+    render(<FamilyTreeCanvas projection={unresolved} />);
+
+    expect(await screen.findByRole("group", { name: "家庭联合：待分配家庭" })).toHaveTextContent("子女归属待确认");
   });
 });
 

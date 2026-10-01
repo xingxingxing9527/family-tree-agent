@@ -124,7 +124,7 @@ describe("workspace snapshot and tree projection", () => {
     const workspaceId = "workspace-lineages";
     const now = new Date().toISOString();
     const insertPerson = database.prepare("INSERT INTO person (id, workspace_id, display_name, gender, created_at, updated_at) VALUES (?, ?, ?, 'unknown', ?, ?)");
-    for (const [id, name] of [["founder-a", "甲祖"], ["child-a", "甲子"], ["founder-b", "乙祖"], ["child-b", "乙子"]]) {
+    for (const [id, name] of [["founder-a", "甲祖"], ["child-a", "甲子"], ["spouse-a", "甲媳"], ["founder-b", "乙祖"], ["child-b", "乙子"]]) {
       insertPerson.run(id, workspaceId, name, now, now);
     }
     const insertParent = database.prepare("INSERT INTO parent_child (id, workspace_id, parent_id, child_id, parent_role, created_at, updated_at) VALUES (?, ?, ?, ?, 'father', ?, ?)");
@@ -138,6 +138,7 @@ describe("workspace snapshot and tree projection", () => {
     insertMembership.run("member-child-a", workspaceId, "lineage-a", "child-a", 3, now, now);
     insertMembership.run("member-founder-b", workspaceId, "lineage-b", "founder-b", null, now, now);
     insertMembership.run("member-child-b", workspaceId, "lineage-b", "child-b", null, now, now);
+    database.prepare("INSERT INTO lineage_membership (id, workspace_id, lineage_id, person_id, lineage_role, is_primary, declared_generation, created_at, updated_at) VALUES ('member-spouse-a', ?, 'lineage-a', 'spouse-a', 'married_in', 1, NULL, ?, ?)").run(workspaceId, now, now);
     database.prepare("UPDATE lineage_membership SET generation_marker='承' WHERE id='member-child-a'").run();
 
     statements = 0;
@@ -146,7 +147,9 @@ describe("workspace snapshot and tree projection", () => {
       .filter((node): node is Extract<typeof node, { kind: "person" }> => node.kind === "person")
       .map((node) => [node.personId, node]));
     expect(personNodes.get("founder-a")?.display.generation).toMatchObject({ displayed: 1, computed: 1, source: "computed", conflict: false });
-    expect(personNodes.get("child-a")?.display).toMatchObject({ generationMarker: "承", generation: { displayed: 3, computed: 2, source: "declared", conflict: true } });
+    expect(personNodes.get("founder-a")?.display.lineageRole).toBe("blood");
+    expect(personNodes.get("child-a")?.display).toMatchObject({ lineageRole: "blood", generationMarker: "承", generation: { displayed: 3, computed: 2, source: "declared", conflict: true } });
+    expect(personNodes.get("spouse-a")?.display.lineageRole).toBe("married_in");
     expect(personNodes.get("child-b")?.display.generation).toMatchObject({ displayed: 2, computed: 2, source: "computed", conflict: false });
     expect(statements).toBeLessThanOrEqual(6);
     database.close();

@@ -63,6 +63,23 @@
   line-height: 1.35;
 }
 
+.tree-person-node.blood { border-color: #1d4ed8; }
+.tree-person-node.married-in { border-color: #a16207; border-style: dashed; }
+.tree-person-node.associated { border-color: #64748b; }
+
+.tree-lineage-role {
+  width: fit-content;
+  padding: 2px 7px;
+  color: #ffffff;
+  background: #1d4ed8;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tree-person-node.married-in .tree-lineage-role { background: #a16207; }
+.tree-person-node.associated .tree-lineage-role { background: #64748b; }
+
 .tree-kinship-label {
   color: #1d4ed8;
   font-weight: 700;
@@ -108,6 +125,8 @@
 .family-union-node.warning {
   border-color: #c2410c;
 }
+
+.family-union-warning { color: #9a3412; font-size: 11px; line-height: 1.25; }
 
 .tree-status {
   padding: 2rem;

@@ -20,21 +20,27 @@ export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | n
     : display.generation.source === "computed"
       ? `第 ${display.generation.displayed} 代（系统推导）`
       : `第 ${display.generation.displayed} 代${display.generation.conflict ? "（与系统推导冲突）" : "（申报）"}`;
+  const roleLabel = display.lineageRole === "blood" ? "本层子女"
+    : display.lineageRole === "married_in" ? "配偶"
+      : display.lineageRole === "associated" ? "关联成员" : null;
 
   return (
     <article
-      className="tree-person-node"
+      className={`tree-person-node${display.lineageRole ? ` ${display.lineageRole.replace("_", "-")}` : ""}`}
       role="group"
       aria-label={`人物：${display.displayName}`}
       style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
     >
-      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <Handle id="descent-target" type="target" position={Position.Top} isConnectable={false} />
+      <Handle id="marriage-left" type="source" position={Position.Left} isConnectable={false} />
+      <Handle id="marriage-right" type="source" position={Position.Right} isConnectable={false} />
       <strong className="tree-person-name" style={{ fontSize: "15px" }}>{display.displayName}</strong>
+      {roleLabel && <span className="tree-lineage-role">{roleLabel}</span>}
       {relationshipLabel && <span className="tree-kinship-label">{relationshipLabel}</span>}
       {years && <span className="tree-life-years">{years}</span>}
       {generation && <span className={display.generation?.conflict ? "tree-generation conflict" : "tree-generation"}>{generation}</span>}
       {display.generationMarker && <span className="tree-generation-marker">字辈：{display.generationMarker}</span>}
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle id="descent-source" type="source" position={Position.Bottom} isConnectable={false} />
     </article>
   );
 }

@@ -13,6 +13,7 @@ export interface TreeFlowNodeData extends Record<string, unknown> {
 
 export interface TreeFlowEdgeData extends Record<string, unknown> {
   edge: TreeProjectionEdgeDto;
+  visualRole: "marriage" | "descent";
 }
 
 export type TreeFlowNode = Node<TreeFlowNodeData, "person" | "familyUnion">;
@@ -33,7 +34,8 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
       "elk.direction": "DOWN",
       "elk.layered.spacing.nodeNodeBetweenLayers": "72",
       "elk.spacing.nodeNode": "36",
-      "elk.edgeRouting": "ORTHOGONAL"
+      "elk.edgeRouting": "ORTHOGONAL",
+      "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
     },
     children: topology.nodes.map((node) => ({
       id: node.id,
@@ -43,6 +45,21 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
     edges: topology.edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
   });
   const positions = new Map((graph.children ?? []).map((node) => [node.id, { x: node.x ?? 0, y: node.y ?? 0 }]));
+  const unionKinds = new Map(topology.nodes.filter((node) => node.kind === "union").map((node) => [node.id, node.display.kind]));
+  const visualRole = (edge: TreeProjectionEdgeDto): "marriage" | "descent" => edge.kind === "unionChild" || unionKinds.get(edge.target) === "singleParent" ? "descent" : "marriage";
+  for (const union of topology.nodes.filter((node) => node.kind === "union" && node.display.kind !== "singleParent")) {
+    const parentIds = topology.edges.filter((edge) => edge.target === union.id && visualRole(edge) === "marriage").map((edge) => edge.source);
+    const parentPositions = parentIds.map((id) => positions.get(id)).filter((position): position is { x: number; y: number } => Boolean(position));
+    const unionPosition = positions.get(union.id);
+    if (!unionPosition || parentPositions.length === 0) continue;
+    unionPosition.y = parentPositions.reduce((sum, position) => sum + position.y + 56, 0) / parentPositions.length - 48;
+    unionPosition.x = parentPositions.reduce((sum, position) => sum + position.x + 98, 0) / parentPositions.length - 68;
+    if (parentPositions.length === 2) {
+      const orderedParents = parentPositions.sort((left, right) => left.x - right.x);
+      orderedParents[0]!.x = Math.min(orderedParents[0]!.x, unionPosition.x - 216);
+      orderedParents[1]!.x = Math.max(orderedParents[1]!.x, unionPosition.x + 156);
+    }
+  }
 
   return {
     nodes: topology.nodes.map((node) => ({
@@ -53,13 +70,25 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
       draggable: false,
       selectable: true
     })),
-    edges: topology.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      type: "smoothstep",
-      data: { edge },
-      style: edge.marriageStatus === "divorced" ? { stroke: "#64748b", strokeDasharray: "7 5" } : { stroke: "#334155" }
-    }))
+    edges: topology.edges.map((edge) => {
+      const role = visualRole(edge);
+      const sourcePosition = positions.get(edge.source) ?? { x: 0, y: 0 };
+      const targetPosition = positions.get(edge.target) ?? { x: 0, y: 0 };
+      const sourceOnLeft = sourcePosition.x < targetPosition.x;
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: role === "marriage" ? (sourceOnLeft ? "marriage-right" : "marriage-left") : "descent-source",
+        targetHandle: role === "marriage" ? (sourceOnLeft ? "marriage-left" : "marriage-right") : "descent-target",
+        type: role === "marriage" ? "straight" : "smoothstep",
+        data: { edge, visualRole: role },
+        style: {
+          stroke: role === "marriage" ? "#a16207" : "#334155",
+          strokeWidth: role === "marriage" ? 2.5 : 2,
+          ...(edge.marriageStatus === "divorced" ? { strokeDasharray: "7 5" } : {})
+        }
+      };
+    })
   };
 }

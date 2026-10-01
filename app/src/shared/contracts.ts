@@ -252,6 +252,7 @@ export interface TreePersonNodeDto {
     deathYear: number | null;
     generation: TreeGenerationDisplayDto | null;
     generationMarker: string | null;
+    lineageRole: "blood" | "married_in" | "associated" | null;
   };
 }
 

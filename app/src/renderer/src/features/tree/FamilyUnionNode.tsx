@@ -24,7 +24,9 @@ export function FamilyUnionNode({ data }: NodeProps<UnionFlowNode>): JSX.Element
       aria-label={`家庭联合：${label}`}
       style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
     >
-      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <Handle id="descent-target" type="target" position={Position.Top} isConnectable={false} />
+      <Handle id="marriage-left" type="target" position={Position.Left} isConnectable={false} />
+      <Handle id="marriage-right" type="target" position={Position.Right} isConnectable={false} />
       <span>{label}</span>
       {data.node.display.marriageStart
         ? <span className="family-union-date">开始：{formatPartialDate(data.node.display.marriageStart)}</span>
@@ -32,8 +34,9 @@ export function FamilyUnionNode({ data }: NodeProps<UnionFlowNode>): JSX.Element
       {data.node.display.marriageEnd
         ? <span className="family-union-date">结束：{formatPartialDate(data.node.display.marriageEnd)}</span>
         : null}
+      {data.node.display.kind === "unassigned" && <span className="family-union-warning">子女归属待确认</span>}
       {data.node.display.warnings.map((warning) => <span className="sr-only" key={warning}>{warning}</span>)}
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle id="descent-source" type="source" position={Position.Bottom} isConnectable={false} />
     </article>
   );
 }

@@ -7,6 +7,7 @@ export interface TreePersonDisplay {
   deathYear: number | null;
   generation: GenerationDisplay | null;
   generationMarker: string | null;
+  lineageRole: "blood" | "married_in" | "associated" | null;
 }
 
 export interface TreeProjectionPerson extends TreePersonDisplay {
@@ -141,7 +142,13 @@ export class TreeProjectionService {
   }
 
   private buildTopology(key: string, personIds: Set<string>, unionIds: Set<string>): TreeProjectionTopology {
-    const people = sorted(personIds).flatMap((personId): TreePersonNode[] => {
+    const roleOrder: Record<NonNullable<TreePersonDisplay["lineageRole"]> | "unknown", number> = { blood: 0, associated: 1, unknown: 2, married_in: 3 };
+    const orderedPeople = [...new Set(personIds)].sort((left, right) => {
+      const leftRole = this.people.get(left)?.lineageRole ?? "unknown";
+      const rightRole = this.people.get(right)?.lineageRole ?? "unknown";
+      return roleOrder[leftRole] - roleOrder[rightRole] || left.localeCompare(right);
+    });
+    const people = orderedPeople.flatMap((personId): TreePersonNode[] => {
       const person = this.people.get(personId);
       return person ? [{
         id: `person:${person.id}`,
@@ -152,7 +159,8 @@ export class TreeProjectionService {
           birthYear: person.birthYear,
           deathYear: person.deathYear,
           generation: person.generation,
-          generationMarker: person.generationMarker
+          generationMarker: person.generationMarker,
+          lineageRole: person.lineageRole
         }
       }] : [];
     });

@@ -242,7 +242,9 @@ describe("TreeProjectionService", () => {
     displayName: id.toUpperCase(),
     birthYear: null,
     deathYear: null,
-    generation: null
+    generation: null,
+    generationMarker: null,
+    lineageRole: id === "b" || id === "d" ? "married_in" as const : "blood" as const
   }));
   const unions = [
     {
@@ -302,5 +304,28 @@ describe("TreeProjectionService", () => {
     expect(fromC.topology).toBe(fromA.topology);
     expect(fromA.labels.c).toBe("a->c");
     expect(fromC.labels.c).toBe("c->c");
+  });
+
+  it("keeps lineage siblings in descent while attaching a spouse through marriage", () => {
+    const service = new TreeProjectionService({
+      people: [
+        { id: "ancestor-a", displayName: "王守义", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" },
+        { id: "ancestor-b", displayName: "李氏", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "married_in" },
+        { id: "jianguo", displayName: "王建国", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" },
+        { id: "qiang", displayName: "王强", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" },
+        { id: "xiulan", displayName: "赵秀兰", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "married_in" }
+      ],
+      unions: [
+        { id: "marriage:ancestors", kind: "marriage", parentIds: ["ancestor-a", "ancestor-b"], marriageId: "ancestors", marriageStatus: "active", marriageStart: null, marriageEnd: null, childIds: ["jianguo", "qiang"], warnings: [] },
+        { id: "marriage:jianguo", kind: "marriage", parentIds: ["jianguo", "xiulan"], marriageId: "jianguo", marriageStatus: "active", marriageStart: null, marriageEnd: null, childIds: [], warnings: [] }
+      ]
+    });
+
+    const topology = service.full("jianguo", Number.POSITIVE_INFINITY).topology;
+    const ancestorChildren = topology.edges.filter((edge) => edge.source === "marriage:ancestors").map((edge) => edge.target).sort();
+    expect(ancestorChildren).toEqual(["person:jianguo", "person:qiang"]);
+    expect(topology.edges.filter((edge) => edge.target === "marriage:jianguo").map((edge) => edge.source).sort()).toEqual(["person:jianguo", "person:xiulan"]);
+    const roles = Object.fromEntries(topology.nodes.filter((node) => node.kind === "person").map((node) => [node.personId, node.display.lineageRole]));
+    expect(roles).toMatchObject({ jianguo: "blood", qiang: "blood", xiulan: "married_in" });
   });
 });
