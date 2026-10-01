@@ -1,11 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase } from "../../../src/main/database/open-database";
 import { WorkspaceFactsGateway } from "../../../src/main/application/facts/facts-gateway";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
+import { FactQueries } from "../../../src/main/application/facts/fact-queries";
 import type { PersonDraft } from "../../../src/shared/contracts";
 
 describe("WorkspaceFactsGateway", () => {
@@ -170,6 +171,59 @@ describe("WorkspaceFactsGateway", () => {
     if (!mother.ok) throw new Error("mother detail fixture failed");
     expect(mother.value.marriages[0]).not.toHaveProperty("originKind");
     expect(mother.value.marriages[0]).not.toHaveProperty("inferredFromMarriageId");
+  });
+
+  it("loads each distinct person once when sibling rows share a source marriage", async () => {
+    const database = openDatabase(databasePath);
+    const facts = new FactCommandService(database, "workspace-1");
+    const source = (key: string) => ({ sourceKey: key, title: key, kind: "test" });
+    for (const [id, displayName] of [["father", "父亲"], ["mother", "母亲"], ["child-a", "孩子甲"], ["child-b", "孩子乙"]] as const) {
+      facts.execute({
+        type: "person.create",
+        draft: { id, workspaceId: "workspace-1", displayName, gender: "unknown" },
+        source: source(`person:${id}`)
+      });
+    }
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "shared-marriage", workspaceId: "workspace-1", spouseAId: "father", spouseBId: "mother", status: "active" },
+      source: source("marriage")
+    });
+    for (const childId of ["child-a", "child-b"] as const) {
+      facts.execute({
+        type: "parentChild.add",
+        draft: {
+          id: `inferred-${childId}`,
+          workspaceId: "workspace-1",
+          parentId: "mother",
+          childId,
+          parentRole: "mother",
+          originKind: "spouse_default",
+          inferredFromMarriageId: "shared-marriage"
+        },
+        source: source(`inferred:${childId}`)
+      });
+    }
+    database.close();
+
+    const getPerson = vi.spyOn(FactQueries.prototype, "getPerson");
+    try {
+      const detail = await gateway.getPerson({ personId: "mother" });
+      expect(detail).toMatchObject({
+        ok: true,
+        value: {
+          children: [
+            { person: { displayName: "孩子甲" }, inferredFromMarriage: { spouseAName: "父亲", spouseBName: "母亲", status: "active" } },
+            { person: { displayName: "孩子乙" }, inferredFromMarriage: { spouseAName: "父亲", spouseBName: "母亲", status: "active" } }
+          ]
+        }
+      });
+      const queriedPersonIds = getPerson.mock.calls.map(([personId]) => personId);
+      expect(queriedPersonIds).toHaveLength(4);
+      expect([...new Set(queriedPersonIds)].sort()).toEqual(["child-a", "child-b", "father", "mother"]);
+    } finally {
+      getPerson.mockRestore();
+    }
   });
 
   it("returns a sanitized not-found result when no workspace is open", async () => {

@@ -1,8 +1,14 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import { ensureFamily, openArea, rpc, stageAndConfirm } from "./helpers";
 
 interface Workspace { id: string; name: string }
 interface Result<T> { ok: boolean; value?: T; error?: { message: string } }
+interface BackupInspection {
+  restoreToken: string;
+  targetWorkspaceId: string;
+  verified: true;
+  manifest: { workspaceId: string };
+}
 interface PartialDate {
   calendar: "solar" | "lunar";
   year: number;
@@ -29,8 +35,84 @@ const solar = (year: number, month: number, day: number | null = null): PartialD
   precision: day === null ? "month" : "day"
 });
 
-async function freshFamily(request: APIRequestContext, _scenarioName: string): Promise<Workspace> {
-  return ensureFamily(request);
+let baseline: { workspace: Workspace; bytes: Buffer } | null = null;
+let activeWorkspace: Workspace | null = null;
+let activeTestTitle: string | null = null;
+let activeScenarioName: string | null = null;
+const uploadedTokens = new Set<string>();
+const restoreTokens = new Set<string>();
+
+function configuredBaseUrl(testInfo: TestInfo): string {
+  const baseURL = testInfo.project.use.baseURL;
+  if (typeof baseURL !== "string") throw new Error("Parent-completion E2E requires a string baseURL");
+  return baseURL;
+}
+
+async function createBaselineBackup(request: APIRequestContext): Promise<{ workspace: Workspace; bytes: Buffer }> {
+  const workspace = await ensureFamily(request);
+  const initialSnapshot = await rpc<{ people: Array<{ id: string }> }>(request, "query", "workspaceSnapshot");
+  if (initialSnapshot.people.length === 0) {
+    await createPerson(request, "父母补全隔离基准人物");
+    console.info(`[parent-completion fixture] created minimal origin for workspace=${workspace.id}`);
+  }
+  const created = await rpc<{
+    saved: boolean;
+    verified?: true;
+    download?: { downloadUrl: string; fileName: string };
+  }>(request, "dataManagement", "createBackup");
+  if (!created.saved || created.verified !== true || !created.download) throw new Error("Unable to create verified parent-completion baseline backup");
+  const downloaded = await request.get(created.download.downloadUrl);
+  if (!downloaded.ok()) throw new Error(`Unable to download parent-completion baseline backup: HTTP ${downloaded.status()}`);
+  const bytes = await downloaded.body();
+  if (bytes.length === 0 || bytes.subarray(0, 2).toString("ascii") !== "PK") throw new Error("Parent-completion baseline backup is not a non-empty ZIP archive");
+  console.info(`[parent-completion fixture] baseline workspace=${workspace.id} bytes=${bytes.length}`);
+  return { workspace, bytes };
+}
+
+async function restoreBaseline(request: APIRequestContext, scenarioName: string): Promise<Workspace> {
+  if (!baseline) throw new Error("Parent-completion baseline backup was not initialized");
+  const encodedScenario = Buffer.from(scenarioName, "utf8").toString("base64url").slice(0, 48);
+  const uploadedResponse = await request.post("/api/files/backup", {
+    data: baseline.bytes,
+    headers: { "content-type": "application/octet-stream", "x-file-name": `parent-completion-${encodedScenario}.zip` }
+  });
+  const uploaded = await uploadedResponse.json() as Result<{ fileToken: string }>;
+  if (!uploadedResponse.ok() || !uploaded.ok || !uploaded.value?.fileToken) throw new Error(uploaded.error?.message ?? `Unable to upload baseline backup for ${scenarioName}`);
+  if (uploadedTokens.has(uploaded.value.fileToken)) throw new Error(`Backup upload token was reused for ${scenarioName}`);
+  uploadedTokens.add(uploaded.value.fileToken);
+
+  const inspection = await rpc<BackupInspection>(request, "dataManagement", "inspectBackup", {
+    fileToken: uploaded.value.fileToken,
+    targetWorkspaceId: baseline.workspace.id
+  });
+  if (inspection.verified !== true || inspection.targetWorkspaceId !== baseline.workspace.id || inspection.manifest.workspaceId !== baseline.workspace.id) {
+    throw new Error(`Baseline backup workspace mismatch for ${scenarioName}`);
+  }
+  if (restoreTokens.has(inspection.restoreToken)) throw new Error(`Backup restore token was reused for ${scenarioName}`);
+  restoreTokens.add(inspection.restoreToken);
+  const restored = await rpc<{ restored: true; automaticSnapshotVerified: true }>(request, "dataManagement", "restoreBackup", {
+    restoreToken: inspection.restoreToken,
+    targetWorkspaceId: baseline.workspace.id,
+    confirmReplace: true
+  });
+  if (restored.restored !== true || restored.automaticSnapshotVerified !== true) throw new Error(`Baseline restore was not verified for ${scenarioName}`);
+
+  const workspace = await ensureFamily(request);
+  const snapshot = await rpc<{ workspaceId: string }>(request, "query", "workspaceSnapshot");
+  if (workspace.id !== baseline.workspace.id || snapshot.workspaceId !== baseline.workspace.id) throw new Error(`Restored the wrong workspace for ${scenarioName}`);
+  console.info(`[parent-completion fixture] restored scenario="${scenarioName}" workspace=${workspace.id}`);
+  return workspace;
+}
+
+async function freshFamily(request: APIRequestContext, scenarioName: string): Promise<Workspace> {
+  if (!activeWorkspace || !activeTestTitle) throw new Error(`Scenario ${scenarioName} started before its baseline restore`);
+  if (!scenarioName.trim()) throw new Error("Parent-completion scenario name is required");
+  if (activeScenarioName !== null) throw new Error(`Scenario already named ${activeScenarioName}`);
+  const opened = await ensureFamily(request);
+  if (opened.id !== activeWorkspace.id) throw new Error(`Scenario ${scenarioName} opened workspace ${opened.id}, expected ${activeWorkspace.id}`);
+  activeScenarioName = scenarioName;
+  console.info(`[parent-completion fixture] test="${activeTestTitle}" scenario="${scenarioName}"`);
+  return opened;
 }
 
 async function createPerson(
@@ -139,9 +221,9 @@ async function relatives(request: APIRequestContext, personId: string, kinds: Ar
   return rpc<RelativeRow[]>(request, "query", "listRelatives", { personId, kinds });
 }
 
-async function undoMostRecentFromSettings(page: Page, workspaceId: string): Promise<void> {
+async function undoOperationFromSettings(page: Page, workspaceId: string, operationGroupId: string): Promise<void> {
   await openArea(page, workspaceId, "settings");
-  await page.getByRole("button", { name: /^撤销 /u }).first().click();
+  await page.getByRole("button", { name: `撤销 ${operationGroupId}`, exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "确认撤销操作" });
   await dialog.getByLabel(/我确认撤销以上/u).check();
   await dialog.getByRole("button", { name: "确认撤销", exact: true }).click();
@@ -149,10 +231,12 @@ async function undoMostRecentFromSettings(page: Page, workspaceId: string): Prom
 }
 
 async function selectVisibleOption(page: Page, label: string, optionText: string): Promise<void> {
-  const select = page.getByLabel(label, { exact: true });
-  const value = await select.locator("option").filter({ hasText: optionText }).getAttribute("value");
-  if (!value) throw new Error(`Missing ${optionText} option for ${label}`);
-  await select.selectOption(value);
+  await page.getByLabel(label, { exact: true }).selectOption({ label: optionText });
+}
+
+async function personOptionLabel(request: APIRequestContext, personId: string): Promise<string> {
+  const person = await rpc<{ personCode: string; displayName: string }>(request, "query", "getPerson", { personId });
+  return `${person.personCode}｜${person.displayName}`;
 }
 
 async function openTreeBranch(page: Page, workspaceId: string, centerName: string): Promise<void> {
@@ -162,6 +246,38 @@ async function openTreeBranch(page: Page, workspaceId: string, centerName: strin
   await expect(page.getByRole("button", { name: "支系", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("group", { name: `人物：${centerName}`, exact: true })).toBeVisible();
 }
+
+test.beforeAll(async ({ playwright }, testInfo) => {
+  const request = await playwright.request.newContext({ baseURL: configuredBaseUrl(testInfo) });
+  try {
+    baseline = await createBaselineBackup(request);
+  } finally {
+    await request.dispose();
+  }
+});
+
+test.beforeEach(async ({ request }, testInfo) => {
+  activeTestTitle = testInfo.title;
+  activeScenarioName = null;
+  activeWorkspace = await restoreBaseline(request, testInfo.title);
+});
+
+test.afterEach(async () => {
+  if (!activeScenarioName) throw new Error(`Test ${activeTestTitle ?? "unknown"} did not identify its parent-completion scenario`);
+  activeWorkspace = null;
+  activeTestTitle = null;
+  activeScenarioName = null;
+});
+
+test.afterAll(async ({ playwright }, testInfo) => {
+  if (!baseline) return;
+  const request = await playwright.request.newContext({ baseURL: configuredBaseUrl(testInfo) });
+  try {
+    await restoreBaseline(request, "spec-after-all-baseline");
+  } finally {
+    await request.dispose();
+  }
+});
 
 test("普通夫妻新增一个孩子时预览人工与自动两行", async ({ page, request }) => {
   const workspace = await freshFamily(request, "验收-普通夫妻");
@@ -188,10 +304,12 @@ test("普通夫妻新增一个孩子时预览人工与自动两行", async ({ pa
   const childSearch = await rpc<Array<{ id: string }>>(request, "query", "searchPeople", { query: "验收普通孩子", limit: 10 });
   const childParents = await relatives(request, childSearch[0]!.id, ["parent"]);
   expect(childParents.map(({ originKind }) => originKind).sort()).toEqual(["explicit", "spouse_default"]);
+  await createPerson(request, "验收场景隔离标记");
 });
 
 test("管理员取消自动项后只保存明确亲子关系", async ({ page, request }) => {
   const workspace = await freshFamily(request, "验收-取消自动项");
+  expect(await rpc<Array<{ id: string }>>(request, "query", "searchPeople", { query: "验收场景隔离标记", limit: 10 })).toHaveLength(0);
   const father = await createPerson(request, "验收取消父亲", "male");
   const mother = await createPerson(request, "验收取消母亲", "female");
   const child = await createPerson(request, "验收取消孩子", "unknown");
@@ -327,23 +445,23 @@ test("自动关系可移除、更正并通过操作历史整体撤销", async ({
   await openPerson(page, workspace.id, "验收维护孩子");
 
   await page.getByRole("button", { name: "移除母亲 验收维护原母亲", exact: true }).click();
-  await confirmDialog(page);
+  const removeReceipt = await confirmDialog(page);
   expect((await relatives(request, child, ["parent"])).map(({ person }) => person.displayName)).toEqual(["验收维护父亲"]);
   expect(await relatives(request, father, ["spouse"])).toEqual([
     expect.objectContaining({ person: expect.objectContaining({ displayName: "验收维护原母亲" }) })
   ]);
 
-  await undoMostRecentFromSettings(page, workspace.id);
+  await undoOperationFromSettings(page, workspace.id, removeReceipt.operationGroupId);
   expect((await relatives(request, child, ["parent"])).map(({ person }) => person.displayName).sort()).toEqual(["验收维护原母亲", "验收维护父亲"]);
 
   await openPerson(page, workspace.id, "验收维护孩子");
   await page.getByRole("button", { name: "更正母亲 验收维护原母亲", exact: true }).click();
-  await selectVisibleOption(page, "母亲更正为", "验收维护新母亲");
+  await selectVisibleOption(page, "母亲更正为", await personOptionLabel(request, replacementMother));
   await page.getByRole("button", { name: "预览母亲更正", exact: true }).click();
-  await confirmDialog(page);
+  const correctionReceipt = await confirmDialog(page);
   expect((await relatives(request, child, ["parent"])).map(({ person }) => person.displayName).sort()).toEqual(["验收维护新母亲", "验收维护父亲"]);
 
-  await undoMostRecentFromSettings(page, workspace.id);
+  await undoOperationFromSettings(page, workspace.id, correctionReceipt.operationGroupId);
   expect((await relatives(request, child, ["parent"])).map(({ person }) => person.displayName).sort()).toEqual(["验收维护原母亲", "验收维护父亲"]);
 });
 
@@ -385,5 +503,13 @@ test("批修复后家谱树不再把该家庭标为单亲", async ({ page, reque
 
   await openTreeBranch(page, workspace.id, "验收树父亲");
   await expect(page.getByRole("group", { name: "家庭联合：单亲家庭" })).toHaveCount(0);
-  await expect(page.getByRole("group", { name: "家庭联合：婚姻" })).toHaveCount(1);
+  await expect(page.getByRole("group", { name: "家庭联合：婚姻", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "人物：验收树父亲", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "人物：验收树母亲", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "人物：验收树孩子", exact: true })).toBeVisible();
+  const repairedParents = await relatives(request, child, ["parent"]);
+  expect(repairedParents.map((row) => ({ personId: row.person.id, role: row.parentRole })).sort((left, right) => left.role!.localeCompare(right.role!))).toEqual([
+    { personId: father, role: "father" },
+    { personId: mother, role: "mother" }
+  ]);
 });

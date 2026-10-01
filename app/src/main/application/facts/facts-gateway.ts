@@ -92,7 +92,12 @@ export class WorkspaceFactsGateway implements FactsGateway {
   async getPerson(input: { personId: string }): Promise<AppResult<PersonDetailReadModel>> {
     return this.withWorkspace((database, workspaceId) => {
       const queries = new FactQueries(database, workspaceId);
-      const person = queries.getPerson(input.personId);
+      const peopleById = new Map<string, PersonRecord | null>();
+      const getPerson = (personId: string): PersonRecord | null => {
+        if (!peopleById.has(personId)) peopleById.set(personId, queries.getPerson(personId));
+        return peopleById.get(personId) ?? null;
+      };
+      const person = getPerson(input.personId);
       if (!person) throw new GatewayError("NOT_FOUND", "Person was not found", { entityId: input.personId });
       const aliases = queries.listAliases(person.id).map((alias) => alias.name);
       const edges = queries.listParentChild();
@@ -100,10 +105,10 @@ export class WorkspaceFactsGateway implements FactsGateway {
       const marriageById = new Map(marriages.map((marriage) => [marriage.id, marriage]));
       const listItem = (record: PersonRecord): PersonListItem => toListItem(record, queries.listAliases(record.id).map((alias) => alias.name));
       const related = (edge: ParentChildRecord, relatedId: string, role: RelatedPersonReadModel["role"]): RelatedPersonReadModel | null => {
-        const record = queries.getPerson(relatedId);
+        const record = getPerson(relatedId);
         const sourceMarriage = edge.inferredFromMarriageId === null ? null : marriageById.get(edge.inferredFromMarriageId) ?? null;
-        const spouseA = sourceMarriage === null ? null : queries.getPerson(sourceMarriage.spouseAId);
-        const spouseB = sourceMarriage === null ? null : queries.getPerson(sourceMarriage.spouseBId);
+        const spouseA = sourceMarriage === null ? null : getPerson(sourceMarriage.spouseAId);
+        const spouseB = sourceMarriage === null ? null : getPerson(sourceMarriage.spouseBId);
         return record ? {
           relationId: edge.id,
           person: listItem(record),
@@ -132,7 +137,7 @@ export class WorkspaceFactsGateway implements FactsGateway {
         .filter((entry): entry is RelatedPersonReadModel => entry !== null);
       const marriageModels = marriages
         .filter((marriage) => marriage.spouseAId === person.id || marriage.spouseBId === person.id)
-        .map((marriage) => this.marriageReadModel(queries, person.id, marriage))
+        .map((marriage) => this.marriageReadModel(queries, person.id, marriage, getPerson))
         .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
       return {
         person: {
@@ -254,9 +259,14 @@ export class WorkspaceFactsGateway implements FactsGateway {
     return this.withWorkspace((database, workspaceId) => new ParentCompletionService(new FactQueries(database, workspaceId)).scan());
   }
 
-  private marriageReadModel(queries: FactQueries, personId: string, marriage: MarriageRecord): PersonDetailReadModel["marriages"][number] | null {
+  private marriageReadModel(
+    queries: FactQueries,
+    personId: string,
+    marriage: MarriageRecord,
+    getPerson: (personId: string) => PersonRecord | null
+  ): PersonDetailReadModel["marriages"][number] | null {
     const spouseId = marriage.spouseAId === personId ? marriage.spouseBId : marriage.spouseAId;
-    const spouse = queries.getPerson(spouseId);
+    const spouse = getPerson(spouseId);
     if (!spouse) return null;
     return {
       id: marriage.id,
