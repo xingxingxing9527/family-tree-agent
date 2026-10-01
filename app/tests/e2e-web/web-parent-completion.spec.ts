@@ -1,13 +1,23 @@
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { suiteBaselinePersonName } from "./global-setup";
 import { ensureFamily, openArea, rpc, stageAndConfirm } from "./helpers";
 
 interface Workspace { id: string; name: string }
 interface Result<T> { ok: boolean; value?: T; error?: { message: string } }
+interface BackupCounts {
+  people: number;
+  parentChild: number;
+  marriages: number;
+  wikiEntries: number;
+  auditRows: number;
+  mediaAssets: number;
+}
 interface BackupInspection {
   restoreToken: string;
   targetWorkspaceId: string;
   verified: true;
-  manifest: { workspaceId: string };
+  manifest: { workspaceId: string; counts: BackupCounts };
 }
 interface PartialDate {
   calendar: "solar" | "lunar";
@@ -25,6 +35,33 @@ interface RelativeRow {
   originKind?: "explicit" | "spouse_default";
   inferredFromMarriageId?: string | null;
 }
+interface WorkspaceSnapshot {
+  workspaceId: string;
+  people: Array<{ id: string; displayName: string }>;
+  sources: unknown[];
+  lineages: unknown[];
+}
+interface TreeProjection {
+  topology: {
+    nodes: Array<
+      | { id: string; kind: "person"; personId: string }
+      | { id: string; kind: "union"; unionId: string; display: { kind: "marriage" | "coParents" | "singleParent" | "unassigned" } }
+    >;
+    edges: Array<{ source: string; target: string; kind: "parentUnion" | "unionChild" }>;
+  };
+}
+interface SuiteStateGuard {
+  fingerprint: string;
+  counts: {
+    people: number;
+    sources: number;
+    lineages: number;
+    treeNodes: number;
+    treeEdges: number;
+    wikiEntries: number;
+    auditGroups: number;
+  };
+}
 
 const solar = (year: number, month: number, day: number | null = null): PartialDate => ({
   calendar: "solar",
@@ -35,7 +72,7 @@ const solar = (year: number, month: number, day: number | null = null): PartialD
   precision: day === null ? "month" : "day"
 });
 
-let baseline: { workspace: Workspace; bytes: Buffer } | null = null;
+let baseline: { workspace: Workspace; bytes: Buffer; backupCounts: BackupCounts; state: SuiteStateGuard } | null = null;
 let activeWorkspace: Workspace | null = null;
 let activeTestTitle: string | null = null;
 let activeScenarioName: string | null = null;
@@ -48,25 +85,59 @@ function configuredBaseUrl(testInfo: TestInfo): string {
   return baseURL;
 }
 
-async function createBaselineBackup(request: APIRequestContext): Promise<{ workspace: Workspace; bytes: Buffer }> {
-  const workspace = await ensureFamily(request);
-  const initialSnapshot = await rpc<{ people: Array<{ id: string }> }>(request, "query", "workspaceSnapshot");
-  if (initialSnapshot.people.length === 0) {
-    await createPerson(request, "父母补全隔离基准人物");
-    console.info(`[parent-completion fixture] created minimal origin for workspace=${workspace.id}`);
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right), "en"));
   }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right, "en")).map(([key, entry]) => [key, canonicalize(entry)]));
+  }
+  return value;
+}
+
+async function captureSuiteState(request: APIRequestContext): Promise<SuiteStateGuard> {
+  const [snapshot, tree, wiki, audit] = await Promise.all([
+    rpc<WorkspaceSnapshot>(request, "query", "workspaceSnapshot"),
+    rpc<TreeProjection>(request, "query", "projectTree", { view: "full", collapseDepth: 20 }),
+    rpc<unknown[]>(request, "wiki", "list", { limit: 100, offset: 0 }),
+    rpc<unknown[]>(request, "dataManagement", "listAudit")
+  ]);
+  const state = canonicalize({ snapshot, tree, wiki, audit });
+  return {
+    fingerprint: createHash("sha256").update(JSON.stringify(state)).digest("hex"),
+    counts: {
+      people: snapshot.people.length,
+      sources: snapshot.sources.length,
+      lineages: snapshot.lineages.length,
+      treeNodes: tree.topology.nodes.length,
+      treeEdges: tree.topology.edges.length,
+      wikiEntries: wiki.length,
+      auditGroups: audit.length
+    }
+  };
+}
+
+async function createBaselineBackup(request: APIRequestContext): Promise<{ workspace: Workspace; bytes: Buffer; backupCounts: BackupCounts; state: SuiteStateGuard }> {
+  const workspace = await ensureFamily(request);
+  const initialSnapshot = await rpc<WorkspaceSnapshot>(request, "query", "workspaceSnapshot");
+  const suiteBaselinePeople = initialSnapshot.people.filter((person) => person.displayName === suiteBaselinePersonName);
+  if (initialSnapshot.people.length === 0 || suiteBaselinePeople.length !== 1) {
+    throw new Error(`Expected one non-empty suite baseline named ${suiteBaselinePersonName}; found ${suiteBaselinePeople.length} in ${initialSnapshot.people.length} people`);
+  }
+  const state = await captureSuiteState(request);
   const created = await rpc<{
     saved: boolean;
     verified?: true;
+    counts?: BackupCounts;
     download?: { downloadUrl: string; fileName: string };
   }>(request, "dataManagement", "createBackup");
-  if (!created.saved || created.verified !== true || !created.download) throw new Error("Unable to create verified parent-completion baseline backup");
+  if (!created.saved || created.verified !== true || !created.download || !created.counts) throw new Error("Unable to create verified parent-completion baseline backup");
   const downloaded = await request.get(created.download.downloadUrl);
   if (!downloaded.ok()) throw new Error(`Unable to download parent-completion baseline backup: HTTP ${downloaded.status()}`);
   const bytes = await downloaded.body();
   if (bytes.length === 0 || bytes.subarray(0, 2).toString("ascii") !== "PK") throw new Error("Parent-completion baseline backup is not a non-empty ZIP archive");
-  console.info(`[parent-completion fixture] baseline workspace=${workspace.id} bytes=${bytes.length}`);
-  return { workspace, bytes };
+  console.info(`[parent-completion fixture] baseline workspace=${workspace.id} bytes=${bytes.length} people=${state.counts.people} fingerprint=${state.fingerprint}`);
+  return { workspace, bytes, backupCounts: created.counts, state };
 }
 
 async function restoreBaseline(request: APIRequestContext, scenarioName: string): Promise<Workspace> {
@@ -85,7 +156,12 @@ async function restoreBaseline(request: APIRequestContext, scenarioName: string)
     fileToken: uploaded.value.fileToken,
     targetWorkspaceId: baseline.workspace.id
   });
-  if (inspection.verified !== true || inspection.targetWorkspaceId !== baseline.workspace.id || inspection.manifest.workspaceId !== baseline.workspace.id) {
+  if (
+    inspection.verified !== true ||
+    inspection.targetWorkspaceId !== baseline.workspace.id ||
+    inspection.manifest.workspaceId !== baseline.workspace.id ||
+    JSON.stringify(inspection.manifest.counts) !== JSON.stringify(baseline.backupCounts)
+  ) {
     throw new Error(`Baseline backup workspace mismatch for ${scenarioName}`);
   }
   if (restoreTokens.has(inspection.restoreToken)) throw new Error(`Backup restore token was reused for ${scenarioName}`);
@@ -100,7 +176,11 @@ async function restoreBaseline(request: APIRequestContext, scenarioName: string)
   const workspace = await ensureFamily(request);
   const snapshot = await rpc<{ workspaceId: string }>(request, "query", "workspaceSnapshot");
   if (workspace.id !== baseline.workspace.id || snapshot.workspaceId !== baseline.workspace.id) throw new Error(`Restored the wrong workspace for ${scenarioName}`);
-  console.info(`[parent-completion fixture] restored scenario="${scenarioName}" workspace=${workspace.id}`);
+  const restoredState = await captureSuiteState(request);
+  if (restoredState.fingerprint !== baseline.state.fingerprint || JSON.stringify(restoredState.counts) !== JSON.stringify(baseline.state.counts)) {
+    throw new Error(`Suite state mismatch after restoring ${scenarioName}: expected ${baseline.state.fingerprint}/${JSON.stringify(baseline.state.counts)}, received ${restoredState.fingerprint}/${JSON.stringify(restoredState.counts)}`);
+  }
+  console.info(`[parent-completion fixture] restored scenario="${scenarioName}" workspace=${workspace.id} people=${restoredState.counts.people} fingerprint=${restoredState.fingerprint}`);
   return workspace;
 }
 
@@ -274,6 +354,7 @@ test.afterAll(async ({ playwright }, testInfo) => {
   const request = await playwright.request.newContext({ baseURL: configuredBaseUrl(testInfo) });
   try {
     await restoreBaseline(request, "spec-after-all-baseline");
+    console.info(`[parent-completion fixture] final suite state restored people=${baseline.state.counts.people} fingerprint=${baseline.state.fingerprint}`);
   } finally {
     await request.dispose();
   }
@@ -490,7 +571,7 @@ test("批修复后家谱树不再把该家庭标为单亲", async ({ page, reque
   const father = await createPerson(request, "验收树父亲", "male");
   const mother = await createPerson(request, "验收树母亲", "female");
   const child = await createPerson(request, "验收树孩子");
-  await createMarriage(request, father, mother);
+  const marriage = await createMarriage(request, father, mother);
   await createExplicitParent(request, father, child, "father");
 
   await openTreeBranch(page, workspace.id, "验收树父亲");
@@ -507,6 +588,21 @@ test("批修复后家谱树不再把该家庭标为单亲", async ({ page, reque
   await expect(page.getByRole("group", { name: "人物：验收树父亲", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "人物：验收树母亲", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "人物：验收树孩子", exact: true })).toBeVisible();
+  const projection = await rpc<TreeProjection>(request, "query", "projectTree", { view: "branch", subjectId: father });
+  const fatherNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === father);
+  const motherNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === mother);
+  const childNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === child);
+  const marriageUnions = projection.topology.nodes.filter((node) => node.kind === "union" && node.unionId === `marriage:${marriage}` && node.display.kind === "marriage");
+  expect(fatherNodes).toHaveLength(1);
+  expect(motherNodes).toHaveLength(1);
+  expect(childNodes).toHaveLength(1);
+  expect(marriageUnions).toHaveLength(1);
+  const targetUnionId = marriageUnions[0]!.id;
+  expect(projection.topology.edges.filter((edge) => edge.kind === "parentUnion" && edge.target === targetUnionId).map((edge) => edge.source).sort()).toEqual([
+    fatherNodes[0]!.id,
+    motherNodes[0]!.id
+  ].sort());
+  expect(projection.topology.edges.filter((edge) => edge.kind === "unionChild" && edge.source === targetUnionId).map((edge) => edge.target)).toContain(childNodes[0]!.id);
   const repairedParents = await relatives(request, child, ["parent"]);
   expect(repairedParents.map((row) => ({ personId: row.person.id, role: row.parentRole })).sort((left, right) => left.role!.localeCompare(right.role!))).toEqual([
     { personId: father, role: "father" },
