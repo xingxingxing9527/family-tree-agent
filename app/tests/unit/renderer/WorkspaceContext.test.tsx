@@ -3,8 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import React, { useRef, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiProvider } from "../../../src/renderer/src/app/ApiContext";
 import { WorkspaceProvider, useWorkspace, type MutationRefreshOutcome, type PreparedMutationRefresh } from "../../../src/renderer/src/app/WorkspaceContext";
-import type { AppResult, DesktopApi, WorkspaceSummary } from "../../../src/shared/contracts";
+import type { AppResult, FamilyAgentApi, WorkspaceSummary } from "../../../src/shared/contracts";
 
 const workspaceA: WorkspaceSummary = {
   id: "11111111-1111-4111-8111-111111111111", name: "甲谱", directory: "opaque-a",
@@ -62,16 +63,22 @@ function Harness(): React.JSX.Element {
   </>;
 }
 
-function installApi(overrides: Partial<DesktopApi["workspaces"]>): DesktopApi["workspaces"] {
+let installedApi: FamilyAgentApi;
+
+function installApi(overrides: Partial<FamilyAgentApi["workspaces"]>): FamilyAgentApi["workspaces"] {
   const workspaces = {
     list: vi.fn().mockResolvedValue({ ok: true, value: [] }),
     create: vi.fn().mockResolvedValue({ ok: true, value: workspaceA }),
     open: vi.fn(async ({ id }: { id: string }) => ({ ok: true as const, value: id === workspaceB.id ? workspaceB : workspaceA })),
     close: vi.fn().mockResolvedValue({ ok: true, value: null }),
     ...overrides
-  } as DesktopApi["workspaces"];
-  window.desktopApi = { workspaces } as DesktopApi;
+  } as FamilyAgentApi["workspaces"];
+  installedApi = { workspaces } as FamilyAgentApi;
   return workspaces;
+}
+
+function renderHarness(): ReturnType<typeof render> {
+  return render(<ApiProvider api={installedApi}><WorkspaceProvider><Harness /></WorkspaceProvider></ApiProvider>);
 }
 
 beforeEach(() => { (globalThis as typeof globalThis & { React: typeof React }).React = React; });
@@ -81,7 +88,7 @@ describe("WorkspaceContext request ownership", () => {
   it("settles loading and preserves a created workspace when the initial list resolves last", async () => {
     const listing = deferred<AppResult<WorkspaceSummary[]>>();
     installApi({ list: vi.fn(() => listing.promise) });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
 
     fireEvent.click(screen.getByRole("button", { name: "create" }));
     await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
@@ -98,7 +105,7 @@ describe("WorkspaceContext request ownership", () => {
       list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceB] }),
       create: vi.fn(() => creating.promise)
     });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
     await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
 
     fireEvent.click(screen.getByRole("button", { name: "create" }));
@@ -119,7 +126,7 @@ describe("WorkspaceContext request ownership", () => {
         ? openingB.promise
         : Promise.resolve({ ok: true as const, value: workspaceA }))
     });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
     await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
 
     fireEvent.click(screen.getByRole("button", { name: "open-a" }));
@@ -138,7 +145,7 @@ describe("WorkspaceContext request ownership", () => {
 
   it("refreshes and increments the mutation epoch for a same-workspace completion without newer navigation", async () => {
     const api = installApi({ list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }) });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
     await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
     fireEvent.click(screen.getByRole("button", { name: "open-a" }));
     await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
@@ -153,7 +160,7 @@ describe("WorkspaceContext request ownership", () => {
 
   it("treats a committed restore targeting B as explicit navigation to B", async () => {
     const api = installApi({ list: vi.fn().mockResolvedValue({ ok: true, value: [workspaceA, workspaceB] }) });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
     await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
     fireEvent.click(screen.getByRole("button", { name: "open-a" }));
     await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));
@@ -175,7 +182,7 @@ describe("WorkspaceContext request ownership", () => {
         ? openingB.promise
         : Promise.resolve({ ok: true as const, value: workspaceA }))
     });
-    render(<WorkspaceProvider><Harness /></WorkspaceProvider>);
+    renderHarness();
     await waitFor(() => expect(screen.getByLabelText("loading")).toHaveTextContent("idle"));
     fireEvent.click(screen.getByRole("button", { name: "open-a" }));
     await waitFor(() => expect(screen.getByLabelText("active")).toHaveTextContent(workspaceA.id));

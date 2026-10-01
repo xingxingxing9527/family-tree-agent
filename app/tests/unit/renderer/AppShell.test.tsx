@@ -4,7 +4,8 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../../src/renderer/src/App";
-import type { DesktopApi, WorkspaceSummary } from "../../../src/shared/contracts";
+import { ApiProvider } from "../../../src/renderer/src/app/ApiContext";
+import type { FamilyAgentApi, WorkspaceSummary } from "../../../src/shared/contracts";
 
 const workspaceA: WorkspaceSummary = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -56,8 +57,12 @@ function desktopApi(workspaces: WorkspaceSummary[]) {
     chat: { authorize: vi.fn(), stageMutation: vi.fn(), ask: vi.fn(), confirm: vi.fn(), revise: vi.fn() },
     modelSettings: { status: vi.fn().mockResolvedValue({ ok: true, value: { configured: false } }), saveKey: vi.fn(), clearKey: vi.fn() },
     dataManagement: { listAudit: vi.fn().mockResolvedValue({ ok: true, value: [] }), undoOperationGroup: vi.fn(), createBackup: vi.fn(), listRestoreTargets: vi.fn().mockResolvedValue({ ok: true, value: workspaces }), selectRestoreFile: vi.fn(), inspectBackup: vi.fn(), restoreBackup: vi.fn(), exportWorkspace: vi.fn() }
-  } as unknown as DesktopApi;
+  } as unknown as FamilyAgentApi;
   return { api, open };
+}
+
+function renderApp(api: FamilyAgentApi): ReturnType<typeof render> {
+  return render(<ApiProvider api={api}><App /></ApiProvider>);
 }
 
 beforeEach(() => {
@@ -70,10 +75,9 @@ afterEach(cleanup);
 describe("complete application shell", () => {
   it("renders the six first-level areas for a validated packaged-app hash route", async () => {
     const { api } = desktopApi([workspaceA]);
-    window.desktopApi = api;
     window.location.hash = `#/workspace/${workspaceA.id}/tree`;
 
-    render(<App />);
+    renderApp(api);
 
     const navigation = await screen.findByRole("navigation", { name: "一级导航" });
     for (const label of ["首页", "家谱树", "人物库", "录入中心", "家族 Wiki", "设置与数据"]) {
@@ -84,10 +88,9 @@ describe("complete application shell", () => {
 
   it("opens the deep-linked workspace before rendering workspace-scoped data", async () => {
     const { api, open } = desktopApi([workspaceA, workspaceB]);
-    window.desktopApi = api;
     window.location.hash = `#/workspace/${workspaceB.id}/people`;
 
-    render(<App />);
+    renderApp(api);
 
     await waitFor(() => expect(open).toHaveBeenCalled());
     expect(open.mock.calls[0]?.[0]).toEqual({ id: workspaceB.id });
@@ -103,9 +106,8 @@ describe("complete application shell", () => {
     vi.mocked(api.people.get).mockResolvedValue({ ok: true, value: { person, aliases: [], parents: [], children: [], marriages: [] } });
     vi.mocked(api.chat.authorize).mockResolvedValue({ ok: true, value: { authorizationToken: "token" } });
     vi.mocked(api.chat.ask).mockResolvedValue({ ok: true, value: { answer: "本人", matchedPersonIds: [person.id], sourceIds: [], relationship: null, toolTrace: [] } });
-    window.desktopApi = api;
     window.location.hash = `#/workspace/${workspaceA.id}/tree`;
-    render(<App />);
+    renderApp(api);
 
     const search = await screen.findByLabelText("搜索当前谱册人物");
     fireEvent.change(search, { target: { value: "甲家人" } });
@@ -141,9 +143,8 @@ describe("complete application shell", () => {
       }
     } });
     vi.mocked(api.dataManagement.restoreBackup).mockResolvedValue({ ok: true, value: { restored: true, automaticSnapshotVerified: true, cleanupPending: false } });
-    window.desktopApi = api;
     window.location.hash = `#/workspace/${workspaceA.id}/settings`;
-    render(<App />);
+    renderApp(api);
 
     await screen.findByRole("heading", { name: "设置与数据" });
     fireEvent.click(screen.getByRole("button", { name: "选择备份文件" }));

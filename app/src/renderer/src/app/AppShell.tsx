@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type JSX } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { ConversationAnswer } from "../../../shared/chat";
-import type { DesktopApi, PersonCandidate, WorkspaceSnapshotDto, WorkspaceSummary } from "../../../shared/contracts";
+import type { PersonCandidate, WorkspaceSnapshotDto, WorkspaceSummary } from "../../../shared/contracts";
 import { ChatPanel } from "../features/chat/ChatPanel";
 import { EntryCenterPage } from "../features/import/EntryCenterPage";
 import { PeoplePage } from "../features/people/PeoplePage";
@@ -9,6 +9,7 @@ import { SettingsPage } from "../features/settings/SettingsPage";
 import { FamilyTreePage } from "../features/tree/FamilyTreePage";
 import { WikiPage } from "../features/wiki/WikiPage";
 import { ViewpointProvider, useViewpoint } from "./ViewpointContext";
+import { useApi } from "./ApiContext";
 import { useWorkspace, type MutationRefreshOutcome, type PreparedMutationRefresh } from "./WorkspaceContext";
 import "./app-shell.css";
 
@@ -20,7 +21,7 @@ const areas: Array<{ id: Area; label: string }> = [
 const conversationSessionId = (): string => globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now().toString(36)}`;
 
 function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: WorkspaceSummary; snapshot: WorkspaceSnapshotDto; refreshSnapshot(): void }): JSX.Element {
-  const api = window.desktopApi;
+  const api = useApi();
   const { viewpointId, setViewpointId } = useViewpoint();
   const location = useLocation();
   const navigate = useNavigate();
@@ -111,7 +112,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
 }
 
 export function AppShell({ workspace }: { workspace: WorkspaceSummary }): JSX.Element {
-  const api = window.desktopApi;
+  const api = useApi();
   const { mutationEpoch } = useWorkspace();
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshotDto | null>(null);
   const [error, setError] = useState<string | null>(null);

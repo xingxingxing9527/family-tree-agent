@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppResult, DesktopApi, PersonDetailReadModel, PersonDraft } from "../../../src/shared/contracts";
+import type { AppResult, FamilyAgentApi, PersonDetailReadModel, PersonDraft } from "../../../src/shared/contracts";
 import { PersonEditor } from "../../../src/renderer/src/features/people/PersonEditor";
 
 afterEach(cleanup);
@@ -29,7 +29,7 @@ function createPeopleApi(
     ok: true,
     value: { entityId: "person-1", saved: true, warnings: [] }
   }
-): DesktopApi["people"] {
+): FamilyAgentApi["people"] {
   return {
     list: vi.fn(),
     get: vi.fn().mockResolvedValue({ ok: true, value: savedDetail }),

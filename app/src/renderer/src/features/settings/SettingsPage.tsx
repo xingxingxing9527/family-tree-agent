@@ -1,5 +1,5 @@
 import React, { type JSX } from "react";
-import type { DesktopApi, PersonListItem, WorkspaceLineageReadModel } from "../../../../shared/contracts";
+import type { FamilyAgentApi, PersonListItem, WorkspaceLineageReadModel } from "../../../../shared/contracts";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 import { LineageSettings } from "../lineages/LineageSettings";
 import { DataManagementPage } from "./DataManagementPage";
@@ -7,7 +7,7 @@ import { ModelSettings } from "./ModelSettings";
 import { PrivacyWarning } from "./PrivacyWarning";
 
 export function SettingsPage({ api, people, lineages, refreshToken, prepareMutation, onChanged }: {
-  api: DesktopApi;
+  api: FamilyAgentApi;
   people: PersonListItem[];
   lineages: WorkspaceLineageReadModel[];
   refreshToken?: number;

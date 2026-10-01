@@ -1,10 +1,10 @@
 import React, { useState, type FormEvent, type JSX } from "react";
-import type { DesktopApi, DomainWarningDto, PersonDetailReadModel, PersonDraft } from "../../../../shared/contracts";
+import type { FamilyAgentApi, DomainWarningDto, PersonDetailReadModel, PersonDraft } from "../../../../shared/contracts";
 import { PartialDateField } from "./PartialDateField";
 import "./people.css";
 
 interface PersonEditorProps {
-  api: DesktopApi["people"];
+  api: FamilyAgentApi["people"];
   personId?: string;
   expectedVersion?: number;
   initialValue?: PersonDraft;

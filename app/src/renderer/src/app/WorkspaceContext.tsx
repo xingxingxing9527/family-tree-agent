@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import type { WorkspaceSummary } from "../../../shared/contracts";
+import { useApi } from "./ApiContext";
 
 export type MutationRefreshOutcome =
   | { status: "refreshed"; workspace: WorkspaceSummary }
@@ -30,6 +31,7 @@ export interface WorkspaceState {
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.Element {
+  const api = useApi();
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,14 +60,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     const activeRequest = ++listRequestId.current;
     setLoading(true);
     try {
-      const result = await window.desktopApi.workspaces.list();
+      const result = await api.workspaces.list();
       if (activeRequest !== listRequestId.current) return;
       if (!result.ok) { setError(result.error.message); return; }
       setWorkspaces(result.value);
       setError(null);
     } catch { if (activeRequest === listRequestId.current) setError("无法读取本地谱册"); }
     finally { if (activeRequest === listRequestId.current) setLoading(false); }
-  }, []);
+  }, [api]);
 
   useEffect(() => { void refresh(); return () => { listRequestId.current += 1; switchRequestId.current += 1; refreshRequestId.current += 1; }; }, [refresh]);
 
@@ -75,7 +77,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     if (clearActive) { activeWorkspaceRef.current = null; setActiveWorkspace(null); }
     setError(null);
     try {
-      const result = await window.desktopApi.workspaces.open({ id });
+      const result = await api.workspaces.open({ id });
       if (activeRequest !== switchRequestId.current) return null;
       if (!result.ok) { setError(result.error.message); return null; }
       activeWorkspaceRef.current = result.value;
@@ -92,7 +94,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
         setSwitching(false);
       }
     }
-  }, [upsertWorkspace]);
+  }, [api, upsertWorkspace]);
 
   const openWorkspace = useCallback(async (id: string): Promise<WorkspaceSummary | null> => {
     supersedeList();
@@ -107,7 +109,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     setSwitching(true);
     setError(null);
     try {
-      const result = await window.desktopApi.workspaces.create({ name });
+      const result = await api.workspaces.create({ name });
       if (!result.ok) {
         if (activeRequest === switchRequestId.current) setError(result.error.message);
         return null;
@@ -124,7 +126,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
         setSwitching(false);
       }
     }
-  }, [performOpen, supersedeList, upsertWorkspace]);
+  }, [api, performOpen, supersedeList, upsertWorkspace]);
 
   const closeWorkspace = useCallback(async (): Promise<boolean> => {
     supersedeList();
@@ -132,7 +134,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     const activeRequest = ++switchRequestId.current;
     setSwitching(true);
     try {
-      const result = await window.desktopApi.workspaces.close();
+      const result = await api.workspaces.close();
       if (activeRequest !== switchRequestId.current) return false;
       if (!result.ok) { setError(result.error.message); return false; }
       activeWorkspaceRef.current = null;
@@ -145,7 +147,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
         setSwitching(false);
       }
     }
-  }, [supersedeList]);
+  }, [api, supersedeList]);
 
   const prepareMutation = useCallback((sourceWorkspaceId: string, requestedTargetWorkspaceId?: string): PreparedMutationRefresh => {
     const targetWorkspaceId = requestedTargetWorkspaceId ?? sourceWorkspaceId;
@@ -172,7 +174,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
         setSwitching(true);
         setError(null);
         try {
-          const result = await window.desktopApi.workspaces.open({ id: targetWorkspaceId });
+          const result = await api.workspaces.open({ id: targetWorkspaceId });
           if (activeRequest !== switchRequestId.current) return { status: "superseded" };
           if (!result.ok) return { status: "refresh-failed" };
           activeWorkspaceRef.current = result.value;
@@ -193,7 +195,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
 
       const activeRefresh = ++refreshRequestId.current;
       try {
-        const result = await window.desktopApi.workspaces.open({ id: sourceWorkspaceId });
+        const result = await api.workspaces.open({ id: sourceWorkspaceId });
         if (
           activeRefresh !== refreshRequestId.current ||
           sourceNavigationEpoch !== switchRequestId.current ||
@@ -215,7 +217,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
     };
 
     return { complete: runRefresh, retry: runRefresh };
-  }, [supersedeList, upsertWorkspace]);
+  }, [api, supersedeList, upsertWorkspace]);
 
   const value = useMemo<WorkspaceState>(() => ({
     workspaces, activeWorkspace, loading, switching, mutationEpoch, error, refresh, createWorkspace, openWorkspace, closeWorkspace, prepareMutation,

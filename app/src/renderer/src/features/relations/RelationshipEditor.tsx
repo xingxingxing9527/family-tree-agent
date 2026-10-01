@@ -1,12 +1,12 @@
 import React, { useMemo, useRef, useState, type JSX } from "react";
-import type { DesktopApi, DomainWarningDto, MarriageDraft, ParentChildDraft, PersonListItem } from "../../../../shared/contracts";
+import type { FamilyAgentApi, DomainWarningDto, MarriageDraft, ParentChildDraft, PersonListItem } from "../../../../shared/contracts";
 import type { PartialDate } from "../../../../shared/domain";
 import { PartialDateField } from "../people/PartialDateField";
 
 interface RelationshipEditorProps {
   people: PersonListItem[];
-  peopleApi: DesktopApi["people"];
-  relationsApi: DesktopApi["relations"];
+  peopleApi: FamilyAgentApi["people"];
+  relationsApi: FamilyAgentApi["relations"];
   onSaved(): Promise<void>;
 }
 

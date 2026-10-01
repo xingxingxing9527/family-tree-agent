@@ -1,13 +1,13 @@
 import React, { type JSX } from "react";
-import type { DesktopApi, PersonDetailReadModel } from "../../../../shared/contracts";
+import type { FamilyAgentApi, PersonDetailReadModel } from "../../../../shared/contracts";
 import { MarriageHistory } from "../relations/MarriageHistory";
 import { formatPartialDate } from "./format-partial-date";
 import { MediaGallery } from "./MediaGallery";
 
 interface PersonDetailProps {
   detail: PersonDetailReadModel;
-  relationsApi: DesktopApi["relations"];
-  mediaApi: DesktopApi["media"];
+  relationsApi: FamilyAgentApi["relations"];
+  mediaApi: FamilyAgentApi["media"];
   onEdit(): void;
   onChanged(): Promise<void>;
 }

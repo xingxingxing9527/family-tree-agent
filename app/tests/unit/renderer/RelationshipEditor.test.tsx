@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopApi, PersonListItem } from "../../../src/shared/contracts";
+import type { FamilyAgentApi, PersonListItem } from "../../../src/shared/contracts";
 import { RelationshipEditor } from "../../../src/renderer/src/features/relations/RelationshipEditor";
 import { MarriageHistory } from "../../../src/renderer/src/features/relations/MarriageHistory";
 
@@ -15,7 +15,7 @@ const people: PersonListItem[] = [
   { id: "child-2", displayName: "张伟", aliases: [], gender: "male", birth: null, death: null, notes: null, rowVersion: 1 }
 ];
 
-function createApis(): { peopleApi: DesktopApi["people"]; relationsApi: DesktopApi["relations"] } {
+function createApis(): { peopleApi: FamilyAgentApi["people"]; relationsApi: FamilyAgentApi["relations"] } {
   return {
     peopleApi: {
       list: vi.fn().mockResolvedValue({ ok: true, value: people }),

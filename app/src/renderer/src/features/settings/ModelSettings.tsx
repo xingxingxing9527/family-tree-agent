@@ -1,7 +1,7 @@
 import React, { useEffect, useState, type FormEvent, type JSX } from "react";
-import type { DesktopApi } from "../../../../shared/contracts";
+import type { FamilyAgentApi } from "../../../../shared/contracts";
 
-export function ModelSettings({ api }: { api: DesktopApi["modelSettings"] }): JSX.Element {
+export function ModelSettings({ api }: { api: FamilyAgentApi["modelSettings"] }): JSX.Element {
   const [configured, setConfigured] = useState(false); const [key, setKey] = useState(""); const [message, setMessage] = useState("");
   const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
   useEffect(() => {

@@ -1,13 +1,13 @@
 import React, { useMemo, useState, type FormEvent, type JSX } from "react";
 import { Link } from "react-router-dom";
-import type { DesktopApi, PersonCandidate, PersonListItem } from "../../../../shared/contracts";
+import type { FamilyAgentApi, PersonCandidate, PersonListItem } from "../../../../shared/contracts";
 import type { ConversationDraftPreview } from "../../../../shared/chat";
 import { MutationDraftPreview } from "../chat/MutationDraftPreview";
 import { OnlineModelDisclosure } from "../chat/OnlineModelDisclosure";
 import { ImportPage } from "./ImportPage";
 
 type EntryMode = "manual" | "spreadsheet" | "conversation";
-interface EntryCenterPageProps { workspaceId: string; api: DesktopApi; people: PersonListItem[]; onChanged(): void; }
+interface EntryCenterPageProps { workspaceId: string; api: FamilyAgentApi; people: PersonListItem[]; onChanged(): void; }
 
 const sessionId = (): string => globalThis.crypto?.randomUUID?.() ?? `session-${Date.now().toString(36)}`;
 

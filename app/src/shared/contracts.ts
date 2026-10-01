@@ -479,7 +479,7 @@ export interface DataManagementApi {
   exportWorkspace(): Promise<AppResult<{ saved: boolean; files?: number; mediaAssets?: number }>>;
 }
 
-export interface DesktopApi {
+export interface FamilyAgentApi {
   app: { getVersion(): Promise<string> };
   workspaces: {
     list(): Promise<AppResult<WorkspaceSummary[]>>;
@@ -518,3 +518,5 @@ export interface DesktopApi {
   };
   dataManagement: DataManagementApi;
 }
+
+export type DesktopApi = FamilyAgentApi;

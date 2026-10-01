@@ -1,12 +1,12 @@
 import React, { useState, type JSX } from "react";
-import type { DesktopApi, MarriageReadModel } from "../../../../shared/contracts";
+import type { FamilyAgentApi, MarriageReadModel } from "../../../../shared/contracts";
 import type { PartialDate } from "../../../../shared/domain";
 import { PartialDateField } from "../people/PartialDateField";
 import { formatPartialDate } from "../people/format-partial-date";
 
 interface MarriageHistoryProps {
   marriages: MarriageReadModel[];
-  api: DesktopApi["relations"];
+  api: FamilyAgentApi["relations"];
   onChanged(): Promise<void>;
 }
 

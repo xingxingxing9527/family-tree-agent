@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import type { DesktopApi, PersonDetailReadModel, PersonDraft, PersonListItem, WorkspaceSummary } from "../../../../shared/contracts";
+import type { FamilyAgentApi, PersonDetailReadModel, PersonDraft, PersonListItem, WorkspaceSummary } from "../../../../shared/contracts";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
@@ -10,7 +10,7 @@ import "./people.css";
 
 interface PeoplePageProps {
   workspace: WorkspaceSummary;
-  api: DesktopApi;
+  api: FamilyAgentApi;
   initialSelectedPersonId?: string | null;
   onDataChanged?(): void;
   prepareMutation?(): PreparedMutationRefresh;
