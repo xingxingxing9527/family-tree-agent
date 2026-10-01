@@ -77,7 +77,7 @@ export class FamilyAgentService implements FamilyAgentApi {
     const keys = new MemoryModelKeyStore(options.initialModelKey ?? process.env.FAMILY_AGENT_OPENAI_API_KEY?.trim() ?? null);
     const modelFactory = options.modelFactory ?? ((apiKey: string) => new OpenAIResponsesAdapter({ apiKey, model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini" }));
     this.chatGateway = new WorkspaceChatGateway(runtime.workspaceManager, keys, modelFactory);
-    this.restoreManager = options.uploads ? new BrowserRestoreManager(runtime, options.uploads, () => this.disposeMutationSession()) : null;
+    this.restoreManager = options.uploads ? new BrowserRestoreManager(runtime, options.uploads, () => this.disposeWorkspaceSessions()) : null;
     const gated = <T>(operation: () => Promise<T>): Promise<T> => runtime.mutationGate.runOperation(operation);
 
     this.app = { getVersion: async () => "1.0.0" };
@@ -193,9 +193,8 @@ export class FamilyAgentService implements FamilyAgentApi {
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    this.chatGateway.dispose();
+    this.disposeWorkspaceSessions();
     await this.restoreManager?.dispose();
-    this.disposeMutationSession();
   }
 
   private async listAudit(): ReturnType<FamilyAgentApi["dataManagement"]["listAudit"]> {
@@ -243,6 +242,11 @@ export class FamilyAgentService implements FamilyAgentApi {
   private disposeMutationSession(): void {
     this.mutationSession?.database.close();
     this.mutationSession = null;
+  }
+
+  private disposeWorkspaceSessions(): void {
+    this.chatGateway.dispose();
+    this.disposeMutationSession();
   }
 
   private async parseUploadedImport(input: Parameters<FamilyAgentApi["imports"]["parse"]>[0], uploads?: UploadStore): ReturnType<FamilyAgentApi["imports"]["parse"]> {

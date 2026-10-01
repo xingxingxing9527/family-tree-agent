@@ -65,7 +65,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }): JSX.El
       if (!result.ok) { setError(result.error.message); return; }
       setWorkspaces(result.value);
       setError(null);
-    } catch { if (activeRequest === listRequestId.current) setError("无法读取本地谱册"); }
+    } catch { if (activeRequest === listRequestId.current) setError("无法读取家谱，请检查网页服务是否正常"); }
     finally { if (activeRequest === listRequestId.current) setLoading(false); }
   }, [api]);
 

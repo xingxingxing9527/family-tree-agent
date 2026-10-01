@@ -8,6 +8,12 @@ export interface AuditHistoryProps {
   prepareMutation?(): PreparedMutationRefresh;
 }
 
+const statusLabel: Record<AuditOperationGroupDto["status"], string> = {
+  available: "可撤销",
+  undone: "已撤销",
+  blocked: "不可撤销"
+};
+
 export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistoryProps): JSX.Element {
   const [groups, setGroups] = useState<AuditOperationGroupDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +66,7 @@ export function AuditHistory({ api, refreshToken, prepareMutation }: AuditHistor
     {refreshWarning && <div role="alert"><p>撤销已提交，但界面刷新失败。请勿重复撤销。</p><button type="button" onClick={() => void retryRefresh()}>重新刷新界面</button></div>}
     {groups.length === 0 ? <p>暂无操作记录</p> : <ul>
       {groups.map((group) => <li key={group.id}>
-        <p>{group.kind} · {group.createdAt} · {group.status}</p>
+        <p>{group.kind} · {group.createdAt} · {statusLabel[group.status]}</p>
         <p>影响：{group.affectedEntities.length ? group.affectedEntities.map((entity) => `${entity.entityType}:${entity.entityId}`).join("、") : "无"}</p>
         {group.reason && <p>{group.reason}</p>}
         {group.undoable && <button type="button" aria-label={`撤销 ${group.id}`} disabled={busyId !== null} onClick={() => { setPendingUndo(group); setConfirmed(false); }}>{busyId === group.id ? "撤销中" : "撤销"}</button>}

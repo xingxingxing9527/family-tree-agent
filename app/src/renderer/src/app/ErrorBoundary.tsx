@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       <main className="fatal-error" aria-labelledby="fatal-error-title">
         <section className="state-card" role="alert">
           <h1 id="fatal-error-title">界面暂时无法显示</h1>
-          <p>你的本地资料没有在此处显示。请返回首页后重试。</p>
+          <p>你的家谱资料没有在此处显示。请返回首页后重试。</p>
           <p>诊断编号：{this.state.diagnosticId}</p>
           <button className="button primary-button" type="button" onClick={this.recover}>返回首页</button>
         </section>

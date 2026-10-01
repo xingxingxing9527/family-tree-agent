@@ -8,5 +8,6 @@ app/coverage/
 app/test-results/
 app/playwright-report/
 app/.family-agent-data/
+app/.e2e-web-data/
 *.log
 *.tmp

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { AppResult } from "../shared/contracts.js";
 import { registerRpcRoutes } from "./http/rpc-router.js";
 import { registerFileRoutes, type FileTransferStores } from "./http/file-routes.js";
+import { mapUnexpectedRpcError, sanitizeRpcResponse } from "./http/error-mapper.js";
 import type { FamilyAgentService } from "./runtime/family-agent-service.js";
 import type { FamilyRuntime } from "./runtime/family-runtime.js";
 
@@ -37,24 +38,28 @@ function statusFor<T>(result: AppResult<T>): number {
 
 export function createWebServer(options: WebServerOptions): WebServer {
   const server = Fastify({ logger: options.logger ?? false });
+  server.setErrorHandler((_error, _request, reply) => {
+    const error = mapUnexpectedRpcError();
+    return reply.code(error.statusCode).send(error.body);
+  });
 
   server.get("/api/health", async () => ({ ok: true, version: "1.0.0" }));
   server.get("/api/family", async (_request, reply) => {
     const result = await options.runtime.listFamilies();
-    return reply.code(statusFor(result)).send(result);
+    return reply.code(statusFor(result)).send(sanitizeRpcResponse(result));
   });
   server.post<{ Body: { name?: unknown } }>("/api/family", async (request, reply) => {
     const name = typeof request.body?.name === "string" ? request.body.name : "";
     const result = await options.runtime.createFamily(name);
-    return reply.code(statusFor(result)).send(result);
+    return reply.code(statusFor(result)).send(sanitizeRpcResponse(result));
   });
   server.post<{ Params: { id: string } }>("/api/family/:id/open", async (request, reply) => {
     const result = await options.runtime.openFamily(request.params.id);
-    return reply.code(statusFor(result)).send(result);
+    return reply.code(statusFor(result)).send(sanitizeRpcResponse(result));
   });
   server.delete("/api/family/open", async (_request, reply) => {
     const result = await options.runtime.closeFamily();
-    return reply.code(statusFor(result)).send(result);
+    return reply.code(statusFor(result)).send(sanitizeRpcResponse(result));
   });
 
   if (options.service) registerRpcRoutes(server, options.service);

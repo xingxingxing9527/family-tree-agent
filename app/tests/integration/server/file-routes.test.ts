@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createWebServer, type WebServer } from "../../../src/server/create-web-server.js";
 import { openDatabase } from "../../../src/main/database/open-database.js";
+import { DeterministicE2EAdapter } from "../../../src/main/llm/deterministic-e2e-adapter.js";
 import { DownloadStore } from "../../../src/server/http/download-store.js";
 import { UploadStore } from "../../../src/server/http/upload-store.js";
 import { createFamilyAgentService, type FamilyAgentService } from "../../../src/server/runtime/family-agent-service.js";
@@ -27,7 +28,7 @@ describe("browser file routes", () => {
     if (!created.ok) throw new Error(created.error.message);
     uploads = new UploadStore({ root: join(dataRoot, "uploads"), now: () => now });
     downloads = new DownloadStore({ now: () => now });
-    service = createFamilyAgentService({ runtime, uploads, downloads });
+    service = createFamilyAgentService({ runtime, uploads, downloads, initialModelKey: "test-only", modelFactory: () => new DeterministicE2EAdapter() });
     server = createWebServer({ runtime, service, fileTransfers: { uploads, downloads } });
   });
 
@@ -173,8 +174,42 @@ describe("browser file routes", () => {
     const personId = saved.json().value.entityId as string;
     const targetWorkspaceId = runtime.workspaceManager.getOpenWorkspaceContext()!.workspaceId;
 
+    const question = { question: "有几个孩子", viewpointId: personId, selectedPersonId: null };
+    const authorized = await server.inject({
+      method: "POST",
+      url: "/api/rpc/chat/authorize",
+      payload: { input: { sessionId: "restore-chat-session", operation: "ask", payload: question } }
+    });
+    const asked = await server.inject({
+      method: "POST",
+      url: "/api/rpc/chat/ask",
+      payload: { input: { sessionId: "restore-chat-session", authorizationToken: authorized.json().value.authorizationToken, payload: question } }
+    });
+    expect(asked.json()).toMatchObject({ ok: true });
+
     const created = await server.inject({ method: "POST", url: "/api/rpc/dataManagement/createBackup", payload: { input: null } });
     const backup = await server.inject({ method: "GET", url: created.json().value.download.downloadUrl as string });
+
+    const staged = await server.inject({
+      method: "POST",
+      url: "/api/rpc/mutations/stage",
+      payload: { input: { intents: [{ type: "person.create", draft: {
+        displayName: "备份后人物", aliases: [], gender: "unknown", birth: null, death: null,
+        notes: null, sourceDescription: "网页端恢复测试"
+      } }] } }
+    });
+    const preview = staged.json().value;
+    const confirmed = await server.inject({
+      method: "POST",
+      url: "/api/rpc/mutations/confirm",
+      payload: { input: {
+        draftId: preview.id,
+        draftVersion: preview.version,
+        selectedChangeIds: preview.changes.map((change: { id: string }) => change.id),
+        acknowledgedWarningCodes: []
+      } }
+    });
+    expect(confirmed.json()).toMatchObject({ ok: true });
 
     const database = openDatabase(runtime.workspaceManager.getOpenWorkspaceContext()!.databasePath);
     database.prepare("UPDATE person SET display_name='已修改', row_version=row_version+1 WHERE id=?").run(personId);

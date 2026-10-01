@@ -4,15 +4,20 @@ import { pathToFileURL } from "node:url";
 import { createWebServer, resolveListenOptions } from "./create-web-server.js";
 import { DownloadStore } from "./http/download-store.js";
 import { UploadStore } from "./http/upload-store.js";
-import { createFamilyAgentService } from "./runtime/family-agent-service.js";
+import { createFamilyAgentService, type FamilyAgentServiceOptions } from "./runtime/family-agent-service.js";
 import { createFamilyRuntime } from "./runtime/family-runtime.js";
 
-export async function startWebServer(environment: NodeJS.ProcessEnv = process.env): Promise<void> {
+type WebServerServiceOverrides = Pick<FamilyAgentServiceOptions, "initialModelKey" | "modelFactory">;
+
+export async function startWebServer(
+  environment: NodeJS.ProcessEnv = process.env,
+  serviceOverrides: WebServerServiceOverrides = {}
+): Promise<void> {
   const dataRoot = resolve(environment.FAMILY_AGENT_DATA_DIR ?? ".family-agent-data");
   const webRoot = resolve(environment.FAMILY_AGENT_WEB_ROOT ?? "out/web");
   const runtime = await createFamilyRuntime({ dataRoot });
   const fileTransfers = { uploads: new UploadStore({ root: resolve(dataRoot, "uploads") }), downloads: new DownloadStore() };
-  const service = createFamilyAgentService({ runtime, ...fileTransfers });
+  const service = createFamilyAgentService({ runtime, ...fileTransfers, ...serviceOverrides });
   const server = createWebServer({ runtime, service, fileTransfers, ...(existsSync(webRoot) ? { webRoot } : {}), logger: true });
   const listenOptions = resolveListenOptions(environment);
 

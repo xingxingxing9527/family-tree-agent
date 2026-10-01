@@ -171,6 +171,8 @@ describe("data-management settings", () => {
     const prepared = preparedRefresh();
     const prepareMutation = vi.fn(() => prepared);
     render(<AuditHistory api={value} prepareMutation={prepareMutation} />);
+    expect(await screen.findByText((text) => text.endsWith(" · 可撤销"))).toBeVisible();
+    expect(screen.getByText((text) => text.endsWith(" · 不可撤销"))).toBeVisible();
     expect(await screen.findByText("Merge groups require the dedicated unmerge workflow")).toBeVisible();
     expect(screen.queryByRole("button", { name: `撤销 ${workspaceId}` })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `撤销 ${groupId}` }));

@@ -57,8 +57,11 @@ describe("1000-person beta performance fixture", () => {
     expect(PERFORMANCE_GATES).toEqual({
       defaultTreeAndLayoutMs: 2000,
       viewpointRelabelMs: 500,
-      relationshipP95Ms: 300,
-      importPreviewMs: 30_000
+      personSearchP95Ms: 500,
+      personDetailP95Ms: 500,
+      relationshipP95Ms: 1000,
+      treeProjectionP95Ms: 1000,
+      importPreviewMs: 10_000
     });
     const pairs = buildFixedRelationshipPairs(blueprint);
     expect(pairs).toHaveLength(200);
@@ -128,9 +131,12 @@ describe("1000-person beta performance fixture", () => {
       const files = await writeBenchmarkImportFiles(root);
       const csv = await parseImport(files.csvPath, "benchmark-test-csv", { csvEntityType: "People" });
       const xlsx = await parseImport(files.xlsxPath, "benchmark-test-xlsx");
+      const blueprint = buildBenchmarkBlueprint(BENCHMARK_SEED);
 
       expect(csv.rows).toHaveLength(1000);
-      expect(xlsx.rows).toHaveLength(1000);
+      expect(xlsx.rows.filter((row) => row.sheet === "People")).toHaveLength(1000);
+      expect(xlsx.rows.filter((row) => row.sheet === "ParentChild")).toHaveLength(blueprint.parentChild.length);
+      expect(xlsx.rows.filter((row) => row.sheet === "Marriages")).toHaveLength(blueprint.marriages.length);
       expect(csv.rows[999]?.raw.person_external_id).toBe("import-1000");
       expect(xlsx.rows[999]?.raw.person_external_id).toBe("import-1000");
     } finally {

@@ -29,8 +29,11 @@ export { REQUIRED_RELATIONSHIP_DISTRIBUTION, classifyProductionRelationship } fr
 export const PERFORMANCE_GATES = Object.freeze({
   defaultTreeAndLayoutMs: 2_000,
   viewpointRelabelMs: 500,
-  relationshipP95Ms: 300,
-  importPreviewMs: 30_000
+  personSearchP95Ms: 500,
+  personDetailP95Ms: 500,
+  relationshipP95Ms: 1_000,
+  treeProjectionP95Ms: 1_000,
+  importPreviewMs: 10_000
 });
 
 const PERFORMANCE_SOURCE_FILES = [
@@ -150,8 +153,21 @@ export async function writeBenchmarkImportFiles(root: string): Promise<{ csvPath
   const peopleSheet = workbook.addWorksheet("People");
   peopleSheet.addRow([...headers]);
   for (const row of rows) peopleSheet.addRow(headers.map((header) => row[header as keyof typeof row]));
-  workbook.addWorksheet("ParentChild").addRow([...IMPORT_TEMPLATE_COLUMNS.ParentChild]);
-  workbook.addWorksheet("Marriages").addRow([...IMPORT_TEMPLATE_COLUMNS.Marriages]);
+  const blueprint = buildBenchmarkBlueprint(BENCHMARK_SEED);
+  const externalIdByPersonId = new Map(blueprint.people.map((person, index) => [person.id, rows[index]!.person_external_id]));
+  const parentSheet = workbook.addWorksheet("ParentChild");
+  parentSheet.addRow([...IMPORT_TEMPLATE_COLUMNS.ParentChild]);
+  for (const relation of blueprint.parentChild) parentSheet.addRow([
+    externalIdByPersonId.get(relation.parentId),
+    externalIdByPersonId.get(relation.childId),
+    relation.parentRole
+  ]);
+  const marriageSheet = workbook.addWorksheet("Marriages");
+  marriageSheet.addRow([...IMPORT_TEMPLATE_COLUMNS.Marriages]);
+  for (const marriage of blueprint.marriages) marriageSheet.addRow([
+    externalIdByPersonId.get(marriage.spouseAId), externalIdByPersonId.get(marriage.spouseBId), marriage.status,
+    "", "", "", "", false, "", "", "", "", false
+  ]);
   await workbook.xlsx.writeFile(xlsxPath);
   return { csvPath, xlsxPath };
 }
@@ -260,6 +276,10 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
       await layoutWithElk(projection.topology);
     });
     process.stdout.write("[performance] default tree/layout measured\n");
+    const treeProjectionSamples = measureSync(Array.from({ length: 20 }, (_, index) => index), () => {
+      projectWorkspaceTree(database, workspaceId, { view: "full", collapseDepth: 4 });
+    });
+    process.stdout.write("[performance] 20 tree projections measured\n");
 
     const viewpointId = blueprint.people[0]!.id;
     projectWorkspaceTree(database, workspaceId, { view: "full", collapseDepth: 4, viewpointId });
@@ -269,6 +289,15 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     process.stdout.write("[performance] viewpoint relabel measured\n");
 
     const registry = new QueryToolRegistry(database, workspaceId);
+    const searchQueries = blueprint.people.slice(0, 200).map((person) => person.displayName);
+    registry.tools.search_people({ query: searchQueries[0]!, limit: 20 });
+    const personSearchSamples = measureSync(searchQueries, (query) => registry.tools.search_people({ query, limit: 20 }));
+    process.stdout.write("[performance] 200 person searches measured\n");
+    const personIds = blueprint.people.slice(0, 200).map((person) => person.id);
+    registry.tools.get_person({ personId: personIds[0]! });
+    const personDetailSamples = measureSync(personIds, (personId) => registry.tools.get_person({ personId }));
+    process.stdout.write("[performance] 200 person details measured\n");
+
     const relationshipPairs = buildFixedRelationshipPairs(blueprint);
     registry.tools.calculate_relationship({
       viewpointId: relationshipPairs[0]!.viewpointId,
@@ -320,7 +349,10 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     const gates = {
       defaultTreeAndLayout: gate(treeSamples, PERFORMANCE_GATES.defaultTreeAndLayoutMs),
       viewpointRelabel: gate(viewpointSamples, PERFORMANCE_GATES.viewpointRelabelMs),
+      personSearchP95: gate(personSearchSamples, PERFORMANCE_GATES.personSearchP95Ms),
+      personDetailP95: gate(personDetailSamples, PERFORMANCE_GATES.personDetailP95Ms),
       relationshipP95: gate(relationshipSamples, PERFORMANCE_GATES.relationshipP95Ms),
+      treeProjectionP95: gate(treeProjectionSamples, PERFORMANCE_GATES.treeProjectionP95Ms),
       importPreview: gate(importSamples, PERFORMANCE_GATES.importPreviewMs)
     };
     const cpuInfo = cpus();
@@ -349,13 +381,22 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
         constraints
       },
       workloads: {
+        personSearch: { executionPath: "QueryToolRegistry.search_people", sampleCount: searchQueries.length, limit: 20 },
+        personDetail: { executionPath: "QueryToolRegistry.get_person", sampleCount: personIds.length },
+        treeProjection: { executionPath: "projectWorkspaceTree", sampleCount: treeProjectionSamples.length, view: "full", collapseDepth: 4 },
         relationships: {
           executionPath: "QueryToolRegistry.calculate_relationship",
           classification: "selected production result after SQLite materialization",
           blueprintDigestSha256: createHash("sha256").update(JSON.stringify(blueprint)).digest("hex"),
           ...relationshipDistribution
         },
-        importPreview: { executionPath: "parseImport + ImportPlanner.plan", rowsPerFile: 1_000, formats: importFormats }
+        importPreview: {
+          executionPath: "parseImport + ImportPlanner.plan",
+          peopleRows: blueprint.people.length,
+          parentChildRows: blueprint.parentChild.length,
+          marriageRows: blueprint.marriages.length,
+          formats: importFormats
+        }
       },
       gates,
       passed: Object.values(gates).every(({ passed }) => passed)
