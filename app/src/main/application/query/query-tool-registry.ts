@@ -11,9 +11,11 @@ import type {
 import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { RelationshipCalculator } from "../../domain/kinship/relationship-calculator.js";
 import { FactQueries } from "../facts/fact-queries.js";
+import { CompletenessRepository, type ChildrenCountStatus } from "../../database/repositories/completeness-repository.js";
+import { SourceRepository } from "../../database/repositories/source-repository.js";
 import { getPerson } from "./get-person.js";
 import { listRelatives } from "./list-relatives.js";
-import { searchPeople } from "./search-people.js";
+import { personCandidate, searchPeople } from "./search-people.js";
 import { searchWiki } from "./search-wiki.js";
 import { summarizeLineage } from "./summarize-lineage.js";
 import { loadPersistedKinshipFacts } from "./persisted-kinship-facts.js";
@@ -63,6 +65,59 @@ export class QueryToolRegistry {
       search_wiki: (input) => searchWiki(database, workspaceId, QUERY_TOOL_SCHEMAS.search_wiki.parse(input))
     };
     this.tools = Object.freeze(tools);
+  }
+
+  findMentionedPeople(text: string): Array<{ mention: string; candidates: PersonCandidate[] }> {
+    const groups = new Map<string, { mention: string; candidates: PersonCandidate[]; index: number }>();
+    for (const person of this.queries.listPeople()) {
+      const names = [person.displayName, ...this.queries.listAliases(person.id).map((alias) => alias.name)]
+        .filter((name) => text.includes(name))
+        .sort((left, right) => right.length - left.length || left.localeCompare(right));
+      const mention = names[0];
+      if (!mention) continue;
+      const candidate = personCandidate(this.queries, person.id);
+      if (!candidate) continue;
+      const key = mention.toLocaleLowerCase();
+      const group = groups.get(key) ?? { mention, candidates: [], index: text.indexOf(mention) };
+      group.candidates.push(candidate);
+      groups.set(key, group);
+    }
+    return [...groups.values()]
+      .sort((left, right) => left.index - right.index || right.mention.length - left.mention.length)
+      .map(({ mention, candidates }) => ({ mention, candidates: candidates.sort((left, right) => left.id.localeCompare(right.id)) }));
+  }
+
+  getChildrenCountStatus(personId: string): ChildrenCountStatus {
+    return new CompletenessRepository(this.database, this.workspaceId).getChildrenCountStatus(personId);
+  }
+
+  resolveSources(sourceIds: readonly string[]): Array<{ id: string; title: string }> {
+    const sources = new SourceRepository(this.database, this.workspaceId);
+    return [...new Set(sourceIds)].flatMap((sourceId) => {
+      const source = sources.get(sourceId);
+      return source ? [{ id: source.id, title: source.title }] : [];
+    });
+  }
+
+  sourceIdsForFacts(factIds: readonly string[]): string[] {
+    const ids = [...new Set(factIds)];
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.database.prepare(`
+      SELECT DISTINCT source.id
+      FROM source
+      JOIN audit_log AS source_audit
+        ON source_audit.workspace_id = source.workspace_id
+        AND source_audit.entity_type = 'source'
+        AND source_audit.entity_id = source.id
+      JOIN audit_log AS fact_audit
+        ON fact_audit.workspace_id = source_audit.workspace_id
+        AND fact_audit.operation_group_id = source_audit.operation_group_id
+      WHERE source.workspace_id = ?
+        AND source.deleted_at IS NULL
+        AND fact_audit.entity_id IN (${placeholders})
+      ORDER BY source.title, source.id
+    `).pluck().all(this.workspaceId, ...ids) as string[];
   }
 }
 

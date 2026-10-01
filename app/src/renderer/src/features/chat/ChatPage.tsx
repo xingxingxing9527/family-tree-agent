@@ -9,9 +9,10 @@ interface ChatPageProps {
   selectedPersonId: string | null;
   onSelectedPersonChange(personId: string | null): void;
   onSend(question: string): Promise<void | ConversationAnswer>;
+  onOpenPerson?(personId: string): void;
 }
 
-export function ChatPage({ people, selectedPersonId, onSelectedPersonChange, onSend }: ChatPageProps): JSX.Element {
+export function ChatPage({ people, selectedPersonId, onSelectedPersonChange, onSend, onOpenPerson }: ChatPageProps): JSX.Element {
   const { viewpointId, setViewpointId } = useViewpoint();
   return (
     <section className="feature-page chat-page" aria-labelledby="chat-page-title">
@@ -38,7 +39,7 @@ export function ChatPage({ people, selectedPersonId, onSelectedPersonChange, onS
           </select>
         </label>
       </section>
-      <ChatPanel onSend={onSend} />
+      <ChatPanel onSend={onSend} onSelectCandidate={onSelectedPersonChange} onOpenPerson={onOpenPerson} />
     </section>
   );
 }

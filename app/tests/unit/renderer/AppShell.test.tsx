@@ -143,7 +143,10 @@ describe("complete application shell", () => {
     vi.mocked(api.query.searchPeople).mockResolvedValue({ ok: true, value: [{ ...person, parentHints: [] }] });
     vi.mocked(api.people.get).mockResolvedValue({ ok: true, value: { person, aliases: [], parents: [], children: [], marriages: [] } });
     vi.mocked(api.chat.authorize).mockResolvedValue({ ok: true, value: { authorizationToken: "token" } });
-    vi.mocked(api.chat.ask).mockResolvedValue({ ok: true, value: { answer: "本人", matchedPersonIds: [person.id], sourceIds: [], relationship: null, toolTrace: [] } });
+    vi.mocked(api.chat.ask).mockResolvedValue({ ok: true, value: {
+      status: "answered", conclusion: "本人", answer: "本人", viewpoint: { id: person.id, displayName: person.displayName },
+      relationshipPath: [], evidence: [], candidates: [], missingFacts: [], matchedPersonIds: [person.id], sourceIds: [], relationship: null, toolTrace: []
+    } });
     window.location.hash = `#/workspace/${workspaceA.id}/tree`;
     renderApp(api);
 

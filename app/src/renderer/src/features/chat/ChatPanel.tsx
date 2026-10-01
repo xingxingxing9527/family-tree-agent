@@ -15,6 +15,8 @@ export interface ChatPanelProps {
   answer?: ChatAnswer | ConversationAnswer | null;
   onQuickAction?(action: QuickAction): void;
   onSend?(question: string): Promise<void | ConversationAnswer>;
+  onSelectCandidate?(personId: string): void;
+  onOpenPerson?(personId: string): void;
 }
 
 const actions: Array<{ id: QuickAction; label: string }> = [
@@ -32,7 +34,9 @@ const quickQuestions: Record<QuickAction, string> = {
 
 const isConversationAnswer = (answer: ChatAnswer | ConversationAnswer): answer is ConversationAnswer => "answer" in answer;
 
-export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSend = async () => undefined }: ChatPanelProps): JSX.Element {
+const genderLabel = (gender: "male" | "female" | "unknown"): string => gender === "male" ? "男" : gender === "female" ? "女" : "性别未知";
+
+export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSend = async () => undefined, onSelectCandidate = () => undefined, onOpenPerson = () => undefined }: ChatPanelProps): JSX.Element {
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -62,9 +66,9 @@ export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSe
     }
   };
   const displayedAnswer = answer ?? latestAnswer;
-  const conclusion = displayedAnswer ? (isConversationAnswer(displayedAnswer) ? displayedAnswer.answer : displayedAnswer.conclusion) : null;
-  const sourceIds = displayedAnswer && isConversationAnswer(displayedAnswer) ? displayedAnswer.sourceIds : [];
-  const pathIds = displayedAnswer && isConversationAnswer(displayedAnswer) ? displayedAnswer.relationship?.signature.pathPersonIds ?? [] : [];
+  const conclusion = displayedAnswer ? (isConversationAnswer(displayedAnswer) ? displayedAnswer.conclusion ?? displayedAnswer.answer : displayedAnswer.conclusion) : null;
+  const structured = displayedAnswer && isConversationAnswer(displayedAnswer) ? displayedAnswer : null;
+  const legacy = displayedAnswer && !isConversationAnswer(displayedAnswer) ? displayedAnswer : null;
   return (
     <section className="chat-panel" aria-label="家谱问答">
       <header>
@@ -80,17 +84,24 @@ export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSe
       {pending && <OnlineModelDisclosure busy={sending} onCancel={() => setPending(null)} onConfirm={() => void send()} />}
       {error && <p className="error-banner" role="alert">{error}</p>}
       {displayedAnswer && (
-        <section aria-live="polite">
-          <h3>结论</h3>
+        <section className={`chat-answer ${structured?.status ?? "answered"}`} aria-live="polite">
+          <div className="answer-heading"><h3>结论</h3>{structured && <span className="answer-status">{structured.status === "needs_disambiguation" ? "需要确认人物" : structured.status === "insufficient" ? "资料不足" : "已核对"}</span>}</div>
           <p>{conclusion}</p>
+          {structured?.viewpoint && <p className="answer-viewpoint">回答视角：{structured.viewpoint.displayName}</p>}
+          {(structured?.candidates ?? []).length ? <section className="candidate-section"><h3>需要确认人物</h3><div className="candidate-grid">{structured!.candidates.map((candidate) => {
+            const parent = candidate.parentHints[0];
+            const detail = [genderLabel(candidate.gender), candidate.birth ? `${candidate.birth.year} 年` : null, parent ? `${parent.role === "father" ? "父亲" : "母亲"}：${parent.displayName}` : null].filter(Boolean).join(" · ");
+            return <article className="candidate-card" key={candidate.id}><strong>{candidate.displayName}</strong><span>{detail}</span><button type="button" onClick={() => onSelectCandidate(candidate.id)}>选择{candidate.displayName}（{detail}）</button></article>;
+          })}</div></section> : null}
+          {(structured?.missingFacts ?? []).length ? <section className="missing-facts"><h3>需要补充</h3><ul>{structured!.missingFacts.map((fact, index) => <li key={`${fact.code}:${fact.personId ?? "none"}:${index}`}><span>{fact.message}</span>{fact.personId && <button type="button" onClick={() => onOpenPerson(fact.personId!)}>前往补录</button>}</li>)}</ul></section> : null}
           {!isConversationAnswer(displayedAnswer) && <><h3>命中的人物</h3>{displayedAnswer.matchedPeople.length > 0
             ? <ul>{displayedAnswer.matchedPeople.map((person) => <li key={person.id}><strong>{person.displayName}</strong>{person.hint ? `（${person.hint}）` : ""}</li>)}</ul>
             : <p>没有命中人物。</p>}</>}
           <h3>来源</h3>
-          {isConversationAnswer(displayedAnswer) ? (sourceIds.length ? <ul>{sourceIds.map((id) => <li key={id}>{id}</li>)}</ul> : <p>没有记录来源。</p>)
-            : (displayedAnswer.sources.length > 0 ? <ul>{displayedAnswer.sources.map((source) => <li key={source.id}>{source.title}</li>)}</ul> : <p>没有记录来源。</p>)}
+          {structured ? ((structured.evidence ?? []).length ? <ul>{structured.evidence.map((entry) => <li key={entry.id}>{entry.title}</li>)}</ul> : <p>没有记录来源。</p>)
+            : (legacy && legacy.sources.length > 0 ? <ul>{legacy.sources.map((source) => <li key={source.id}>{source.title}</li>)}</ul> : <p>没有记录来源。</p>)}
           <h3>关系路径</h3>
-          <p>{isConversationAnswer(displayedAnswer) ? (pathIds.length ? pathIds.join(" → ") : "无需关系路径。") : (displayedAnswer.relationshipPath.length > 0 ? displayedAnswer.relationshipPath.join(" → ") : "无需关系路径。")}</p>
+          <p>{structured ? ((structured.relationshipPath ?? []).length ? structured.relationshipPath.map((entry) => entry.displayName).join(" → ") : "无需关系路径。") : (displayedAnswer.relationshipPath.length > 0 ? displayedAnswer.relationshipPath.join(" → ") : "无需关系路径。")}</p>
         </section>
       )}
     </section>

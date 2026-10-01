@@ -29,14 +29,46 @@ describe("controlled chat UI", () => {
 
   it("renders source and relationship-path evidence", () => {
     render(<ChatPanel answer={{
-      answer: "张敏是张国强的女儿。", matchedPersonIds: ["father", "child"], sourceIds: ["source-1"],
+      status: "answered", conclusion: "张敏是张国强的女儿。", answer: "张敏是张国强的女儿。",
+      viewpoint: { id: "father", displayName: "张国强" },
+      relationshipPath: [{ personId: "father", displayName: "张国强" }, { personId: "child", displayName: "张敏" }],
+      evidence: [{ id: "source-1", title: "张氏家谱原件" }], candidates: [], missingFacts: [],
+      matchedPersonIds: ["father", "child"], sourceIds: ["source-1"],
       relationship: {
         primaryTerm: "女儿", reverseTerm: "父亲", description: "父女关系", ruleVersion: "v1", alternatives: [], uncertainty: [],
         signature: { steps: ["child"], generationDelta: 1, lineageSide: "self", bloodAffinity: "blood", viewpointGender: "male", targetGender: "female", relativeAgeOrder: "unknown", pathPersonIds: ["father", "child"], pathRelationIds: ["edge-1"] }
       }, toolTrace: [{ name: "calculate_relationship", arguments: { viewpointId: "father", targetId: "child" } }]
     }} />);
-    expect(screen.getByText("source-1")).toBeVisible();
-    expect(screen.getByText("father → child")).toBeVisible();
+    expect(screen.getByText("回答视角：张国强")).toBeVisible();
+    expect(screen.getByText("张氏家谱原件")).toBeVisible();
+    expect(screen.getByText("张国强 → 张敏")).toBeVisible();
+  });
+
+  it("shows disambiguation candidates without presenting a guessed answer", () => {
+    const onSelectCandidate = vi.fn();
+    render(<ChatPanel onSelectCandidate={onSelectCandidate} answer={{
+      status: "needs_disambiguation", conclusion: "找到两位同名人物，请先选择。", answer: "找到两位同名人物，请先选择。",
+      viewpoint: { id: "viewpoint", displayName: "王明" }, relationshipPath: [], evidence: [], missingFacts: [],
+      candidates: [
+        { id: "a", displayName: "张敏", aliases: [], gender: "female", birth: null, parentHints: [] },
+        { id: "b", displayName: "张敏", aliases: [], gender: "male", birth: null, parentHints: [] }
+      ], matchedPersonIds: [], sourceIds: [], relationship: null, toolTrace: []
+    }} />);
+    expect(screen.getByRole("heading", { name: "需要确认人物" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /选择张敏.*女/u }));
+    expect(onSelectCandidate).toHaveBeenCalledWith("a");
+  });
+
+  it("offers a direct person action when facts are insufficient", () => {
+    const onOpenPerson = vi.fn();
+    render(<ChatPanel onOpenPerson={onOpenPerson} answer={{
+      status: "insufficient", conclusion: "子女资料尚未确认完整。", answer: "子女资料尚未确认完整。",
+      viewpoint: { id: "viewpoint", displayName: "王明" }, relationshipPath: [], evidence: [], candidates: [],
+      missingFacts: [{ code: "children_completeness", message: "子女资料尚未由管理员确认完整", personId: "person" }],
+      matchedPersonIds: ["person"], sourceIds: [], relationship: null, toolTrace: []
+    }} />);
+    fireEvent.click(screen.getByRole("button", { name: "前往补录" }));
+    expect(onOpenPerson).toHaveBeenCalledWith("person");
   });
 
   it("allows only one confirmed request at a time so an older completion cannot clear a newer question", async () => {

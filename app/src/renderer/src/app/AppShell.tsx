@@ -104,7 +104,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
         {activeArea === "tree" && <FamilyTreePage api={api.query} people={snapshot.people} />}
         {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} onUseAsViewpoint={setViewpointId} onAskAbout={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/chat`); }} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
-        {activeArea === "chat" && <ChatPage people={snapshot.people} selectedPersonId={selectedPersonId} onSelectedPersonChange={setSelectedPersonId} onSend={ask} />}
+        {activeArea === "chat" && <ChatPage people={snapshot.people} selectedPersonId={selectedPersonId} onSelectedPersonChange={setSelectedPersonId} onSend={ask} onOpenPerson={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/people`); }} />}
         {activeArea === "wiki" && <WikiPage api={api.wiki} query={api.query} people={snapshot.people.map((person) => ({ id: person.id, displayName: person.displayName }))} sources={snapshot.sources.map((source) => ({ id: source.id, title: source.title }))} />}
         {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} prepareMutation={prepareMutation} onChanged={refreshSnapshot} />}
       </main>

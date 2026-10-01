@@ -154,8 +154,8 @@ describe("controlled conversational model boundary", () => {
         .mockResolvedValueOnce({ answer: "没有找到匹配人物。", toolCalls: [] })
     };
     const service = new ConversationService(model, new QueryToolRegistry(database, workspaceId), { maxTurns: 3 });
-    await expect(service.ask({ question: "查找张姓", viewpointId: "v", selectedPersonId: null })).resolves.toEqual({
-      answer: "没有找到匹配人物。", matchedPersonIds: [], sourceIds: [], relationship: null,
+    await expect(service.ask({ question: "查找张姓", viewpointId: "v", selectedPersonId: null })).resolves.toMatchObject({
+      status: "answered", conclusion: "没有找到匹配人物。", answer: "没有找到匹配人物。", matchedPersonIds: [], sourceIds: [], relationship: null,
       toolTrace: [{ name: "search_people", arguments: { query: "张", limit: 20 } }]
     });
     expect(model.continueWithTools.mock.calls[1]![0].toolResults[0]).toMatchObject({ callId: "call-1", name: "search_people", output: [] });

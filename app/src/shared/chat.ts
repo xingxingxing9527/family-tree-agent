@@ -62,8 +62,26 @@ export interface MinimizedConversationContext {
   toolResults: ToolResult[];
 }
 
+export type ConversationAnswerStatus = "answered" | "needs_disambiguation" | "insufficient";
+export interface ConversationPersonReference { id: string; displayName: string; }
+export interface ConversationPathPerson { personId: string; displayName: string; }
+export interface ConversationEvidence { id: string; title: string; }
+export interface ConversationMissingFact {
+  code: "person_selection" | "children_completeness" | "relationship_conflict";
+  message: string;
+  personId: string | null;
+}
+
 export interface ConversationAnswer {
+  status: ConversationAnswerStatus;
+  conclusion: string;
+  /** Compatibility alias for older clients. */
   answer: string;
+  viewpoint: ConversationPersonReference;
+  relationshipPath: ConversationPathPerson[];
+  evidence: ConversationEvidence[];
+  candidates: PersonCandidate[];
+  missingFacts: ConversationMissingFact[];
   matchedPersonIds: string[];
   sourceIds: string[];
   relationship: RelationshipResultDto | null;
