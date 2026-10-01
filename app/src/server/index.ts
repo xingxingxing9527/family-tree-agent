@@ -2,13 +2,15 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createWebServer, resolveListenOptions } from "./create-web-server.js";
+import { createFamilyAgentService } from "./runtime/family-agent-service.js";
 import { createFamilyRuntime } from "./runtime/family-runtime.js";
 
 export async function startWebServer(environment: NodeJS.ProcessEnv = process.env): Promise<void> {
   const dataRoot = resolve(environment.FAMILY_AGENT_DATA_DIR ?? ".family-agent-data");
   const webRoot = resolve(environment.FAMILY_AGENT_WEB_ROOT ?? "out/web");
   const runtime = await createFamilyRuntime({ dataRoot });
-  const server = createWebServer({ runtime, ...(existsSync(webRoot) ? { webRoot } : {}), logger: true });
+  const service = createFamilyAgentService({ runtime });
+  const server = createWebServer({ runtime, service, ...(existsSync(webRoot) ? { webRoot } : {}), logger: true });
   const listenOptions = resolveListenOptions(environment);
 
   const shutdown = async (): Promise<void> => {

@@ -1,12 +1,15 @@
 import staticPlugin from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppResult } from "../shared/contracts.js";
+import { registerRpcRoutes } from "./http/rpc-router.js";
+import type { FamilyAgentService } from "./runtime/family-agent-service.js";
 import type { FamilyRuntime } from "./runtime/family-runtime.js";
 
 export type WebServer = FastifyInstance;
 
 export interface WebServerOptions {
   runtime: FamilyRuntime;
+  service?: FamilyAgentService;
   webRoot?: string;
   logger?: boolean;
 }
@@ -52,6 +55,8 @@ export function createWebServer(options: WebServerOptions): WebServer {
     return reply.code(statusFor(result)).send(result);
   });
 
+  if (options.service) registerRpcRoutes(server, options.service);
+
   if (options.webRoot) {
     void server.register(staticPlugin, { root: options.webRoot, wildcard: false });
     server.setNotFoundHandler((request, reply) => {
@@ -60,6 +65,9 @@ export function createWebServer(options: WebServerOptions): WebServer {
     });
   }
 
-  server.addHook("onClose", async () => options.runtime.dispose());
+  server.addHook("onClose", async () => {
+    await options.service?.dispose();
+    await options.runtime.dispose();
+  });
   return server;
 }

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import { ZodError, z, type ZodType } from "zod";
+import { ZodError, type ZodType } from "zod";
+import { RPC_INPUT_SCHEMAS } from "../../shared/api-schemas.js";
 import type {
   AppResult,
   LineageSummary,
@@ -17,7 +18,7 @@ import type {
 import { openQueryDatabase } from "../database/open-query-database.js";
 import type { WorkspaceDatabase } from "../database/open-database.js";
 import type { OpenWorkspaceContextProvider } from "../application/facts/facts-gateway.js";
-import { QUERY_TOOL_SCHEMAS, QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
+import { QueryNotFoundError, QueryToolRegistry } from "../application/query/query-tool-registry.js";
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 import { projectWorkspaceTree, readWorkspaceSnapshot } from "../application/query/workspace-projection.js";
 import { WorkspacePeopleLimitError, WORKSPACE_PEOPLE_LIMIT_MESSAGE } from "../database/workspace-people-limit.js";
@@ -107,16 +108,8 @@ export class WorkspaceQueryGateway implements QueryGateway {
   }
 }
 
-const emptySchema = z.object({}).strict();
-const boundedId = z.string().trim().min(1).max(200);
-const projectTreeSchema = z.object({
-  view: z.enum(["full", "branch", "ancestors", "descendants"]),
-  subjectId: boundedId.optional(),
-  viewpointId: boundedId.optional(),
-  collapseDepth: z.number().int().min(0).max(20).optional()
-}).strict().superRefine((input, context) => {
-  if (input.view !== "full" && !input.subjectId) context.addIssue({ code: "custom", path: ["subjectId"], message: "A subject is required for this tree view" });
-});
+const emptySchema = RPC_INPUT_SCHEMAS.query.workspaceSnapshot;
+const projectTreeSchema = RPC_INPUT_SCHEMAS.query.projectTree;
 
 type IpcMainLike = Pick<IpcMain, "handle">;
 type Operation = (input: never) => Promise<AppResult<unknown>>;
@@ -156,10 +149,10 @@ export function registerQueryIpc(ipc: IpcMainLike, mainWindowId: () => number | 
   const run = <T>(operation: () => Promise<T>): Promise<T> => operations ? operations.runOperation(operation) : operation();
   ipc.handle(QUERY_CHANNELS.workspaceSnapshot, parsedHandler(trusted, emptySchema, () => run(() => query.workspaceSnapshot())));
   ipc.handle(QUERY_CHANNELS.projectTree, parsedHandler(trusted, projectTreeSchema, (input) => run(() => query.projectTree(input))));
-  ipc.handle(QUERY_CHANNELS.searchPeople, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_people, (input) => run(() => query.searchPeople(input))));
-  ipc.handle(QUERY_CHANNELS.getPerson, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.get_person, (input) => run(() => query.getPerson(input))));
-  ipc.handle(QUERY_CHANNELS.listRelatives, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.list_relatives, (input) => run(() => query.listRelatives(input))));
-  ipc.handle(QUERY_CHANNELS.calculateRelationship, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.calculate_relationship, (input) => run(() => query.calculateRelationship(input))));
-  ipc.handle(QUERY_CHANNELS.summarizeLineage, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.summarize_lineage, (input) => run(() => query.summarizeLineage(input))));
-  ipc.handle(QUERY_CHANNELS.searchWiki, parsedHandler(trusted, QUERY_TOOL_SCHEMAS.search_wiki, (input) => run(() => query.searchWiki(input))));
+  ipc.handle(QUERY_CHANNELS.searchPeople, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.searchPeople, (input) => run(() => query.searchPeople(input))));
+  ipc.handle(QUERY_CHANNELS.getPerson, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.getPerson, (input) => run(() => query.getPerson(input))));
+  ipc.handle(QUERY_CHANNELS.listRelatives, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.listRelatives, (input) => run(() => query.listRelatives(input))));
+  ipc.handle(QUERY_CHANNELS.calculateRelationship, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.calculateRelationship, (input) => run(() => query.calculateRelationship(input))));
+  ipc.handle(QUERY_CHANNELS.summarizeLineage, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.summarizeLineage, (input) => run(() => query.summarizeLineage(input))));
+  ipc.handle(QUERY_CHANNELS.searchWiki, parsedHandler(trusted, RPC_INPUT_SCHEMAS.query.searchWiki, (input) => run(() => query.searchWiki(input))));
 }

@@ -1,0 +1,98 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createWebServer, type WebServer } from "../../../src/server/create-web-server.js";
+import { createFamilyAgentService, type FamilyAgentService } from "../../../src/server/runtime/family-agent-service.js";
+import { createFamilyRuntime, type FamilyRuntime } from "../../../src/server/runtime/family-runtime.js";
+
+const personDraft = (displayName: string) => ({
+  displayName,
+  aliases: [],
+  gender: "unknown" as const,
+  birth: null,
+  death: null,
+  notes: null,
+  sourceDescription: "HTTP integration test"
+});
+
+describe("typed family RPC API", () => {
+  let dataRoot: string;
+  let runtime: FamilyRuntime;
+  let service: FamilyAgentService;
+  let server: WebServer;
+
+  const rpc = async (group: string, method: string, input: unknown) => {
+    const response = await server.inject({
+      method: "POST",
+      url: `/api/rpc/${group}/${method}`,
+      payload: { input }
+    });
+    return { response, body: response.json() };
+  };
+
+  beforeEach(async () => {
+    dataRoot = await mkdtemp(join(tmpdir(), "family-agent-rpc-"));
+    runtime = await createFamilyRuntime({ dataRoot });
+    const created = await runtime.createFamily("王氏家谱");
+    if (!created.ok) throw new Error(created.error.message);
+    service = createFamilyAgentService({ runtime });
+    server = createWebServer({ runtime, service });
+  });
+
+  afterEach(async () => {
+    await server.close();
+    await service.dispose();
+    await runtime.dispose();
+    await rm(dataRoot, { recursive: true, force: true });
+  });
+
+  it("round-trips the core structured capability groups", async () => {
+    const father = await rpc("people", "save", { draft: personDraft("王建国"), confirmWarnings: true });
+    const child = await rpc("people", "save", { draft: personDraft("王强"), confirmWarnings: true });
+    expect(father.body).toMatchObject({ ok: true });
+    expect(child.body).toMatchObject({ ok: true });
+    const fatherId = father.body.value.entityId as string;
+    const childId = child.body.value.entityId as string;
+
+    const fixtures = [
+      ["people", "list", { limit: 100, offset: 0 }],
+      ["relations", "addParentChild", { draft: { parentId: fatherId, childId, parentRole: "father", sourceDescription: "族谱" }, confirmWarnings: true }],
+      ["lineages", "createLineage", { name: "王氏直系", founderPersonId: fatherId, description: null }],
+      ["merges", "history", null],
+      ["wiki", "list", { limit: 20, offset: 0 }],
+      ["query", "workspaceSnapshot", null],
+      ["chat", "authorize", { sessionId: "session-1", operation: "ask", payload: { question: "王强的父亲是谁", viewpointId: childId, selectedPersonId: fatherId } }],
+      ["dataManagement", "listAudit", null]
+    ] as const;
+
+    for (const [group, method, input] of fixtures) {
+      const result = await rpc(group, method, input);
+      expect(result.response.statusCode, `${group}.${method}`).toBe(200);
+      expect(result.body, `${group}.${method}`).toMatchObject({ ok: true });
+    }
+  });
+
+  it("rejects unknown methods, envelope fields and input fields", async () => {
+    const unknown = await rpc("people", "readDatabasePath", {});
+    expect(unknown.response.statusCode).toBe(400);
+    const prototypeKey = await rpc("people", "constructor", {});
+    expect(prototypeKey.response.statusCode).toBe(400);
+
+    const extraEnvelope = await server.inject({
+      method: "POST",
+      url: "/api/rpc/people/list",
+      payload: { input: { limit: 10, offset: 0 }, extra: true }
+    });
+    expect(extraEnvelope.statusCode).toBe(400);
+
+    const extraInput = await rpc("people", "list", { limit: 10, offset: 0, databasePath: "C:\\secret" });
+    expect(extraInput.response.statusCode).toBe(400);
+  });
+
+  it("does not serialize filesystem paths", async () => {
+    const snapshot = await rpc("query", "workspaceSnapshot", null);
+    expect(snapshot.response.statusCode).toBe(200);
+    expect(JSON.stringify(snapshot.body)).not.toMatch(/[A-Z]:\\|databasePath|mediaPath/u);
+  });
+});

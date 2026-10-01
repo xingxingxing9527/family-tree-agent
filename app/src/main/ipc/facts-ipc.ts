@@ -1,5 +1,6 @@
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import { z } from "zod";
+import type { ZodType } from "zod";
+import { RPC_INPUT_SCHEMAS } from "../../shared/api-schemas.js";
 import type {
   AppErrorCode,
   AppResult,
@@ -11,8 +12,7 @@ import type {
   PersonListItem,
   PersonPatch
 } from "../../shared/contracts.js";
-import { parsePartialDate, type PartialDate } from "../../shared/domain.js";
-import { validatePartialDate } from "../domain/validation/partial-date-validator.js";
+import type { PartialDate } from "../../shared/domain.js";
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 
 export const FACT_CHANNELS = {
@@ -36,59 +36,16 @@ export interface FactsGateway {
 }
 
 type IpcMainLike = Pick<IpcMain, "handle">;
-type Schema = z.ZodType;
-
-const idSchema = z.string().trim().min(1).max(200);
-const sourceDescriptionSchema = z.string().trim().min(1).max(500);
-const partialDateSchema = z.object({
-  calendar: z.enum(["solar", "lunar"]),
-  year: z.number().int().min(1),
-  month: z.number().int().min(1).max(12),
-  day: z.number().int().min(1).max(31).nullable(),
-  leapMonth: z.boolean(),
-  precision: z.enum(["month", "day"])
-}).strict().superRefine((value, context) => {
-  try {
-    const parsed = parsePartialDate(value);
-    if (parsed.precision !== value.precision) {
-      context.addIssue({ code: "custom", message: "Date precision does not match day", path: ["precision"] });
-    }
-    for (const issue of validatePartialDate(parsed).errors) {
-      context.addIssue({ code: "custom", message: issue.message });
-    }
-  } catch {
-    context.addIssue({ code: "custom", message: "Invalid partial date" });
-  }
-});
-
-const nullableDateSchema = partialDateSchema.nullable();
-const personDraftSchema = z.object({
-  displayName: z.string().trim().min(1).max(200),
-  aliases: z.array(z.string().trim().min(1).max(200)).max(100),
-  gender: z.enum(["male", "female", "unknown"]),
-  birth: nullableDateSchema,
-  death: nullableDateSchema,
-  notes: z.string().max(10_000).nullable(),
-  sourceDescription: sourceDescriptionSchema
-}).strict();
-const personPatchSchema = personDraftSchema.partial().refine((patch) => Object.keys(patch).length > 0, { message: "Patch cannot be empty" });
+type Schema = ZodType;
 
 const schemas = {
-  list: z.object({ query: z.string().trim().max(200).optional(), limit: z.number().int().min(1).max(1_000), offset: z.number().int().min(0).max(100_000) }).strict(),
-  get: z.object({ personId: idSchema }).strict(),
-  save: z.object({ draft: personDraftSchema, confirmWarnings: z.boolean() }).strict(),
-  update: z.object({ personId: idSchema, patch: personPatchSchema, expectedVersion: z.number().int().min(1), confirmWarnings: z.boolean() }).strict(),
-  parentChild: z.object({
-    draft: z.object({ parentId: idSchema, childId: idSchema, parentRole: z.enum(["father", "mother"]), sourceDescription: sourceDescriptionSchema }).strict()
-      .refine((draft) => draft.parentId !== draft.childId, { message: "People must be different" }),
-    confirmWarnings: z.boolean()
-  }).strict(),
-  marriage: z.object({
-    draft: z.object({ spouseAId: idSchema, spouseBId: idSchema, start: nullableDateSchema, sourceDescription: sourceDescriptionSchema }).strict()
-      .refine((draft) => draft.spouseAId !== draft.spouseBId, { message: "People must be different" }),
-    confirmWarnings: z.boolean()
-  }).strict(),
-  divorce: z.object({ marriageId: idSchema, endDate: nullableDateSchema, expectedVersion: z.number().int().min(1) }).strict()
+  list: RPC_INPUT_SCHEMAS.people.list,
+  get: RPC_INPUT_SCHEMAS.people.get,
+  save: RPC_INPUT_SCHEMAS.people.save,
+  update: RPC_INPUT_SCHEMAS.people.update,
+  parentChild: RPC_INPUT_SCHEMAS.relations.addParentChild,
+  marriage: RPC_INPUT_SCHEMAS.relations.addMarriage,
+  divorce: RPC_INPUT_SCHEMAS.relations.divorce
 } as const;
 
 const denied = (): AppResult<never> => ({ ok: false, error: { code: "PATH_DENIED", message: "IPC sender was denied" } });
