@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UndoService } from "../../../src/main/application/audit/undo-service";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
+import { FactQueries } from "../../../src/main/application/facts/fact-queries";
 import { MutationValidationError, StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
+import { ParentCompletionService } from "../../../src/main/application/relations/parent-completion-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import { RPC_INPUT_SCHEMAS } from "../../../src/shared/api-schemas";
@@ -221,6 +223,122 @@ describe("StagedMutationService", () => {
     } satisfies Partial<MutationValidationError>));
     expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE parent_id='known' AND child_id='child'").pluck().get()).toBe(0);
     expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(0);
+  });
+
+  it.each(["marriage", "parent-edge"] as const)("rejects an entirely selected repair batch when one relevant %s changes", (kind) => {
+    seedFamily();
+    createParent("known-parent", "known", "father");
+    createPerson("known-2", "第二位明确父亲", "male");
+    createPerson("spouse-2", "第二位建议母亲", "female");
+    createPerson("child-2", "第二个孩子");
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "marriage-2", workspaceId, spouseAId: "known-2", spouseBId: "spouse-2" },
+      source: source("marriage:2")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: { id: "known-parent-2", workspaceId, parentId: "known-2", childId: "child-2", parentRole: "father" },
+      source: source("parent:2")
+    });
+    const intents = [
+      parentFamilyIntent(),
+      {
+        type: "parentFamily.add" as const,
+        knownParentId: "known-2",
+        childId: "child-2",
+        parentRole: "father" as const,
+        completionPolicy: "spouse-default" as const,
+        sourceDescription: "历史未完整父母关系批量修复"
+      }
+    ];
+    const preview = service.stage({ intents });
+    expect(preview.changes).toHaveLength(4);
+    expect(preview.changes.filter(({ disposition, originKind }) => disposition === "unchanged" && originKind === "explicit"))
+      .toHaveLength(2);
+    const selectedChangeIds = preview.changes
+      .filter(({ disposition, originKind }) => disposition === "create" && originKind === "spouse_default")
+      .map(({ id }) => id);
+    expect(selectedChangeIds).toHaveLength(2);
+
+    if (kind === "marriage") {
+      facts.execute({
+        type: "marriage.divorce",
+        marriageId: "marriage-2",
+        endDate: solar(2025),
+        expectedVersion: 1,
+        source: source("external-marriage-2")
+      });
+    } else {
+      facts.execute({
+        type: "parentChild.add",
+        draft: { id: "external-mother-2", workspaceId, parentId: "spouse-2", childId: "child-2", parentRole: "mother" },
+        source: source("external-parent-2")
+      });
+    }
+    const confirmGroupsBefore = database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get();
+    const activeParentsBefore = database.prepare("SELECT COUNT(*) FROM parent_child WHERE deleted_at IS NULL").pluck().get();
+
+    expect(() => service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds,
+      acknowledgedWarningCodes: []
+    })).toThrowError(expect.objectContaining({
+      code: "CONFLICT",
+      details: { code: "PARENT_COMPLETION_STALE" }
+    } satisfies Partial<MutationValidationError>));
+
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE deleted_at IS NULL").pluck().get()).toBe(activeParentsBefore);
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE origin_kind='spouse_default' AND deleted_at IS NULL").pluck().get()).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(confirmGroupsBefore);
+    expect(database.prepare("SELECT COUNT(*) FROM source WHERE source_key LIKE ?").pluck().get(`mutation:${preview.id}:%`)).toBe(0);
+  });
+
+  it("confirms all selected repair rows in one operation and a fresh scan omits every repaired child", () => {
+    seedFamily();
+    createParent("known-parent", "known", "father");
+    createPerson("known-2", "第二位明确父亲", "male");
+    createPerson("spouse-2", "第二位建议母亲", "female");
+    createPerson("child-2", "第二个孩子");
+    const facts = new FactCommandService(database, workspaceId);
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "marriage-2", workspaceId, spouseAId: "known-2", spouseBId: "spouse-2" },
+      source: source("marriage:2")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: { id: "known-parent-2", workspaceId, parentId: "known-2", childId: "child-2", parentRole: "father" },
+      source: source("parent:2")
+    });
+
+    const beforeScan = new ParentCompletionService(new FactQueries(database, workspaceId)).scan();
+    expect(beforeScan.items.map(({ childId }) => childId).sort()).toEqual(["child", "child-2"]);
+    const preview = service.stage({ intents: beforeScan.items.map(({ knownParentId, childId, parentRole }) => ({
+      type: "parentFamily.add" as const,
+      knownParentId,
+      childId,
+      parentRole,
+      completionPolicy: "spouse-default" as const,
+      sourceDescription: "历史未完整父母关系批量修复"
+    })) });
+    const selectedChangeIds = preview.changes
+      .filter(({ disposition, originKind }) => disposition === "create" && originKind === "spouse_default")
+      .map(({ id }) => id);
+
+    const receipt = service.confirm({
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds,
+      acknowledgedWarningCodes: []
+    });
+
+    expect(selectedChangeIds).toHaveLength(2);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE id=? AND kind='mutation.confirm'").pluck().get(receipt.operationGroupId)).toBe(1);
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE origin_kind='spouse_default' AND deleted_at IS NULL").pluck().get()).toBe(2);
+    expect(new ParentCompletionService(new FactQueries(database, workspaceId)).scan().items).toEqual([]);
   });
 
   it("rejects evidence changed by another connection immediately before the confirmation transaction", () => {

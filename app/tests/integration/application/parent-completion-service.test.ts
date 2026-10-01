@@ -8,11 +8,13 @@ import {
 } from "../../../src/main/application/relations/parent-completion-service";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 import { FactQueries } from "../../../src/main/application/facts/fact-queries";
+import { StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import type { PersonRecord } from "../../../src/main/database/repositories/person-repository";
 import type { MarriageRecord, ParentChildRecord } from "../../../src/main/database/repositories/relation-repository";
 import type { PartialDate } from "../../../src/shared/domain";
+import { MAX_MUTATION_CHANGES, MAX_MUTATION_INTENTS } from "../../../src/shared/mutations";
 
 const workspaceId = "workspace-1";
 const solar = (year: number, month = 1, day: number | null = null): PartialDate => ({
@@ -178,6 +180,71 @@ describe("ParentCompletionService", () => {
     expect(parentsRead).toHaveBeenCalledTimes(1);
     expect(marriagesRead).toHaveBeenCalledTimes(1);
   });
+
+  it("scans a real 1000-person mixed workspace once without writes or duplicate children and stages every safe repair in one bounded draft", () => {
+    for (let index = 0; index < 200; index += 1) {
+      const suffix = String(index).padStart(3, "0");
+      const knownId = `known-${suffix}`;
+      const spouseAId = `spouse-a-${suffix}`;
+      const spouseBId = `spouse-b-${suffix}`;
+      const childId = `child-${suffix}`;
+      createPerson(knownId, `父亲-${suffix}`, "male");
+      createPerson(spouseAId, `配偶甲-${suffix}`, "female");
+      createPerson(spouseBId, `配偶乙-${suffix}`, "female");
+      createPerson(childId, `孩子-${suffix}`);
+      createPerson(`spare-${suffix}`, `旁系-${suffix}`);
+      createParent(`parent-${suffix}`, knownId, childId, "father");
+      if (index % 4 === 0) {
+        createMarriage(`active-${suffix}`, knownId, spouseAId);
+      } else if (index % 4 === 1) {
+        createMarriage(`old-${suffix}`, knownId, spouseAId, "divorced", solar(1980), solar(1990));
+        createMarriage(`current-${suffix}`, knownId, spouseAId, "active", solar(1995));
+      } else if (index % 4 === 3) {
+        createMarriage(`first-${suffix}`, knownId, spouseAId, "divorced", solar(1980), solar(1990));
+        createMarriage(`second-${suffix}`, knownId, spouseBId, "active", solar(1995));
+      }
+    }
+    expect(database.prepare("SELECT COUNT(*) FROM person").pluck().get()).toBe(1_000);
+    const before = tableCounts();
+    const peopleRead = vi.spyOn(FactQueries.prototype, "listPeople");
+    const parentsRead = vi.spyOn(FactQueries.prototype, "listParentChild");
+    const marriagesRead = vi.spyOn(FactQueries.prototype, "listMarriages");
+    const startedAt = performance.now();
+
+    const scan = new ParentCompletionService(queries).scan();
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(scan.counts).toEqual({ total: 200, safe: 100, ambiguous: 50, noCandidate: 50, conflict: 0 });
+    expect(scan.items).toHaveLength(200);
+    expect(new Set(scan.items.map(({ childId }) => childId)).size).toBe(200);
+    expect(scan.items.filter(({ childId }) => childId === "child-001")).toHaveLength(1);
+    expect(scan.items.find(({ childId }) => childId === "child-001")?.plan.candidates[0]?.marriageEpisodes)
+      .toHaveLength(2);
+    expect(elapsedMs).toBeLessThan(1_000);
+    expect(tableCounts()).toEqual(before);
+    expect(peopleRead).toHaveBeenCalledTimes(1);
+    expect(parentsRead).toHaveBeenCalledTimes(1);
+    expect(marriagesRead).toHaveBeenCalledTimes(1);
+
+    const selected = scan.items.filter(({ classification }) => classification === "safe");
+    const intents = selected.map(({ knownParentId, childId, parentRole }) => ({
+      type: "parentFamily.add" as const,
+      knownParentId,
+      childId,
+      parentRole,
+      completionPolicy: "spouse-default" as const,
+      sourceDescription: "历史未完整父母关系批量修复"
+    }));
+    expect(intents.length).toBeLessThanOrEqual(MAX_MUTATION_INTENTS);
+    const preview = new StagedMutationService(database, workspaceId).stage({ intents });
+    expect(preview.changes).toHaveLength(intents.length * 2);
+    expect(preview.changes.length).toBeLessThanOrEqual(MAX_MUTATION_CHANGES);
+    expect(new Set(preview.changes.map(({ id }) => id)).size).toBe(preview.changes.length);
+    expect(preview.changes.filter(({ disposition, originKind }) => disposition === "unchanged" && originKind === "explicit"))
+      .toHaveLength(intents.length);
+    expect(preview.changes.filter(({ disposition, originKind }) => disposition === "create" && originKind === "spouse_default"))
+      .toHaveLength(intents.length);
+  }, 20_000);
 
   it("reports a conflicting complementary parent with Chinese names", () => {
     createPerson("known", "已知父亲", "male");

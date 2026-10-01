@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState, type JSX } from "react
 import type { FamilyAgentApi, PersonDetailReadModel, PersonDraft, PersonListItem, WorkspaceSummary } from "../../../../shared/contracts";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
 import type { RelativeQuickCreateRequest } from "../relations/FamilyRelationsPanel";
+import { ParentCompletionRepairPanel } from "../relations/ParentCompletionRepairPanel";
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
 import { PersonEditor } from "./PersonEditor";
@@ -40,6 +41,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [relativeCreation, setRelativeCreation] = useState<RelativeQuickCreateRequest | null>(null);
+  const [repairingParents, setRepairingParents] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const listRequestId = useRef(0);
@@ -85,6 +87,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
 
   useEffect(() => {
     cancelRelativeCreation();
+    setRepairingParents(false);
     selectedPersonId.current = initialSelectedPersonId;
     setSelected(null);
     void loadPeople();
@@ -132,7 +135,10 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <p className="eyebrow text-secondary">当前谱册</p>
           <h1 id="people-page-title">{workspace.name}</h1>
         </div>
-        <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); cancelRelativeCreation(); }}>新增人物</button>
+        <div className="button-row">
+          <button className="button secondary-button" type="button" onClick={() => setRepairingParents(true)}>检查未完整父母关系</button>
+          <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); cancelRelativeCreation(); setRepairingParents(false); }}>新增人物</button>
+        </div>
       </header>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="people-layout">
@@ -146,7 +152,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
               type="button"
               key={person.id}
               aria-label={`查看${person.displayName}`}
-              onClick={() => { setCreating(false); setEditing(false); cancelRelativeCreation(); void loadDetail(person.id); }}
+              onClick={() => { setCreating(false); setEditing(false); cancelRelativeCreation(); setRepairingParents(false); void loadDetail(person.id); }}
             >
               <strong>{person.displayName}</strong>
               <span className="text-secondary">{person.aliases.join("、") || "无别名"}</span>
@@ -179,6 +185,12 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <MergeHistory api={api.merges} prepareMutation={prepareMutation} />
         </div>
       </div>
+      {repairingParents && <ParentCompletionRepairPanel
+        relations={api.relations}
+        mutations={api.mutations}
+        onClose={() => setRepairingParents(false)}
+        onCommitted={relationsChanged}
+      />}
     </section>
   );
 }
