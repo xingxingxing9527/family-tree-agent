@@ -54,7 +54,11 @@ export function useStagedMutation(
         if (requestIsCurrent(generation)) setError(result.error.message);
         return false;
       }
-      await onPersisted?.(result.value);
+      try {
+        await onPersisted?.(result.value);
+      } catch {
+        // Persistence already succeeded; invalidation is best-effort and must not make the mutation retryable.
+      }
       if (!requestIsCurrent(generation)) return false;
       setPreview(null);
       await onCommitted?.(result.value);

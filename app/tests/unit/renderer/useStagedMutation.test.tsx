@@ -53,10 +53,38 @@ async function stagePreview(result: { current: ReturnType<typeof useStagedMutati
 }
 
 describe("useStagedMutation commit lifecycle", () => {
+  it.each([
+    ["synchronous throw", () => { throw new Error("同步刷新失败"); }],
+    ["asynchronous rejection", async () => { throw new Error("异步刷新失败"); }]
+  ] as const)("keeps a successful confirmation successful after %s from persistence notification", async (_label, failNotification) => {
+    const onCommitted = vi.fn();
+    const onPersisted = vi.fn(failNotification);
+    const confirm = vi.fn().mockResolvedValue({ ok: true, value: receipt });
+    const { result } = renderHook(() => useStagedMutation(apiWithConfirm(confirm), onCommitted, { onPersisted }));
+    await stagePreview(result);
+
+    await act(async () => {
+      expect(await result.current.confirm(["change-1"], [])).toBe(true);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.preview).toBeNull();
+    expect(onPersisted).toHaveBeenCalledOnce();
+    expect(onCommitted).toHaveBeenCalledOnce();
+    expect(onCommitted).toHaveBeenCalledWith(receipt);
+
+    await act(async () => {
+      expect(await result.current.confirm(["change-1"], [])).toBe(false);
+    });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(onPersisted).toHaveBeenCalledOnce();
+    expect(onCommitted).toHaveBeenCalledOnce();
+  });
+
   it("notifies persisted success once but suppresses the owner callback after reset", async () => {
     const pending = deferred<AppResult<MutationReceipt>>();
     const onCommitted = vi.fn();
-    const onPersisted = vi.fn();
+    const onPersisted = vi.fn().mockRejectedValue(new Error("失效 owner 刷新失败"));
     const { result } = renderHook(() => useStagedMutation(apiWithConfirm(vi.fn().mockReturnValue(pending.promise)), onCommitted, { onPersisted }));
     await stagePreview(result);
 
