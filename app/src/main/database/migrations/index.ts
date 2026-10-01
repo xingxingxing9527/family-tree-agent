@@ -6,6 +6,7 @@ import { wikiFtsMigration } from "./003-wiki-fts.js";
 import { operationGroupUndoMigration } from "./004-operation-group-undo.js";
 import { lineageGenerationMarkerMigration } from "./005-lineage-generation-marker.js";
 import { personCodeAndCompletenessMigration } from "./006-person-code-and-completeness.js";
+import { parentCompletionMetadataMigration } from "./007-parent-completion-metadata.js";
 
 interface Migration {
   version: number;
@@ -13,7 +14,7 @@ interface Migration {
   sql: string;
 }
 
-const migrations: readonly Migration[] = [initialSchemaMigration, mergeHistoryMigration, wikiFtsMigration, operationGroupUndoMigration, lineageGenerationMarkerMigration, personCodeAndCompletenessMigration];
+const migrations: readonly Migration[] = [initialSchemaMigration, mergeHistoryMigration, wikiFtsMigration, operationGroupUndoMigration, lineageGenerationMarkerMigration, personCodeAndCompletenessMigration, parentCompletionMetadataMigration];
 
 export const LATEST_SCHEMA_VERSION = migrations.at(-1)!.version;
 

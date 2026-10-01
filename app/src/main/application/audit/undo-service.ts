@@ -84,7 +84,9 @@ const parentChildSchema = z.object({
   parentId: bounded,
   childId: bounded,
   parentRole: z.enum(["father", "mother"]),
-  relationshipType: z.literal("biological")
+  relationshipType: z.literal("biological"),
+  originKind: z.enum(["explicit", "spouse_default"]).default("explicit"),
+  inferredFromMarriageId: nullableBounded.default(null)
 }).strict();
 const marriageSchema = z.object({
   ...common,
@@ -402,8 +404,8 @@ export class UndoService {
       },
       parent_child: {
         table: "parent_child", schema: parentChildSchema as z.ZodType<Snapshot>, supportsRestore: true,
-        read: (id) => row("SELECT * FROM parent_child WHERE workspace_id=? AND id=?", id, (value) => ({ ...base(value), parentId: String(value.parent_id), childId: String(value.child_id), parentRole: value.parent_role as "father" | "mother", relationshipType: "biological" as const })),
-        restore: (snapshot) => { const value = parentChildSchema.parse(snapshot); this.database.prepare("UPDATE parent_child SET parent_id=?, child_id=?, parent_role=?, relationship_type=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?").run(value.parentId, value.childId, value.parentRole, value.relationshipType, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
+        read: (id) => row("SELECT * FROM parent_child WHERE workspace_id=? AND id=?", id, (value) => ({ ...base(value), parentId: String(value.parent_id), childId: String(value.child_id), parentRole: value.parent_role as "father" | "mother", relationshipType: "biological" as const, originKind: value.origin_kind as "explicit" | "spouse_default", inferredFromMarriageId: value.inferred_from_marriage_id === null ? null : String(value.inferred_from_marriage_id) })),
+        restore: (snapshot) => { const value = parentChildSchema.parse(snapshot); this.database.prepare("UPDATE parent_child SET parent_id=?, child_id=?, parent_role=?, relationship_type=?, origin_kind=?, inferred_from_marriage_id=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?").run(value.parentId, value.childId, value.parentRole, value.relationshipType, value.originKind, value.inferredFromMarriageId, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
         dependencies: none
       },
       marriage: {

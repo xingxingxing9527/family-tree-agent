@@ -10,6 +10,7 @@ import { ImportPlanner, ImportPlanStore } from "../../../src/main/application/im
 import type { ParsedImport } from "../../../src/main/application/import/import-types";
 import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
+import { RelationRepository } from "../../../src/main/database/repositories/relation-repository";
 import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
 import type { ConversationMutationDraft } from "../../../src/shared/chat";
 
@@ -117,6 +118,34 @@ describe("conservative operation-group undo", () => {
       expect(database.prepare(`SELECT COUNT(*) FROM ${table} WHERE workspace_id = ?`).pluck().get(workspaceId), table).toBe(0);
     }
     expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE operation_group_id = ?").pluck().get(report.operationGroupId)).toBeGreaterThan(0);
+  });
+
+  it("restores archived inferred parent provenance without mutating its marriage", () => {
+    for (const [id, name] of [["undo-father", "父"], ["undo-mother", "母"], ["undo-child", "子"]] as const) {
+      facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`undo:${id}`) });
+    }
+    const marriage = facts.execute({
+      type: "marriage.add",
+      draft: { id: "undo-marriage", workspaceId, spouseAId: "undo-father", spouseBId: "undo-mother" },
+      source: source("undo:marriage")
+    });
+    facts.execute({
+      type: "parentChild.add",
+      draft: {
+        id: "undo-inferred", workspaceId, parentId: "undo-mother", childId: "undo-child", parentRole: "mother",
+        originKind: "spouse_default", inferredFromMarriageId: "undo-marriage"
+      },
+      source: source("undo:inferred")
+    });
+    const archived = facts.execute({ type: "fact.softDelete", entityType: "parent_child", entityId: "undo-inferred", expectedVersion: 1 });
+    const marriageBeforeUndo = database.prepare("SELECT row_version, deleted_at FROM marriage WHERE id = 'undo-marriage'").get();
+
+    undo.undoOperationGroup(archived.operationGroupId);
+
+    expect(database.prepare("SELECT row_version, deleted_at FROM marriage WHERE id = 'undo-marriage'").get()).toEqual(marriageBeforeUndo);
+    expect(new RelationRepository(database, workspaceId).getParentChild("undo-inferred"))
+      .toMatchObject({ originKind: "spouse_default", inferredFromMarriageId: "undo-marriage", deletedAt: null });
+    expect(marriage.operationGroupId).not.toBe(archived.operationGroupId);
   });
 
   it("preflights the entire group so a later row-version mismatch changes nothing", () => {

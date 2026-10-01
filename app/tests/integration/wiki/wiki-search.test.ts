@@ -16,7 +16,7 @@ describe("wiki FTS search", () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-wiki-"));
     roots.push(root);
     const database = openDatabase(join(root, "genealogy.sqlite"));
-    expect(applyMigrations(database)).toBe(6);
+    expect(applyMigrations(database)).toBe(7);
     const now = new Date().toISOString();
     database.prepare("INSERT INTO source (id, workspace_id, source_key, title, created_at, updated_at) VALUES ('source-a', 'workspace-1', 'a', '家谱底本', ?, ?)").run(now, now);
     database.prepare("INSERT INTO source (id, workspace_id, source_key, title, created_at, updated_at) VALUES ('source-b', 'workspace-1', 'b', '口述记录', ?, ?)").run(now, now);

@@ -33,7 +33,7 @@ export async function createBackupFixture(roots: string[]): Promise<BackupFixtur
   await mkdir(mediaRoot, { recursive: true });
   await mkdir(backupsRoot);
   await mkdir(join(root, "archives"));
-  const workspaceManifest = { id: workspaceId, name: "王氏家谱", directory: workspaceDirectory, originPersonId, lastOpenedAt: "2026-09-16T00:00:00.000Z", schemaVersion: 6 };
+  const workspaceManifest = { id: workspaceId, name: "王氏家谱", directory: workspaceDirectory, originPersonId, lastOpenedAt: "2026-09-16T00:00:00.000Z", schemaVersion: 7 };
   await writeFile(manifestPath, JSON.stringify(workspaceManifest));
   await writeFile(join(root, "workspaces", "index.json"), JSON.stringify({ workspaces: [workspaceManifest] }));
   const database = openDatabase(databasePath);

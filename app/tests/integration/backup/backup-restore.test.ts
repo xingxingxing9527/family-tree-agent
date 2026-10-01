@@ -65,7 +65,7 @@ describe("verified backup and staged restore", () => {
       formatVersion: 1,
       workspaceId,
       workspaceName: "王氏家谱",
-      schemaVersion: 6,
+      schemaVersion: 7,
       counts: { people: 1, parentChild: 0, marriages: 0, wikiEntries: 1, mediaAssets: 1 }
     });
     expect(backup.manifest.files.map((entry) => entry.path)).toEqual([...backup.manifest.files.map((entry) => entry.path)].sort());
@@ -97,7 +97,7 @@ describe("verified backup and staged restore", () => {
       completeActivation: () => { completed = true; }
     });
     const inspection = await restore.inspectBackup({ archivePath: value.archivePath, targetWorkspaceId: workspaceId });
-    expect(inspection).toMatchObject({ verified: true, targetWorkspaceId: workspaceId, manifest: { schemaVersion: 6, counts: backup.manifest.counts } });
+    expect(inspection).toMatchObject({ verified: true, targetWorkspaceId: workspaceId, manifest: { schemaVersion: 7, counts: backup.manifest.counts } });
     await restore.restoreBackup({ restoreToken: inspection.restoreToken, targetWorkspaceId: workspaceId, confirmReplace: true });
 
     expect(committed).toBe(true);

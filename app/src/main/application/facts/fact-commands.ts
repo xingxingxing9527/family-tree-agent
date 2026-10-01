@@ -1,6 +1,6 @@
 import type { PartialDate } from "../../../shared/domain.js";
 import type { Gender, UpdatePersonInput } from "../../database/repositories/person-repository.js";
-import type { ParentRole } from "../../database/repositories/relation-repository.js";
+import type { ParentChildOriginKind, ParentRole } from "../../database/repositories/relation-repository.js";
 import type { CreateSourceInput } from "../../database/repositories/source-repository.js";
 import type { DomainIssue } from "../../domain/validation/partial-date-validator.js";
 
@@ -23,6 +23,8 @@ export interface ParentChildDraft {
   parentId: string;
   childId: string;
   parentRole: ParentRole;
+  originKind?: ParentChildOriginKind;
+  inferredFromMarriageId?: string | null;
 }
 
 export interface MarriageDraft {

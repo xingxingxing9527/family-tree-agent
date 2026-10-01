@@ -33,7 +33,7 @@ describe("person code migration and allocation", () => {
     insert.run("person-b", workspaceId, "同日乙", "2025-02-01T00:00:00.000Z", "2025-02-01T00:00:00.000Z");
     insert.run("person-a", workspaceId, "同日甲", "2025-02-01T00:00:00.000Z", "2025-02-01T00:00:00.000Z");
 
-    expect(applyMigrations(database)).toBe(6);
+    expect(applyMigrations(database)).toBe(7);
     expect(database.prepare("SELECT person_code FROM person WHERE workspace_id=? ORDER BY person_code").pluck().all(workspaceId))
       .toEqual(["P000001", "P000002", "P000003"]);
     expect(database.prepare("SELECT id FROM person WHERE workspace_id=? ORDER BY person_code").pluck().all(workspaceId))

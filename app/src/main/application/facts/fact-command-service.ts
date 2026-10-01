@@ -139,6 +139,14 @@ export class FactCommandService {
         const parent = this.loadPerson(command.draft.parentId, "parentId", ids, errors);
         const child = this.loadPerson(command.draft.childId, "childId", ids, errors);
         if (!parent || !child) break;
+        if ((command.draft.originKind ?? "explicit") === "spouse_default") {
+          if (!command.draft.inferredFromMarriageId) {
+            errors.push(issue("VALIDATION", "Spouse-default parent-child relations require an inferred marriage"));
+          } else {
+            const marriage = this.loadMarriage(command.draft.inferredFromMarriageId, errors);
+            if (marriage) ids.inferredMarriageId = marriage.id;
+          }
+        }
         const edges = this.relations.listParentChild();
         this.mergeValidation(validateParentChildFact(parent, child, edges), errors, warnings);
         if (edges.some((edge) => edge.childId === child.id && edge.parentRole === command.draft.parentRole)) {
@@ -212,7 +220,9 @@ export class FactCommandService {
           id: command.draft.id,
           parentId: ids.parentId!,
           childId: ids.childId!,
-          parentRole: command.draft.parentRole
+          parentRole: command.draft.parentRole,
+          originKind: command.draft.originKind,
+          inferredFromMarriageId: command.draft.originKind === "spouse_default" ? ids.inferredMarriageId : null
         }).id;
       }
       case "marriage.add": {
