@@ -17,8 +17,8 @@ function WorkspaceRoute(): JSX.Element {
   }, [indexed, state, workspaceId]);
 
   if (!workspaceId) return <Navigate to="/" replace />;
-  if (state.loading || (state.switching && state.activeWorkspace?.id !== workspaceId) || (indexed && attempted.current !== workspaceId && state.activeWorkspace?.id !== workspaceId)) return <main className="state-page"><section className="state-card" role="status"><h1>正在打开谱册…</h1><p>正在验证本地谱册并隔离工作区。</p></section></main>;
-  if (!indexed) return <main className="state-page"><section className="state-card" role="alert"><h1>找不到这个谱册</h1><p>链接中的谱册不在本机索引中，未加载任何其他谱册资料。</p><Link to="/">返回首页</Link></section></main>;
+  if (state.loading || (state.switching && state.activeWorkspace?.id !== workspaceId) || (indexed && attempted.current !== workspaceId && state.activeWorkspace?.id !== workspaceId)) return <main className="state-page"><section className="state-card" role="status"><h1>正在打开谱册…</h1><p>正在验证谱册并隔离工作区。</p></section></main>;
+  if (!indexed) return <main className="state-page"><section className="state-card" role="alert"><h1>找不到这个谱册</h1><p>链接中的谱册不存在，未加载任何其他谱册资料。</p><Link to="/">返回首页</Link></section></main>;
   if (state.activeWorkspace?.id !== workspaceId) return <main className="state-page"><section className="state-card" role="alert"><h1>无法打开谱册</h1><p>没有加载链接目标以外的谱册资料。</p><Link to="/">返回首页</Link></section></main>;
   return <AppShell workspace={state.activeWorkspace} />;
 }

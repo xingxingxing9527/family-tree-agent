@@ -87,7 +87,7 @@ export function EntryCenterPage({ workspaceId, api, people, onChanged }: EntryCe
       <button className="button secondary-button" aria-pressed={mode === "spreadsheet"} type="button" onClick={() => setMode("spreadsheet")}>表格导入</button>
       <button className="button secondary-button" aria-pressed={mode === "conversation"} type="button" onClick={() => setMode("conversation")}>对话录入</button>
     </nav>
-    {mode === "manual" && <section className="content-card"><h2>表单录入</h2><p>在人物库新增人物、修正资料，并建立亲子、婚姻与离婚事实。</p><Link className="button-link" to={`/workspace/${workspaceId}/people`}>前往人物库</Link></section>}
+    {mode === "manual" && <section className="content-card"><h2>表单录入</h2><p>在人物页面新增人物、修正资料，并建立亲子、婚姻与离婚事实。</p><Link className="button-link" to={`/workspace/${workspaceId}/people`}>前往人物</Link></section>}
     {mode === "spreadsheet" && <ImportPage api={api.imports} onCommitted={onChanged} />}
     {mode === "conversation" && <ConversationEntry api={api} people={people} onChanged={onChanged} />}
   </section>;

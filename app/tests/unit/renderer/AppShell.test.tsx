@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../../../src/renderer/src/App";
 import { ApiProvider } from "../../../src/renderer/src/app/ApiContext";
@@ -73,17 +73,55 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("complete application shell", () => {
-  it("renders the six first-level areas for a validated packaged-app hash route", async () => {
+  it("renders exactly four primary Web areas and keeps Wiki/settings secondary", async () => {
     const { api } = desktopApi([workspaceA]);
     window.location.hash = `#/workspace/${workspaceA.id}/tree`;
 
     renderApp(api);
 
     const navigation = await screen.findByRole("navigation", { name: "一级导航" });
-    for (const label of ["首页", "家谱树", "人物库", "录入中心", "家族 Wiki", "设置与数据"]) {
-      expect(navigation).toHaveTextContent(label);
-    }
+    expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual(["家谱树", "人物", "录入", "问答"]);
+    const secondary = screen.getByRole("navigation", { name: "次级导航" });
+    expect(within(secondary).getAllByRole("link").map((link) => link.textContent)).toEqual(["家族 Wiki", "设置与数据"]);
+    expect(screen.queryByRole("button", { name: "切换谱册" })).not.toBeInTheDocument();
     expect(screen.getByText("甲谱")).toBeVisible();
+  });
+
+  it("keeps the shared viewpoint when moving from the tree to the question page", async () => {
+    const { api } = desktopApi([workspaceA]);
+    const people = [
+      { id: "person-a", displayName: "王明", aliases: [], gender: "male" as const, birth: null, death: null, notes: null, rowVersion: 1 },
+      { id: "person-b", displayName: "王强", aliases: [], gender: "male" as const, birth: null, death: null, notes: null, rowVersion: 1 }
+    ];
+    vi.mocked(api.query.workspaceSnapshot).mockResolvedValue({ ok: true, value: { workspaceId: workspaceA.id, people, sources: [], lineages: [] } });
+    window.location.hash = `#/workspace/${workspaceA.id}/tree`;
+    renderApp(api);
+
+    fireEvent.change(await screen.findByLabelText("共享当前视角"), { target: { value: "person-b" } });
+    fireEvent.click(screen.getByRole("link", { name: "问答" }));
+
+    expect(await screen.findByLabelText("回答视角")).toHaveValue("person-b");
+  });
+
+  it("opens a person-scoped question from the person detail quick actions", async () => {
+    const { api } = desktopApi([workspaceA]);
+    const people = [
+      { id: "person-a", displayName: "王明", aliases: [], gender: "male" as const, birth: null, death: null, notes: null, rowVersion: 1 },
+      { id: "person-b", displayName: "王强", aliases: [], gender: "male" as const, birth: null, death: null, notes: null, rowVersion: 1 }
+    ];
+    vi.mocked(api.query.workspaceSnapshot).mockResolvedValue({ ok: true, value: { workspaceId: workspaceA.id, people, sources: [], lineages: [] } });
+    vi.mocked(api.people.list).mockResolvedValue({ ok: true, value: people });
+    vi.mocked(api.people.get).mockResolvedValue({ ok: true, value: { person: { ...people[1], personCode: "P000002" }, aliases: [], parents: [], children: [], marriages: [] } });
+    window.location.hash = `#/workspace/${workspaceA.id}/people`;
+    renderApp(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: "查看王强" }));
+    fireEvent.click(await screen.findByRole("button", { name: "设为当前视角" }));
+    expect(screen.getByLabelText("共享当前视角")).toHaveValue("person-b");
+    fireEvent.click(screen.getByRole("button", { name: "询问此人" }));
+
+    expect(await screen.findByLabelText("问题人物")).toHaveValue("person-b");
+    expect(screen.getByLabelText("回答视角")).toHaveValue("person-b");
   });
 
   it("opens the deep-linked workspace before rendering workspace-scoped data", async () => {
@@ -113,6 +151,7 @@ describe("complete application shell", () => {
     fireEvent.change(search, { target: { value: "甲家人" } });
     fireEvent.submit(search.closest("form")!);
     fireEvent.click(await screen.findByRole("button", { name: /甲家人/u }));
+    fireEvent.click(screen.getByRole("link", { name: "问答" }));
     fireEvent.click(await screen.findByRole("button", { name: "关系查询" }));
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     fireEvent.click(await screen.findByRole("button", { name: "同意并发送" }));

@@ -15,9 +15,11 @@ interface PersonDetailProps {
   mediaApi: FamilyAgentApi["media"];
   onEdit(): void;
   onChanged(): Promise<void>;
+  onUseAsViewpoint?(personId: string): void;
+  onAskAbout?(personId: string): void;
 }
 
-export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged }: PersonDetailProps): JSX.Element {
+export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged, onUseAsViewpoint, onAskAbout }: PersonDetailProps): JSX.Element {
   const gender = detail.person.gender === "male" ? "男" : detail.person.gender === "female" ? "女" : "未知";
   const [childrenStatus, setChildrenStatus] = useState<ChildrenCountStatusDto | null>(null);
   useEffect(() => {
@@ -45,7 +47,11 @@ export function PersonDetail({ detail, peopleApi, relationsApi, mutations, media
           <p className="eyebrow text-secondary">人物详情</p>
           <h2 id="person-detail-title" className="text-primary">{detail.person.displayName}</h2>
         </div>
-        <button className="button secondary-button" type="button" onClick={onEdit}>编辑人物</button>
+        <div className="button-row">
+          {onUseAsViewpoint && <button className="button secondary-button" type="button" onClick={() => onUseAsViewpoint(detail.person.id)}>设为当前视角</button>}
+          {onAskAbout && <button className="button secondary-button" type="button" onClick={() => onAskAbout(detail.person.id)}>询问此人</button>}
+          <button className="button secondary-button" type="button" onClick={onEdit}>编辑人物</button>
+        </div>
       </div>
       <dl className="detail-grid">
         <div><dt>人物编号</dt><dd>{detail.person.personCode}</dd></div>

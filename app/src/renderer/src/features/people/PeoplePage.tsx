@@ -15,6 +15,8 @@ interface PeoplePageProps {
   onDataChanged?(): void;
   prepareMutation?(): PreparedMutationRefresh;
   onSelectedPersonChange?(personId: string | null): void;
+  onUseAsViewpoint?(personId: string): void;
+  onAskAbout?(personId: string): void;
 }
 
 const noop = (): void => undefined;
@@ -31,7 +33,7 @@ function draftFromDetail(detail: PersonDetailReadModel): PersonDraft {
   };
 }
 
-export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onDataChanged = noop, prepareMutation, onSelectedPersonChange = noop }: PeoplePageProps): JSX.Element {
+export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onDataChanged = noop, prepareMutation, onSelectedPersonChange = noop, onUseAsViewpoint, onAskAbout }: PeoplePageProps): JSX.Element {
   const [people, setPeople] = useState<PersonListItem[]>([]);
   const [selected, setSelected] = useState<PersonDetailReadModel | null>(null);
   const [editing, setEditing] = useState(false);
@@ -128,7 +130,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
             />
           )}
           {!creating && !editing && selected && (
-            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => setEditing(true)} onChanged={relationsChanged} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
+            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => setEditing(true)} onChanged={relationsChanged} onUseAsViewpoint={onUseAsViewpoint} onAskAbout={onAskAbout} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
           {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} onSaved={relationsChanged} />}

@@ -66,7 +66,7 @@ export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSe
   const sourceIds = displayedAnswer && isConversationAnswer(displayedAnswer) ? displayedAnswer.sourceIds : [];
   const pathIds = displayedAnswer && isConversationAnswer(displayedAnswer) ? displayedAnswer.relationship?.signature.pathPersonIds ?? [] : [];
   return (
-    <aside className="chat-panel" aria-label="家谱问答">
+    <section className="chat-panel" aria-label="家谱问答">
       <header>
         <h2>家谱问答</h2>
         <p>选择结构化问题；查询只读取已确认的家谱事实。</p>
@@ -93,6 +93,6 @@ export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSe
           <p>{isConversationAnswer(displayedAnswer) ? (pathIds.length ? pathIds.join(" → ") : "无需关系路径。") : (displayedAnswer.relationshipPath.length > 0 ? displayedAnswer.relationshipPath.join(" → ") : "无需关系路径。")}</p>
         </section>
       )}
-    </aside>
+    </section>
   );
 }

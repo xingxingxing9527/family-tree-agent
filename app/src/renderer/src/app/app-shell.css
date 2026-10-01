@@ -1,5 +1,5 @@
 .app-shell { min-height: 100vh; color: var(--text-primary); background: #f4f1e8; }
-.top-bar { position: sticky; z-index: 20; top: 0; display: grid; grid-template-columns: auto auto minmax(220px, 1fr) auto auto; gap: 1rem; align-items: center; min-height: 76px; padding: 0.75rem 1.25rem; background: rgb(255 253 247 / 96%); border-bottom: 1px solid var(--border); backdrop-filter: blur(12px); }
+.top-bar { position: sticky; z-index: 20; top: 0; display: grid; grid-template-columns: auto auto minmax(220px, 1fr) auto; gap: 1rem; align-items: center; min-height: 76px; padding: 0.75rem 1.25rem; background: rgb(255 253 247 / 96%); border-bottom: 1px solid var(--border); backdrop-filter: blur(12px); }
 .brand { color: var(--accent-strong); font-family: Georgia, "Noto Serif SC", serif; font-size: 1.3rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
 .workspace-identity { display: grid; color: var(--text-secondary); font-size: 0.8rem; }
 .workspace-identity strong { color: var(--text-primary); font-size: 1rem; }
@@ -9,11 +9,14 @@
 .global-search button { color: #fff; background: var(--accent); border-color: var(--accent); border-radius: 0 8px 8px 0; font-weight: 700; }
 .viewpoint-control { display: flex; gap: 0.5rem; align-items: center; white-space: nowrap; }
 .viewpoint-control select, .tree-selectors select { border-radius: 8px; }
-.shell-grid { display: grid; grid-template-columns: 176px minmax(0, 1fr) minmax(250px, 310px); gap: 1rem; width: min(1680px, 100%); margin: 0 auto; padding: 1rem; align-items: start; }
-.primary-nav, .chat-panel { position: sticky; top: 92px; }
+.shell-grid { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 1rem; width: min(1440px, 100%); margin: 0 auto; padding: 1rem; align-items: start; }
+.shell-nav { position: sticky; top: 92px; display: grid; gap: 0.75rem; min-width: 0; }
 .primary-nav { display: grid; gap: 0.35rem; padding: 0.7rem; background: #263c30; border-radius: 14px; }
 .primary-nav a { min-height: 2.75rem; padding: 0.75rem; color: #f4f1e8; border-radius: 8px; font-weight: 700; text-decoration: none; }
 .primary-nav a:hover, .primary-nav a.active { color: #172019; background: #dce9dd; }
+.secondary-nav { display: grid; gap: 0.25rem; padding: 0.55rem; background: rgb(255 253 247 / 80%); border: 1px solid var(--border); border-radius: 12px; }
+.secondary-nav a { min-height: 2.4rem; padding: 0.6rem 0.65rem; color: var(--text-secondary); border-radius: 7px; font-size: 0.9rem; font-weight: 700; text-decoration: none; }
+.secondary-nav a:hover, .secondary-nav a.active { color: var(--accent-strong); background: #eef5ef; }
 .workspace-content { min-width: 0; padding: 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 30px rgb(31 48 37 / 6%); }
 .feature-page { display: grid; gap: 1.25rem; min-width: 0; }
 .page-heading { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; justify-content: space-between; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
@@ -25,6 +28,9 @@
 .chat-panel button { min-height: 2.55rem; padding: 0.5rem; color: var(--accent-strong); background: #eef5ef; border: 1px solid var(--control-border); border-radius: 7px; font-weight: 700; }
 .chat-panel form { display: grid; gap: 0.55rem; }
 .chat-panel input { min-height: 2.6rem; padding: 0.55rem; color: var(--text-primary); background: #fff; border: 1px solid var(--control-border); border-radius: 7px; }
+.chat-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; padding: 1rem; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; }
+.chat-context label { display: grid; gap: 0.4rem; min-width: 0; color: var(--text-secondary); font-weight: 700; }
+.chat-context select { width: 100%; min-width: 0; min-height: 2.7rem; padding: 0.55rem 0.7rem; color: var(--text-primary); background: #fff; border: 1px solid var(--control-border); border-radius: 8px; }
 .search-results { position: fixed; z-index: 30; top: 72px; left: 50%; width: min(620px, calc(100% - 2rem)); max-height: 50vh; padding: 1rem; overflow: auto; transform: translateX(-50%); background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; box-shadow: 0 18px 50px rgb(23 32 25 / 24%); }
 .search-results ul, .settings-list { display: grid; gap: 0.6rem; padding: 0; list-style: none; }
 .search-results li button, .list-row { display: grid; width: 100%; gap: 0.2rem; padding: 0.75rem; color: var(--text-primary); text-align: left; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
@@ -62,15 +68,14 @@
   .top-bar { grid-template-columns: auto 1fr auto; }
   .global-search { grid-column: 1 / -1; grid-row: 2; }
   .shell-grid { grid-template-columns: 150px minmax(0, 1fr); }
-  .chat-panel { position: static; grid-column: 2; }
 }
 @media (max-width: 760px) {
   .top-bar { position: static; grid-template-columns: 1fr auto; }
   .workspace-identity, .viewpoint-control { grid-column: 1 / -1; }
   .shell-grid { grid-template-columns: 1fr; padding: 0.65rem; }
-  .primary-nav { position: static; display: flex; overflow-x: auto; }
-  .primary-nav a { flex: 0 0 auto; }
-  .chat-panel { grid-column: 1; }
+  .shell-nav { position: static; display: grid; gap: 0.45rem; }
+  .primary-nav, .secondary-nav { display: flex; max-width: 100%; overflow-x: auto; }
+  .primary-nav a, .secondary-nav a { flex: 0 0 auto; }
   .workspace-content { padding: 0.85rem; }
   .wiki-layout, .explanation-grid { grid-template-columns: 1fr; }
   .lineage-form, .membership-edit-grid { grid-template-columns: 1fr; }
@@ -84,5 +89,5 @@
   .shell-grid { width: 100%; padding: 0.45rem; }
   .workspace-content, .feature-page, .settings-section, .chat-panel { min-width: 0; max-width: 100%; }
   .workspace-content { padding: 0.65rem; }
-  .primary-nav { max-width: 100%; }
+  .chat-context { grid-template-columns: 1fr; }
 }

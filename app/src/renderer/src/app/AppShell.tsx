@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEven
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { ConversationAnswer } from "../../../shared/chat";
 import type { PersonCandidate, WorkspaceSnapshotDto, WorkspaceSummary } from "../../../shared/contracts";
-import { ChatPanel } from "../features/chat/ChatPanel";
+import { ChatPage } from "../features/chat/ChatPage";
 import { EntryCenterPage } from "../features/import/EntryCenterPage";
 import { PeoplePage } from "../features/people/PeoplePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -13,11 +13,14 @@ import { useApi } from "./ApiContext";
 import { useWorkspace, type MutationRefreshOutcome, type PreparedMutationRefresh } from "./WorkspaceContext";
 import "./app-shell.css";
 
-type Area = "tree" | "people" | "entry" | "wiki" | "settings";
-const areas: Array<{ id: Area; label: string }> = [
-  { id: "tree", label: "家谱树" }, { id: "people", label: "人物库" }, { id: "entry", label: "录入中心" },
+type Area = "tree" | "people" | "entry" | "chat" | "wiki" | "settings";
+const primaryAreas: Array<{ id: Area; label: string }> = [
+  { id: "tree", label: "家谱树" }, { id: "people", label: "人物" }, { id: "entry", label: "录入" }, { id: "chat", label: "问答" }
+];
+const secondaryAreas: Array<{ id: Area; label: string }> = [
   { id: "wiki", label: "家族 Wiki" }, { id: "settings", label: "设置与数据" }
 ];
+const areas = [...primaryAreas, ...secondaryAreas];
 const conversationSessionId = (): string => globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now().toString(36)}`;
 
 function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: WorkspaceSummary; snapshot: WorkspaceSnapshotDto; refreshSnapshot(): void }): JSX.Element {
@@ -65,10 +68,6 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
     return answer.value;
   };
 
-  const switchWorkspace = async (): Promise<void> => {
-    if (await workspaceState.closeWorkspace()) navigate("/");
-  };
-
   const prepareMutation = useCallback((targetWorkspaceId?: string): PreparedMutationRefresh => {
     const target = targetWorkspaceId ?? workspace.id;
     const prepared = workspaceState.prepareMutation(workspace.id, target);
@@ -94,19 +93,21 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
       <div className="workspace-identity"><span>当前谱册</span><strong>{workspace.name}</strong></div>
       <form className="global-search" role="search" onSubmit={(event) => void runSearch(event)}><label className="sr-only" htmlFor="people-global-search">搜索人物</label><input id="people-global-search" aria-label="搜索当前谱册人物" placeholder="搜索人物、别名…" value={search} onChange={(event) => setSearch(event.target.value)} /><button type="submit" disabled={searching || !search.trim()}>{searching ? "搜索中" : "搜索"}</button></form>
       <label className="viewpoint-control">当前视角<select aria-label="共享当前视角" value={viewpointId ?? ""} onChange={(event) => setViewpointId(event.target.value || null)}><option value="">未选择</option>{snapshot.people.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label>
-      <button className="button secondary-button" type="button" onClick={() => void switchWorkspace()}>切换谱册</button>
     </header>
     {searchResults && <section className="search-results" aria-label="人物搜索结果"><div className="section-heading-row"><strong>人物搜索结果</strong><button type="button" onClick={() => setSearchResults(null)}>关闭</button></div>{searchResults.length === 0 ? <p>没有匹配人物。</p> : <ul>{searchResults.map((person) => <li key={person.id}><button type="button" onClick={() => { setSelectedPersonId(person.id); setSearchResults(null); navigate(`/workspace/${workspace.id}/people`); }}>{person.displayName}<span>{person.aliases.join("、")}</span></button></li>)}</ul>}</section>}
     <div className="shell-grid">
-      <nav className="primary-nav" aria-label="一级导航"><Link to="/">首页</Link>{areas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
+      <aside className="shell-nav">
+        <nav className="primary-nav" aria-label="一级导航">{primaryAreas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
+        <nav className="secondary-nav" aria-label="次级导航">{secondaryAreas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
+      </aside>
       <main className="workspace-content" key={`${workspace.id}:${activeArea}:${activeArea === "settings" ? "persistent" : workspaceState.mutationEpoch}`}>
         {activeArea === "tree" && <FamilyTreePage api={api.query} people={snapshot.people} />}
-        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} />}
+        {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} onUseAsViewpoint={setViewpointId} onAskAbout={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/chat`); }} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
+        {activeArea === "chat" && <ChatPage people={snapshot.people} selectedPersonId={selectedPersonId} onSelectedPersonChange={setSelectedPersonId} onSend={ask} />}
         {activeArea === "wiki" && <WikiPage api={api.wiki} query={api.query} people={snapshot.people.map((person) => ({ id: person.id, displayName: person.displayName }))} sources={snapshot.sources.map((source) => ({ id: source.id, title: source.title }))} />}
         {activeArea === "settings" && <SettingsPage api={api} people={snapshot.people} lineages={snapshot.lineages} refreshToken={workspaceState.mutationEpoch} prepareMutation={prepareMutation} onChanged={refreshSnapshot} />}
       </main>
-      <ChatPanel onSend={ask} />
     </div>
   </div>;
 }
