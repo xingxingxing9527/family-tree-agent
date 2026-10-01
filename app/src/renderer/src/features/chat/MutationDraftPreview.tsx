@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, type JSX } from "react";
 import type { ConversationDraftChangeDto, ConversationDraftPreview } from "../../../../shared/chat";
 import type { ParentCompletionMarriageEpisodeDto } from "../../../../shared/contracts";
+import { formatPartialDate } from "../people/format-partial-date";
 
 function pruneUnsafeSelections(preview: ConversationDraftPreview, selected: Set<string>): Set<string> {
   const next = new Set(selected);
@@ -34,14 +35,9 @@ function initialSelection(preview: ConversationDraftPreview): Set<string> {
 
 const originLabel = (change: ConversationDraftChangeDto): string => change.originKind === "spouse_default" ? "系统自动补全" : "人工录入";
 
-const partialDateLabel = (date: ParentCompletionMarriageEpisodeDto["start"]): string => {
-  if (!date) return "日期未知";
-  return `${date.year}年${date.month}月${date.day === null ? "" : `${date.day}日`}`;
-};
-
 const marriageEpisodeLabel = (episode: ParentCompletionMarriageEpisodeDto): string => {
-  const status = episode.status === "active" ? "存续" : "已离异";
-  return `${status}，${partialDateLabel(episode.start)}至${partialDateLabel(episode.end)}`;
+  if (episode.status === "active") return `存续，${formatPartialDate(episode.start)} 至今`;
+  return `已离异，${formatPartialDate(episode.start)} 至 ${formatPartialDate(episode.end)}`;
 };
 
 export function MutationDraftPreview({ preview, onConfirm }: {

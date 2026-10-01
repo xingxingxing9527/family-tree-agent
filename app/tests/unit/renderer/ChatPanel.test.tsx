@@ -210,6 +210,10 @@ describe("controlled chat UI", () => {
               id: "former-marriage", status: "divorced", rowVersion: 1,
               start: { calendar: "solar", year: 1990, month: 1, day: null, leapMonth: false, precision: "month" },
               end: { calendar: "solar", year: 1999, month: 1, day: null, leapMonth: false, precision: "month" }
+            }, {
+              id: "current-marriage", status: "active", rowVersion: 1,
+              start: { calendar: "lunar", year: 2000, month: 4, day: null, leapMonth: true, precision: "month" },
+              end: null
             }]
           }]
         } },
@@ -222,7 +226,7 @@ describe("controlled chat UI", () => {
 
     expect(screen.getByText("孩子存在多个配偶候选，婚姻和出生时间不足以唯一判断")).toBeVisible();
     expect(screen.getByText("可选择一位已确认婚姻配偶，或跳过系统自动补全：")).toBeVisible();
-    expect(screen.getByText(/婚姻记录：已离异，1990年1月至1999年1月/u)).toBeVisible();
+    expect(screen.getByText(/婚姻记录：已离异，公历 1990年1月 至 公历 1999年1月；存续，农历 2000年闰4月 至今/u)).toBeVisible();
     const former = screen.getByRole("checkbox", { name: /前配偶/u });
     const current = screen.getByRole("checkbox", { name: /现配偶/u });
     expect(former).not.toBeChecked();
