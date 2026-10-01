@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import type {
   AppErrorCode,
   AppResult,
+  ChildrenCountStatusDto,
   FactMutationReceipt,
   MarriageDraft as PublicMarriageDraft,
   ParentChildDraft as PublicParentChildDraft,
@@ -16,6 +17,7 @@ import type { PartialDate } from "../../../shared/domain.js";
 import { applyMigrations } from "../../database/migrations/index.js";
 import { openDatabase, type WorkspaceDatabase } from "../../database/open-database.js";
 import type { PersonRecord } from "../../database/repositories/person-repository.js";
+import { CompletenessRepository } from "../../database/repositories/completeness-repository.js";
 import type { MarriageRecord, ParentChildRecord } from "../../database/repositories/relation-repository.js";
 import type { SourceDraft } from "./fact-commands.js";
 import { FactCommandError, FactCommandService } from "./fact-command-service.js";
@@ -59,6 +61,7 @@ const receipt = (result: import("./fact-commands.js").MutationResult): FactMutat
 function toListItem(person: PersonRecord, aliases: string[]): PersonListItem {
   return {
     id: person.id,
+    personCode: person.personCode,
     displayName: person.displayName,
     aliases,
     gender: person.gender,
@@ -111,6 +114,7 @@ export class WorkspaceFactsGateway implements FactsGateway {
       return {
         person: {
           id: person.id,
+          personCode: person.personCode,
           displayName: person.displayName,
           gender: person.gender,
           birth: person.birth,
@@ -164,6 +168,25 @@ export class WorkspaceFactsGateway implements FactsGateway {
         expectedVersion: input.expectedVersion,
         source: source(sourceDescription ?? "表单修订", "person-update")
       }, { confirmWarnings: input.confirmWarnings }));
+    });
+  }
+
+  async setChildrenCompleteness(input: { personId: string; complete: boolean; sourceDescription: string; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>> {
+    return this.withWorkspace((database, workspaceId) => receipt(new FactCommandService(database, workspaceId).execute({
+      type: "person.childrenCompleteness.set",
+      personId: input.personId,
+      complete: input.complete,
+      expectedVersion: input.expectedVersion,
+      source: source(input.sourceDescription, "children-completeness")
+    }, { confirmWarnings: true })));
+  }
+
+  async getChildrenCountStatus(input: { personId: string }): Promise<AppResult<ChildrenCountStatusDto>> {
+    return this.withWorkspace((database, workspaceId) => {
+      if (!new FactQueries(database, workspaceId).getPerson(input.personId)) {
+        throw new GatewayError("NOT_FOUND", "Person was not found", { entityId: input.personId });
+      }
+      return new CompletenessRepository(database, workspaceId).getChildrenCountStatus(input.personId);
     });
   }
 

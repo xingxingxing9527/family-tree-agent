@@ -86,7 +86,9 @@ export class FamilyAgentService implements FamilyAgentApi {
       list: (input) => gated(() => facts.listPeople(input)),
       get: (input) => gated(() => facts.getPerson(input)),
       save: (input) => gated(() => facts.savePerson(input)),
-      update: (input) => gated(() => facts.updatePerson(input))
+      update: (input) => gated(() => facts.updatePerson(input)),
+      setChildrenCompleteness: (input) => gated(() => facts.setChildrenCompleteness(input)),
+      getChildrenCountStatus: (input) => gated(() => facts.getChildrenCountStatus(input))
     };
     this.relations = {
       addParentChild: (input) => gated(() => facts.addParentChild(input)),

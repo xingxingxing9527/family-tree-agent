@@ -43,6 +43,7 @@ export type FactCommand =
   | { type: "parentChild.add"; draft: ParentChildDraft; source: SourceDraft }
   | { type: "marriage.add"; draft: MarriageDraft; source: SourceDraft }
   | { type: "marriage.divorce"; marriageId: string; endDate: PartialDate | null; expectedVersion: number; source: SourceDraft }
+  | { type: "person.childrenCompleteness.set"; personId: string; complete: boolean; expectedVersion: number; source: SourceDraft }
   | { type: "fact.softDelete"; entityType: string; entityId: string; expectedVersion: number };
 
 export type DomainWarning = DomainIssue;

@@ -45,6 +45,7 @@ export function getPerson(
   const sources = new SourceRepository(database, workspaceId);
   return {
     id: person.id,
+    personCode: person.personCode,
     displayName: person.displayName,
     gender: person.gender,
     birth: person.birth,

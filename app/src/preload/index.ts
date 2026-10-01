@@ -15,7 +15,9 @@ const desktopApi: DesktopApi = {
     list: (input) => ipcRenderer.invoke("people:list", input),
     get: (input) => ipcRenderer.invoke("people:get", input),
     save: (input) => ipcRenderer.invoke("people:save", input),
-    update: (input) => ipcRenderer.invoke("people:update", input)
+    update: (input) => ipcRenderer.invoke("people:update", input),
+    setChildrenCompleteness: (input) => ipcRenderer.invoke("people:children-completeness-set", input),
+    getChildrenCountStatus: (input) => ipcRenderer.invoke("people:children-count-status", input)
   },
   relations: {
     addParentChild: (input) => ipcRenderer.invoke("relations:add-parent-child", input),

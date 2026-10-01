@@ -90,6 +90,25 @@ describe("typed family RPC API", () => {
     expect(extraInput.response.statusCode).toBe(400);
   });
 
+  it("returns read-only person codes and distinguishes partial from complete child counts", async () => {
+    const saved = await rpc("people", "save", { draft: personDraft("王强"), confirmWarnings: true });
+    const personId = saved.body.value.entityId as string;
+    const person = await rpc("people", "get", { personId });
+    expect(person.body).toMatchObject({ ok: true, value: { person: { personCode: "P000001", rowVersion: 1 } } });
+
+    const partial = await rpc("people", "getChildrenCountStatus", { personId });
+    expect(partial.body).toEqual({ ok: true, value: { count: 0, completeness: "partial" } });
+    const confirmed = await rpc("people", "setChildrenCompleteness", {
+      personId,
+      complete: true,
+      sourceDescription: "管理员核对",
+      expectedVersion: 1
+    });
+    expect(confirmed.body).toMatchObject({ ok: true, value: { saved: true, entityId: personId } });
+    const complete = await rpc("people", "getChildrenCountStatus", { personId });
+    expect(complete.body).toEqual({ ok: true, value: { count: 0, completeness: "complete" } });
+  });
+
   it("does not serialize filesystem paths", async () => {
     const snapshot = await rpc("query", "workspaceSnapshot", null);
     expect(snapshot.response.statusCode).toBe(200);

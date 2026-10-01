@@ -6,6 +6,7 @@ type Handler = (event: { sender: { id: number } }, payload?: unknown) => Promise
 
 const person: PersonListItem = {
   id: "person-1",
+  personCode: "P000001",
   displayName: "张敏",
   aliases: ["敏敏"],
   gender: "female",
@@ -34,6 +35,8 @@ function gateway(): FactsGateway {
     getPerson: vi.fn().mockResolvedValue({ ok: true, value: detail }),
     savePerson: vi.fn().mockResolvedValue(mutation),
     updatePerson: vi.fn().mockResolvedValue(mutation),
+    setChildrenCompleteness: vi.fn().mockResolvedValue(mutation),
+    getChildrenCountStatus: vi.fn().mockResolvedValue({ ok: true, value: { count: 0, completeness: "partial" } }),
     addParentChild: vi.fn().mockResolvedValue(mutation),
     addMarriage: vi.fn().mockResolvedValue(mutation),
     divorce: vi.fn().mockResolvedValue(mutation)
@@ -57,6 +60,8 @@ describe("facts IPC contracts", () => {
     [FACT_CHANNELS.peopleGet, { personId: "" }],
     [FACT_CHANNELS.peopleSave, { draft: { displayName: "" }, confirmWarnings: false }],
     [FACT_CHANNELS.peopleUpdate, { personId: "person-1", patch: {}, expectedVersion: 0, confirmWarnings: false }],
+    [FACT_CHANNELS.childrenCompletenessSet, { personId: "person-1", complete: true, sourceDescription: "核对", expectedVersion: 0 }],
+    [FACT_CHANNELS.childrenCountStatus, { personId: "" }],
     [FACT_CHANNELS.addParentChild, { draft: { parentId: "same", childId: "same", parentRole: "father", sourceDescription: "手录" }, confirmWarnings: false }],
     [FACT_CHANNELS.addMarriage, { draft: { spouseAId: "a", spouseBId: "b", start: null }, confirmWarnings: false }],
     [FACT_CHANNELS.divorce, { marriageId: "m", endDate: { calendar: "lunar", year: 2024, month: 2, day: 31, leapMonth: false, precision: "day" }, expectedVersion: 1 }],

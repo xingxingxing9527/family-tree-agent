@@ -3,12 +3,14 @@ import { parsePartialDate, type PartialDate } from "../../../shared/domain.js";
 import type { TransactionContext } from "../unit-of-work.js";
 import type { WorkspaceDatabase } from "../open-database.js";
 import { assertCanActivateWorkspacePeople } from "../workspace-people-limit.js";
+import { allocatePersonCode } from "../person-code-allocator.js";
 
 export type Gender = "male" | "female" | "unknown";
 
 export interface PersonRecord {
   id: string;
   workspaceId: string;
+  personCode: string;
   displayName: string;
   gender: Gender;
   birth: PartialDate | null;
@@ -18,6 +20,7 @@ export interface PersonRecord {
   updatedAt: string;
   deletedAt: string | null;
   rowVersion: number;
+  childrenComplete: boolean;
 }
 
 export interface CreatePersonInput {
@@ -47,12 +50,12 @@ export interface PersonAliasRecord {
 export interface CreatePersonAliasInput { id?: string; personId: string; name: string; }
 
 interface PersonRow {
-  id: string; workspace_id: string; display_name: string; gender: Gender;
+  id: string; workspace_id: string; person_code: string; display_name: string; gender: Gender;
   birth_calendar: PartialDate["calendar"] | null; birth_year: number | null; birth_month: number | null;
   birth_day: number | null; birth_leap_month: number; birth_precision: PartialDate["precision"] | null;
   death_calendar: PartialDate["calendar"] | null; death_year: number | null; death_month: number | null;
   death_day: number | null; death_leap_month: number; death_precision: PartialDate["precision"] | null;
-  notes: string | null; created_at: string; updated_at: string; deleted_at: string | null; row_version: number;
+  notes: string | null; children_complete: number; created_at: string; updated_at: string; deleted_at: string | null; row_version: number;
 }
 
 interface PersonAliasRow {
@@ -108,6 +111,7 @@ function toRecord(row: PersonRow): PersonRecord {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
+    personCode: row.person_code,
     displayName: row.display_name,
     gender: row.gender,
     birth: dateFromRow(row, "birth"),
@@ -116,7 +120,8 @@ function toRecord(row: PersonRow): PersonRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
-    rowVersion: row.row_version
+    rowVersion: row.row_version,
+    childrenComplete: row.children_complete === 1
   };
 }
 
@@ -152,15 +157,16 @@ export class PersonRepository {
   create(ctx: TransactionContext, input: CreatePersonInput): PersonRecord {
     assertCanActivateWorkspacePeople(this.database, this.workspaceId);
     const id = input.id ?? randomUUID();
+    const personCode = allocatePersonCode(this.database, this.workspaceId);
     const now = new Date().toISOString();
     this.database.prepare(`
       INSERT INTO person (
-        id, workspace_id, display_name, gender,
+        id, workspace_id, person_code, display_name, gender,
         birth_calendar, birth_year, birth_month, birth_day, birth_leap_month, birth_precision,
         death_calendar, death_year, death_month, death_day, death_leap_month, death_precision,
         notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, this.workspaceId, input.displayName, input.gender, ...dateValues(input.birth), ...dateValues(input.death), input.notes ?? null, now, now);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, this.workspaceId, personCode, input.displayName, input.gender, ...dateValues(input.birth), ...dateValues(input.death), input.notes ?? null, now, now);
     const created = this.require(id, true);
     ctx.audit.append({ entityType: "person", entityId: id, action: "create", before: null, after: created });
     this.claimOriginPerson(ctx, id, now);

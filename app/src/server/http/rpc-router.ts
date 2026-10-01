@@ -15,7 +15,9 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
       list: entry(RPC_INPUT_SCHEMAS.people.list, (input) => service.people.list(input)),
       get: entry(RPC_INPUT_SCHEMAS.people.get, (input) => service.people.get(input)),
       save: entry(RPC_INPUT_SCHEMAS.people.save, (input) => service.people.save(input)),
-      update: entry(RPC_INPUT_SCHEMAS.people.update, (input) => service.people.update(input))
+      update: entry(RPC_INPUT_SCHEMAS.people.update, (input) => service.people.update(input)),
+      setChildrenCompleteness: entry(RPC_INPUT_SCHEMAS.people.setChildrenCompleteness, (input) => service.people.setChildrenCompleteness(input)),
+      getChildrenCountStatus: entry(RPC_INPUT_SCHEMAS.people.getChildrenCountStatus, (input) => service.people.getChildrenCountStatus(input))
     },
     relations: {
       addParentChild: entry(RPC_INPUT_SCHEMAS.relations.addParentChild, (input) => service.relations.addParentChild(input)),

@@ -159,8 +159,8 @@ describe("WorkspaceManager", () => {
     expect(opened.ok).toBe(true);
     const database = new Database(join(root, created.value.directory, "genealogy.sqlite"), { readonly: true });
     try {
-      expect(database.pragma("user_version", { simple: true })).toBe(5);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(5);
+      expect(database.pragma("user_version", { simple: true })).toBe(6);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(6);
     } finally {
       database.close();
     }

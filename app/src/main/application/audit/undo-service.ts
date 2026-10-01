@@ -54,11 +54,20 @@ const common = {
 
 const personSchema = z.object({
   ...common,
+  personCode: z.string().regex(/^P\d{6}$/u),
   displayName: bounded,
   gender: z.enum(["male", "female", "unknown"]),
   birth: partialDateSchema.nullable(),
   death: partialDateSchema.nullable(),
-  notes: nullableBounded
+  notes: nullableBounded,
+  childrenComplete: z.boolean()
+}).strict();
+const personCompletenessSchema = z.object({
+  id: bounded,
+  workspaceId: bounded,
+  complete: z.boolean(),
+  updatedAt: timestamp,
+  rowVersion
 }).strict();
 const personAliasSchema = z.object({ ...common, personId: bounded, name: bounded, normalizedName: bounded }).strict();
 const sourceSchema = z.object({
@@ -349,8 +358,8 @@ export class UndoService {
       },
       person: {
         table: "person", schema: personSchema as z.ZodType<Snapshot>, supportsRestore: true,
-        read: (id) => row("SELECT * FROM person WHERE workspace_id = ? AND id = ?", id, (value) => ({ ...base(value), displayName: String(value.display_name), gender: value.gender as "male" | "female" | "unknown", birth: date(value, "birth"), death: date(value, "death"), notes: value.notes === null ? null : String(value.notes) })),
-        restore: (snapshot) => { const value = personSchema.parse(snapshot); this.database.prepare(`UPDATE person SET display_name=?, gender=?, birth_calendar=?, birth_year=?, birth_month=?, birth_day=?, birth_leap_month=?, birth_precision=?, death_calendar=?, death_year=?, death_month=?, death_day=?, death_leap_month=?, death_precision=?, notes=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?`).run(value.displayName, value.gender, ...sqlDate(value.birth), ...sqlDate(value.death), value.notes, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
+        read: (id) => row("SELECT * FROM person WHERE workspace_id = ? AND id = ?", id, (value) => ({ ...base(value), personCode: String(value.person_code), displayName: String(value.display_name), gender: value.gender as "male" | "female" | "unknown", birth: date(value, "birth"), death: date(value, "death"), notes: value.notes === null ? null : String(value.notes), childrenComplete: Number(value.children_complete) === 1 })),
+        restore: (snapshot) => { const value = personSchema.parse(snapshot); this.database.prepare(`UPDATE person SET display_name=?, gender=?, birth_calendar=?, birth_year=?, birth_month=?, birth_day=?, birth_leap_month=?, birth_precision=?, death_calendar=?, death_year=?, death_month=?, death_day=?, death_leap_month=?, death_precision=?, notes=?, children_complete=?, created_at=?, updated_at=?, deleted_at=?, row_version=? WHERE workspace_id=? AND id=?`).run(value.displayName, value.gender, ...sqlDate(value.birth), ...sqlDate(value.death), value.notes, value.childrenComplete ? 1 : 0, value.createdAt, value.updatedAt, value.deletedAt, value.rowVersion, this.workspaceId, value.id); },
         dependencies: (id) => distinct([
           ...dependencyRows("SELECT id FROM person_alias WHERE workspace_id=? AND person_id=?", id, "person_alias"),
           ...((this.database.prepare("SELECT id FROM parent_child WHERE workspace_id=? AND (parent_id=? OR child_id=?)").all(this.workspaceId, id, id) as Array<{ id: string }>).map((value) => ({ entityType: "parent_child", entityId: value.id }))),
@@ -359,6 +368,22 @@ export class UndoService {
           ...dependencyRows("SELECT id FROM lineage_membership WHERE workspace_id=? AND person_id=?", id, "lineage_membership"),
           ...dependencyRows("SELECT id FROM import_identity WHERE workspace_id=? AND person_id=?", id, "import_identity")
         ])
+      },
+      person_completeness: {
+        table: "person", schema: personCompletenessSchema as z.ZodType<Snapshot>, supportsRestore: true,
+        read: (id) => row("SELECT id, workspace_id, children_complete, updated_at, row_version FROM person WHERE workspace_id=? AND id=?", id, (value) => ({
+          id: String(value.id),
+          workspaceId: String(value.workspace_id),
+          complete: Number(value.children_complete) === 1,
+          updatedAt: String(value.updated_at),
+          rowVersion: Number(value.row_version)
+        })),
+        restore: (snapshot) => {
+          const value = personCompletenessSchema.parse(snapshot);
+          this.database.prepare("UPDATE person SET children_complete=?, updated_at=?, row_version=? WHERE workspace_id=? AND id=?")
+            .run(value.complete ? 1 : 0, value.updatedAt, value.rowVersion, this.workspaceId, value.id);
+        },
+        dependencies: none
       },
       person_alias: {
         table: "person_alias", schema: personAliasSchema as z.ZodType<Snapshot>, supportsRestore: true,

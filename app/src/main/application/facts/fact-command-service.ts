@@ -1,5 +1,6 @@
 import type { WorkspaceDatabase } from "../../database/open-database.js";
 import { PersonRepository, type PersonRecord } from "../../database/repositories/person-repository.js";
+import { CompletenessRepository } from "../../database/repositories/completeness-repository.js";
 import { RelationRepository, type MarriageRecord, type ParentChildRecord } from "../../database/repositories/relation-repository.js";
 import { createUnitOfWork, type TransactionContext, type UnitOfWork } from "../../database/unit-of-work.js";
 import { MAX_WORKSPACE_PEOPLE, WORKSPACE_PEOPLE_LIMIT_MESSAGE, countActiveWorkspacePeople } from "../../database/workspace-people-limit.js";
@@ -31,6 +32,7 @@ export class FactCommandError extends Error {
 
 export class FactCommandService {
   private readonly people: PersonRepository;
+  private readonly completeness: CompletenessRepository;
   private readonly relations: RelationRepository;
   private readonly unitOfWork: UnitOfWork;
 
@@ -40,6 +42,7 @@ export class FactCommandService {
     unitOfWork: UnitOfWork = createUnitOfWork(database, workspaceId)
   ) {
     this.people = new PersonRepository(database, workspaceId);
+    this.completeness = new CompletenessRepository(database, workspaceId);
     this.relations = new RelationRepository(database, workspaceId);
     this.unitOfWork = unitOfWork;
   }
@@ -140,6 +143,11 @@ export class FactCommandService {
         }
         break;
       }
+      case "person.childrenCompleteness.set": {
+        const person = this.loadPerson(command.personId, "person", ids, errors);
+        if (person) this.requireVersion(person.rowVersion, command.expectedVersion, "person", person.id, errors);
+        break;
+      }
       case "fact.softDelete": {
         this.prepareSoftDelete(command.entityType, command.entityId, command.expectedVersion, ids, errors);
         break;
@@ -193,6 +201,14 @@ export class FactCommandService {
       case "marriage.divorce": {
         if (recordSource) ctx.sources.create(ctx, command.source);
         return ctx.relations.divorceMarriage(ctx, ids.marriage!, command.endDate).id;
+      }
+      case "person.childrenCompleteness.set": {
+        if (recordSource) ctx.sources.create(ctx, command.source);
+        return this.completeness.setChildrenCompleteness(ctx, {
+          personId: ids.person!,
+          complete: command.complete,
+          expectedVersion: command.expectedVersion
+        }).id;
       }
       case "fact.softDelete": {
         if (ids.entityType === "person") return ctx.people.archive(ctx, ids.entityId!).id;

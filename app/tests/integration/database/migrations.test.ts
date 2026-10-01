@@ -13,18 +13,19 @@ describe("database migrations", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
-  it("migrates an empty database to version 5 exactly once with a per-membership generation marker", async () => {
+  it("migrates an empty database to version 6 exactly once with stable person codes", async () => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
     roots.push(root);
     const database = openDatabase(join(root, "genealogy.sqlite"));
 
     try {
-      expect(applyMigrations(database)).toBe(5);
-      expect(applyMigrations(database)).toBe(5);
-      expect(database.pragma("user_version", { simple: true })).toBe(5);
-      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(5);
+      expect(applyMigrations(database)).toBe(6);
+      expect(applyMigrations(database)).toBe(6);
+      expect(database.pragma("user_version", { simple: true })).toBe(6);
+      expect(database.prepare("SELECT COUNT(*) FROM schema_migrations").pluck().get()).toBe(6);
       expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
       expect(database.prepare("SELECT name FROM pragma_table_info('lineage_membership') WHERE name = 'generation_marker'").pluck().get()).toBe("generation_marker");
+      expect(database.prepare("SELECT name FROM pragma_table_info('person') WHERE name = 'person_code'").pluck().get()).toBe("person_code");
       expect(database.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(database.pragma("journal_mode", { simple: true })).toBe("wal");
       expect(database.pragma("busy_timeout", { simple: true })).toBe(5000);
@@ -57,7 +58,7 @@ describe("database migrations", () => {
     expect(tables).toEqual([
       "audit_log", "id_redirect", "import_identity", "lineage", "lineage_membership",
       "marriage", "media_asset", "media_person", "merge_record", "operation_group",
-      "parent_child", "person", "person_alias", "schema_migrations", "source",
+      "parent_child", "person", "person_alias", "person_code_counter", "schema_migrations", "source",
       "wiki_entry", "wiki_fts", "wiki_fts_config", "wiki_fts_content", "wiki_fts_data", "wiki_fts_docsize", "wiki_fts_idx", "wiki_person", "wiki_source", "workspace_meta"
     ]);
 
@@ -79,7 +80,7 @@ describe("database migrations", () => {
   it.each([
     ["a renamed ledger row", "UPDATE schema_migrations SET name = 'forged' WHERE version = 2"],
     ["a gap in the ledger", "DELETE FROM schema_migrations WHERE version = 2"],
-    ["an unknown future ledger row", "INSERT INTO schema_migrations (version, name, applied_at) VALUES (6, 'future', '2026-09-16T00:00:00.000Z')"],
+    ["an unknown future ledger row", "INSERT INTO schema_migrations (version, name, applied_at) VALUES (7, 'future', '2026-09-16T00:00:00.000Z')"],
     ["a missing required index", "DROP INDEX operation_group_history_idx"]
   ])("rejects %s instead of trusting user_version", async (_case, mutation) => {
     const root = await mkdtemp(join(tmpdir(), "family-agent-database-"));
@@ -164,13 +165,14 @@ describe("database migrations", () => {
       PRAGMA user_version = 1;
     `);
 
-    expect(applyMigrations(database)).toBe(5);
+    expect(applyMigrations(database)).toBe(6);
     expect(database.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all()).toEqual([
       { version: 1, name: "initial schema" },
       { version: 2, name: "merge history" },
       { version: 3, name: "wiki full-text search" },
       { version: 4, name: "operation group undo state" },
-      { version: 5, name: "lineage membership generation marker" }
+      { version: 5, name: "lineage membership generation marker" },
+      { version: 6, name: "person code and children completeness" }
     ]);
     expect(database.prepare("SELECT name FROM pragma_table_info('operation_group') WHERE name = 'undone_at'").pluck().get()).toBe("undone_at");
     expect(database.prepare("SELECT name FROM pragma_table_info('lineage_membership') WHERE name = 'generation_marker'").pluck().get()).toBe("generation_marker");

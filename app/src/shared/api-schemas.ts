@@ -81,7 +81,9 @@ export const RPC_INPUT_SCHEMAS = {
     list: z.object({ query: z.string().trim().max(200).optional(), limit: z.number().int().min(1).max(1_000), offset: z.number().int().min(0).max(100_000) }).strict(),
     get: z.object({ personId: id }).strict(),
     save: z.object({ draft: personDraft, confirmWarnings: z.boolean() }).strict(),
-    update: z.object({ personId: id, patch: personPatch, expectedVersion, confirmWarnings: z.boolean() }).strict()
+    update: z.object({ personId: id, patch: personPatch, expectedVersion, confirmWarnings: z.boolean() }).strict(),
+    setChildrenCompleteness: z.object({ personId: id, complete: z.boolean(), sourceDescription, expectedVersion }).strict(),
+    getChildrenCountStatus: z.object({ personId: id }).strict()
   },
   relations: {
     addParentChild: z.object({ draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict()

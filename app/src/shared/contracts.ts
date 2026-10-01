@@ -46,12 +46,18 @@ export type PersonPatch = Partial<PersonDraft>;
 
 export interface PersonReadModel {
   id: string;
+  personCode: string;
   displayName: string;
   gender: Gender;
   birth: PartialDate | null;
   death: PartialDate | null;
   notes: string | null;
   rowVersion: number;
+}
+
+export interface ChildrenCountStatusDto {
+  count: number;
+  completeness: "partial" | "complete";
 }
 
 export interface PersonListItem extends PersonReadModel {
@@ -492,6 +498,8 @@ export interface FamilyAgentApi {
     get(input: { personId: string }): Promise<AppResult<PersonDetailReadModel>>;
     save(input: { draft: PersonDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     update(input: { personId: string; patch: PersonPatch; expectedVersion: number; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
+    setChildrenCompleteness(input: { personId: string; complete: boolean; sourceDescription: string; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
+    getChildrenCountStatus(input: { personId: string }): Promise<AppResult<ChildrenCountStatusDto>>;
   };
   relations: {
     addParentChild(input: { draft: ParentChildDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;

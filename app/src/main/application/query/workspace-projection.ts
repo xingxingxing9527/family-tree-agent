@@ -44,6 +44,7 @@ export function readWorkspaceSnapshot(database: WorkspaceDatabase, workspaceId: 
   }
   const people = queries.listPeople().map((person) => ({
     id: person.id,
+    personCode: person.personCode,
     displayName: person.displayName,
     aliases: aliasesByPerson.get(person.id) ?? [],
     gender: person.gender,

@@ -4,6 +4,7 @@ import { RPC_INPUT_SCHEMAS } from "../../shared/api-schemas.js";
 import type {
   AppErrorCode,
   AppResult,
+  ChildrenCountStatusDto,
   FactMutationReceipt,
   MarriageDraft,
   ParentChildDraft,
@@ -20,6 +21,8 @@ export const FACT_CHANNELS = {
   peopleGet: "people:get",
   peopleSave: "people:save",
   peopleUpdate: "people:update",
+  childrenCompletenessSet: "people:children-completeness-set",
+  childrenCountStatus: "people:children-count-status",
   addParentChild: "relations:add-parent-child",
   addMarriage: "relations:add-marriage",
   divorce: "relations:divorce"
@@ -30,6 +33,8 @@ export interface FactsGateway {
   getPerson(input: { personId: string }): Promise<AppResult<PersonDetailReadModel>>;
   savePerson(input: { draft: PersonDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
   updatePerson(input: { personId: string; patch: PersonPatch; expectedVersion: number; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
+  setChildrenCompleteness(input: { personId: string; complete: boolean; sourceDescription: string; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
+  getChildrenCountStatus(input: { personId: string }): Promise<AppResult<ChildrenCountStatusDto>>;
   addParentChild(input: { draft: ParentChildDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
   addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
   divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
@@ -43,6 +48,8 @@ const schemas = {
   get: RPC_INPUT_SCHEMAS.people.get,
   save: RPC_INPUT_SCHEMAS.people.save,
   update: RPC_INPUT_SCHEMAS.people.update,
+  setChildrenCompleteness: RPC_INPUT_SCHEMAS.people.setChildrenCompleteness,
+  getChildrenCountStatus: RPC_INPUT_SCHEMAS.people.getChildrenCountStatus,
   parentChild: RPC_INPUT_SCHEMAS.relations.addParentChild,
   marriage: RPC_INPUT_SCHEMAS.relations.addMarriage,
   divorce: RPC_INPUT_SCHEMAS.relations.divorce
@@ -104,6 +111,8 @@ export function registerFactsIpc(ipc: IpcMainLike, mainWindowId: () => number | 
   ipc.handle(FACT_CHANNELS.peopleGet, parsedHandler(trusted, schemas.get, (input) => run(() => facts.getPerson(input))));
   ipc.handle(FACT_CHANNELS.peopleSave, parsedHandler(trusted, schemas.save, (input) => run(() => facts.savePerson(input))));
   ipc.handle(FACT_CHANNELS.peopleUpdate, parsedHandler(trusted, schemas.update, (input) => run(() => facts.updatePerson(input))));
+  ipc.handle(FACT_CHANNELS.childrenCompletenessSet, parsedHandler(trusted, schemas.setChildrenCompleteness, (input) => run(() => facts.setChildrenCompleteness(input))));
+  ipc.handle(FACT_CHANNELS.childrenCountStatus, parsedHandler(trusted, schemas.getChildrenCountStatus, (input) => run(() => facts.getChildrenCountStatus(input))));
   ipc.handle(FACT_CHANNELS.addParentChild, parsedHandler(trusted, schemas.parentChild, (input) => run(() => facts.addParentChild(input))));
   ipc.handle(FACT_CHANNELS.addMarriage, parsedHandler(trusted, schemas.marriage, (input) => run(() => facts.addMarriage(input))));
   ipc.handle(FACT_CHANNELS.divorce, parsedHandler(trusted, schemas.divorce, (input) => run(() => facts.divorce(input))));
