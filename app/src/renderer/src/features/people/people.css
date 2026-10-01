@@ -187,6 +187,23 @@ dd { margin: 0.25rem 0 0; color: var(--text-primary); }
 
 .relation-list li + li { margin-top: 0.35rem; }
 
+.relative-wizard {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  color: var(--text-primary);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+}
+
+.relative-wizard > h3,
+.relative-wizard > p { margin: 0; }
+.relative-wizard .relationship-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.relationship-path-preview { padding: 1rem; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 0.55rem; }
+.relationship-path-preview p { color: var(--text-secondary); }
+
 .marriage-history { margin-top: 1.25rem; }
 .marriage-record + .marriage-record { margin-top: 0.75rem; }
 .status-badge { padding: 0.3rem 0.55rem; border-radius: 999px; font-weight: 700; }
@@ -206,6 +223,7 @@ dd { margin: 0.25rem 0 0; color: var(--text-primary); }
   .people-layout,
   .family-summary,
   .relationship-columns,
+  .relative-wizard .relationship-columns,
   .detail-grid { grid-template-columns: 1fr; }
   .people-list { position: static; }
   .detail-wide { grid-column: auto; }

@@ -127,6 +127,25 @@ describe("typed family RPC API", () => {
     expect(families).toMatchObject({ ok: true, value: [{ originPersonId: confirmed.body.value.changedEntityIds[0] }] });
   });
 
+  it("plans a relative path through the allowlisted Web RPC", async () => {
+    const anchor = await rpc("people", "save", { draft: { ...personDraft("王小明"), gender: "male" }, confirmWarnings: true });
+    const target = await rpc("people", "save", { draft: { ...personDraft("王守义"), gender: "male" }, confirmWarnings: true });
+    const candidate = await rpc("people", "save", { draft: { ...personDraft("王建国"), gender: "male" }, confirmWarnings: true });
+    const planned = await rpc("relations", "planRelativePath", {
+      anchorId: anchor.body.value.entityId,
+      targetId: target.body.value.entityId,
+      templateId: "grandparent",
+      selectedIntermediaryIds: {}
+    });
+
+    expect(planned.response.statusCode).toBe(200);
+    expect(planned.body).toMatchObject({ ok: true, value: {
+      templateId: "grandparent",
+      requiredSelections: [{ role: "parent", candidateIds: [candidate.body.value.entityId] }],
+      intents: []
+    } });
+  });
+
   it("does not serialize filesystem paths", async () => {
     const snapshot = await rpc("query", "workspaceSnapshot", null);
     expect(snapshot.response.statusCode).toBe(200);

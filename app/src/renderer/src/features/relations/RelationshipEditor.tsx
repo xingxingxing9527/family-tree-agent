@@ -5,6 +5,7 @@ import type { PartialDate } from "../../../../shared/domain";
 import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
 import { useStagedMutation } from "../mutations/useStagedMutation";
 import { PartialDateField } from "../people/PartialDateField";
+import { RelativeWizard } from "./RelativeWizard";
 
 interface RelationshipEditorProps {
   people: PersonListItem[];
@@ -33,10 +34,10 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, mutations,
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [stagedKind, setStagedKind] = useState<PendingMutation["kind"]>("parentChild");
+  const [stagedKind, setStagedKind] = useState<PendingMutation["kind"] | "relative">("parentChild");
   const searchId = useRef(0);
   const mutationCommitted = useCallback(async (): Promise<void> => {
-    setMessage(stagedKind === "parentChild" ? "亲子关系已保存" : "婚姻已保存");
+    setMessage(stagedKind === "parentChild" ? "亲子关系已保存" : stagedKind === "marriage" ? "婚姻已保存" : "亲属路径已保存");
     await onSaved();
   }, [onSaved, stagedKind]);
   const staged = useStagedMutation(mutations, mutationCommitted);
@@ -138,6 +139,7 @@ export function RelationshipEditor({ people, peopleApi, relationsApi, mutations,
           <button className="button primary-button" type="submit" disabled={busy || staged.busy}>保存婚姻</button>
         </form>
       </div>
+      {mutations && <RelativeWizard people={people} relationsApi={relationsApi} onStage={(intents) => { setStagedKind("relative"); void staged.stage(intents); }} />}
       {staged.preview && <MutationReviewDialog preview={staged.preview} busy={staged.busy} onCancel={staged.cancel} onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)} />}
     </section>
   );

@@ -19,6 +19,7 @@ import { OpenAIResponsesAdapter } from "../../main/llm/openai-responses-adapter.
 import type { ModelAdapter } from "../../main/llm/model-adapter.js";
 import { ManagedMediaService, openSelectedMediaFile } from "../../main/media/media-service.js";
 import { MutationValidationError, StagedMutationService } from "../../main/application/mutations/staged-mutation-service.js";
+import { RelativePathPlanner, RelativePathPlanningError } from "../../main/application/facts/relative-path-planner.js";
 import type { DownloadStore } from "../http/download-store.js";
 import type { UploadStore } from "../http/upload-store.js";
 import { BrowserRestoreManager } from "./browser-restore-manager.js";
@@ -97,7 +98,8 @@ export class FamilyAgentService implements FamilyAgentApi {
     this.relations = {
       addParentChild: (input) => gated(() => facts.addParentChild(input)),
       addMarriage: (input) => gated(() => facts.addMarriage(input)),
-      divorce: (input) => gated(() => facts.divorce(input))
+      divorce: (input) => gated(() => facts.divorce(input)),
+      planRelativePath: (input) => gated(() => this.planRelativePath(input))
     };
     this.lineages = {
       createLineage: (input) => gated(() => lineages.createLineage(input)),
@@ -173,6 +175,19 @@ export class FamilyAgentService implements FamilyAgentApi {
       restoreBackup: (input) => this.restoreManager ? this.restoreManager.restoreBackup(input) : unavailable(),
       exportWorkspace: () => unavailable()
     };
+  }
+
+  private async planRelativePath(input: Parameters<FamilyAgentApi["relations"]["planRelativePath"]>[0]): ReturnType<FamilyAgentApi["relations"]["planRelativePath"]> {
+    const context = this.runtime.workspaceManager.getOpenWorkspaceDetails();
+    if (!context) return failure("NOT_FOUND", "No workspace is open");
+    const database = openDatabase(context.databasePath);
+    try {
+      applyMigrations(database);
+      return { ok: true, value: new RelativePathPlanner(database, context.workspaceId).plan(input) };
+    } catch (error) {
+      if (error instanceof RelativePathPlanningError) return failure(error.code, error.message);
+      return failure("INTERNAL", "Unable to plan the relative path");
+    } finally { database.close(); }
   }
 
   async dispose(): Promise<void> {

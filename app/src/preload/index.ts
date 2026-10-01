@@ -22,7 +22,8 @@ const desktopApi: DesktopApi = {
   relations: {
     addParentChild: (input) => ipcRenderer.invoke("relations:add-parent-child", input),
     addMarriage: (input) => ipcRenderer.invoke("relations:add-marriage", input),
-    divorce: (input) => ipcRenderer.invoke("relations:divorce", input)
+    divorce: (input) => ipcRenderer.invoke("relations:divorce", input),
+    planRelativePath: (input) => ipcRenderer.invoke("relations:plan-relative-path", input)
   },
   lineages: {
     createLineage: (input) => ipcRenderer.invoke("lineages:create", input),

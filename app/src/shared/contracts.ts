@@ -1,6 +1,7 @@
 import type { PartialDate } from "./domain.js";
 import type { ConversationAnswer, ConversationConfirmationReceipt, ConversationDraftPreview, ConversationMutationDraft } from "./chat.js";
 import type { MutationApi } from "./mutations.js";
+import type { RelativePathPlan, RelativePathPlanInput } from "./relative-templates.js";
 
 export type AppErrorCode =
   | "VALIDATION"
@@ -508,6 +509,7 @@ export interface FamilyAgentApi {
     addParentChild(input: { draft: ParentChildDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     addMarriage(input: { draft: MarriageDraft; confirmWarnings: boolean }): Promise<AppResult<FactMutationReceipt>>;
     divorce(input: { marriageId: string; endDate: PartialDate | null; expectedVersion: number }): Promise<AppResult<FactMutationReceipt>>;
+    planRelativePath(input: RelativePathPlanInput): Promise<AppResult<RelativePathPlan>>;
   };
   lineages: LineageApi;
   imports: ImportApi;

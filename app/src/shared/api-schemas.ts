@@ -104,7 +104,18 @@ export const RPC_INPUT_SCHEMAS = {
       .refine((value) => value.parentId !== value.childId, { message: "People must be different" }), confirmWarnings: z.boolean() }).strict(),
     addMarriage: z.object({ draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict()
       .refine((value) => value.spouseAId !== value.spouseBId, { message: "People must be different" }), confirmWarnings: z.boolean() }).strict(),
-    divorce: z.object({ marriageId: id, endDate: nullableDate, expectedVersion }).strict()
+    divorce: z.object({ marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
+    planRelativePath: z.object({
+      anchorId: id,
+      targetId: id,
+      templateId: z.enum(["sibling", "grandparent", "uncle", "aunt", "nibling", "cousin"]),
+      selectedIntermediaryIds: z.object({
+        parent: id.optional(),
+        grandparent: id.optional(),
+        sibling: id.optional(),
+        collateralParent: id.optional()
+      }).strict()
+    }).strict()
   },
   lineages: {
     createLineage: z.object({ name: z.string().trim().min(1).max(200), founderPersonId: id, description: nullableText(10_000) }).strict(),
