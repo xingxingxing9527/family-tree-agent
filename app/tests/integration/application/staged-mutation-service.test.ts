@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UndoService } from "../../../src/main/application/audit/undo-service";
 import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 import { MutationValidationError, StagedMutationService } from "../../../src/main/application/mutations/staged-mutation-service";
@@ -217,6 +220,73 @@ describe("StagedMutationService", () => {
     } satisfies Partial<MutationValidationError>));
     expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE parent_id='known' AND child_id='child'").pluck().get()).toBe(0);
     expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(0);
+  });
+
+  it("rejects evidence changed by another connection immediately before the confirmation transaction", () => {
+    database.close();
+    const root = mkdtempSync(join(tmpdir(), "staged-parent-race-"));
+    const databasePath = join(root, "family.sqlite");
+    database = openDatabase(databasePath);
+    applyMigrations(database);
+    service = new StagedMutationService(database, workspaceId);
+    seedFamily();
+    const preview = service.stage({ intents: [parentFamilyIntent()] });
+    const externalDatabase = openDatabase(databasePath);
+    const externalFacts = new FactCommandService(externalDatabase, workspaceId);
+    const originalExec = database.exec.bind(database);
+    let injected = false;
+    const execSpy = vi.spyOn(database, "exec").mockImplementation((sql: string) => {
+      if (!injected && sql === "BEGIN IMMEDIATE") {
+        injected = true;
+        externalFacts.execute({
+          type: "person.update",
+          personId: "child",
+          expectedVersion: 1,
+          patch: { birth: solar(2020) },
+          source: source("concurrent-birth")
+        });
+      }
+      return originalExec(sql);
+    });
+
+    try {
+      expect(() => service.confirm({
+        draftId: preview.id,
+        draftVersion: preview.version,
+        selectedChangeIds: preview.changes.map(({ id }) => id),
+        acknowledgedWarningCodes: []
+      })).toThrowError(expect.objectContaining({
+        code: "CONFLICT",
+        details: { code: "PARENT_COMPLETION_STALE" }
+      } satisfies Partial<MutationValidationError>));
+      expect(injected).toBe(true);
+      expect(database.prepare("SELECT COUNT(*) FROM parent_child").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM audit_log WHERE entity_type='parent_child'").pluck().get()).toBe(0);
+      expect(database.prepare("SELECT COUNT(*) FROM source WHERE source_key LIKE ?").pluck().get(`mutation:${preview.id}:%`)).toBe(0);
+    } finally {
+      execSpy.mockRestore();
+      externalDatabase.close();
+      database.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("clears default selection when preview validation blocks an actionable change", () => {
+    createPerson("known", "新父亲", "male");
+    createPerson("occupied", "现有父亲", "male");
+    createPerson("child", "孩子");
+    createParent("occupied-father", "occupied", "father");
+
+    const preview = service.stage({ intents: [{
+      type: "parentChild.add",
+      draft: { parentId: "known", childId: "child", parentRole: "father", sourceDescription: "重复父亲" }
+    }] });
+
+    expect(preview.changes).toMatchObject([{
+      disposition: "blocked",
+      selectedByDefault: false
+    }]);
   });
 
   it("accepts more than the legacy one-hundred intent limit up to the bounded batch limit", () => {

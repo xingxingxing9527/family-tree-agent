@@ -145,7 +145,6 @@ export class StagedMutationService {
       throw new MutationValidationError("VALIDATION", "Blocked or unchanged changes cannot be confirmed");
     }
     this.validateDependencies(stored, selected);
-    this.requireFreshParentCompletionPlans(stored.plans);
     const requiredWarnings = stored.preview.issues
       .filter((issue) => selected.has(issue.changeId) && issue.severity === "warning")
       .map((issue) => issue.code);
@@ -155,6 +154,7 @@ export class StagedMutationService {
 
     try {
       const receipt = createUnitOfWork(this.database, this.workspaceId).run("mutation.confirm", (ctx) => {
+        this.requireFreshParentCompletionPlans(stored.plans);
         const service = new FactCommandService(this.database, this.workspaceId);
         const changedEntityIds: string[] = [];
         const currentWarnings: string[] = [];
@@ -260,7 +260,7 @@ export class StagedMutationService {
             const entries = error instanceof FactCommandError
               ? error.issues
               : [{ code: error instanceof MutationValidationError || error instanceof LineageCommandError ? error.code : "VALIDATION", message: error instanceof Error ? error.message : "Invalid change" }];
-            publicChanges.push({ ...change.public, disposition: "blocked" });
+            publicChanges.push({ ...change.public, disposition: "blocked", selectedByDefault: false });
             issues.push(...entries.map((entry) => ({ changeId: change.public.id, severity: "error" as const, code: entry.code, message: entry.message })));
           }
         }
