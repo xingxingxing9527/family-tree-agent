@@ -32,7 +32,7 @@ export class RelationRepository {
     const id = input.id ?? randomUUID(); const now = new Date().toISOString();
     const originKind = input.originKind ?? "explicit";
     const inferredFromMarriageId = originKind === "spouse_default" ? input.inferredFromMarriageId ?? null : null;
-    if (originKind === "spouse_default" && (!inferredFromMarriageId || !this.database.prepare("SELECT 1 FROM marriage WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL AND marriage_status IN ('active', 'divorced')").get(this.workspaceId, inferredFromMarriageId))) {
+    if (originKind === "spouse_default" && inferredFromMarriageId !== null && !this.database.prepare("SELECT 1 FROM marriage WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL AND marriage_status IN ('active', 'divorced')").get(this.workspaceId, inferredFromMarriageId)) {
       throw new Error("Spouse-default parent-child relations require an active or divorced marriage from this workspace");
     }
     this.database.prepare("INSERT INTO parent_child (id, workspace_id, parent_id, child_id, parent_role, relationship_type, origin_kind, inferred_from_marriage_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'biological', ?, ?, ?, ?)").run(id, this.workspaceId, input.parentId, input.childId, input.parentRole, originKind, inferredFromMarriageId, now, now);

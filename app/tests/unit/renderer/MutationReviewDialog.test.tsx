@@ -17,10 +17,10 @@ describe("MutationReviewDialog", () => {
       expiresAt: "2026-10-01T00:30:00.000Z",
       expectedVersions: { p1: 1 },
       changes: [
-        { id: "c1", disposition: "create", entityType: "person", entityId: "new-1", summary: "创建人物 王强", fieldChanges: [] },
-        { id: "c2", disposition: "update", entityType: "person", entityId: "p1", summary: "更新人物 王建国", fieldChanges: [] },
-        { id: "c3", disposition: "unchanged", entityType: "person", entityId: "p2", summary: "人物无变化", fieldChanges: [] },
-        { id: "c4", disposition: "blocked", entityType: "marriage", entityId: null, summary: "创建婚姻", fieldChanges: [] }
+        { id: "c1", disposition: "create", entityType: "person", entityId: "new-1", summary: "创建人物 王强", fieldChanges: [], originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [] },
+        { id: "c2", disposition: "update", entityType: "person", entityId: "p1", summary: "更新人物 王建国", fieldChanges: [], originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [] },
+        { id: "c3", disposition: "unchanged", entityType: "person", entityId: "p2", summary: "人物无变化", fieldChanges: [], originKind: "explicit", selectedByDefault: false, dependsOnChangeIds: [] },
+        { id: "c4", disposition: "blocked", entityType: "marriage", entityId: null, summary: "创建婚姻", fieldChanges: [], originKind: "explicit", selectedByDefault: false, dependsOnChangeIds: [] }
       ],
       issues: [
         { changeId: "c2", severity: "warning", code: "AGE_OUTLIER", message: "年龄差需要确认" },
@@ -44,5 +44,58 @@ describe("MutationReviewDialog", () => {
     expect(button).toBeEnabled();
     fireEvent.click(button);
     expect(confirm).toHaveBeenCalledWith(["c1", "c2"], ["AGE_OUTLIER"]);
+  });
+
+  it("renders provenance and completion basis while info notices require no acknowledgement", () => {
+    const preview: MutationPreview = {
+      id: "draft-family",
+      workspaceId: "workspace-1",
+      version: 1,
+      expiresAt: "2026-10-01T00:30:00.000Z",
+      expectedVersions: {},
+      changes: [
+        { id: "explicit", disposition: "create", entityType: "parentChild", entityId: "edge-1", summary: "明确父亲 → 孩子：父亲", fieldChanges: [], originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [] },
+        { id: "auto", disposition: "create", entityType: "parentChild", entityId: "edge-2", summary: "建议母亲 → 孩子：母亲（依据：唯一已确认配偶）", fieldChanges: [], originKind: "spouse_default", selectedByDefault: true, dependsOnChangeIds: ["explicit"] },
+        { id: "missing", disposition: "blocked", entityType: "parentChild", entityId: null, summary: "另一位父母尚未确认", fieldChanges: [], originKind: "spouse_default", selectedByDefault: false, dependsOnChangeIds: ["explicit"] }
+      ],
+      issues: [{ changeId: "missing", severity: "info", code: "PARENT_COMPLETION_NO_CANDIDATE", message: "没有可用于补全的已确认婚姻配偶" }],
+      canConfirm: true
+    };
+    const confirm = vi.fn();
+    render(<MutationReviewDialog preview={preview} onCancel={vi.fn()} onConfirm={confirm} />);
+
+    expect(screen.getAllByText("人工录入")).toHaveLength(1);
+    expect(screen.getAllByText("系统自动补全")).toHaveLength(2);
+    expect(screen.getByText(/唯一已确认配偶/u)).toBeInTheDocument();
+    expect(screen.getByText("没有可用于补全的已确认婚姻配偶")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/PARENT_COMPLETION_NO_CANDIDATE/u)).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "确认写入" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledWith(["explicit", "auto"], []);
+  });
+
+  it("cannot select an automatic change without its newly-created explicit dependency", () => {
+    const preview: MutationPreview = {
+      id: "draft-dependency",
+      workspaceId: "workspace-1",
+      version: 1,
+      expiresAt: "2026-10-01T00:30:00.000Z",
+      expectedVersions: {},
+      changes: [
+        { id: "explicit", disposition: "create", entityType: "parentChild", entityId: "edge-1", summary: "明确父亲", fieldChanges: [], originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [] },
+        { id: "auto", disposition: "create", entityType: "parentChild", entityId: "edge-2", summary: "自动母亲", fieldChanges: [], originKind: "spouse_default", selectedByDefault: true, dependsOnChangeIds: ["explicit"] }
+      ],
+      issues: [],
+      canConfirm: true
+    };
+    render(<MutationReviewDialog preview={preview} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+
+    fireEvent.click(screen.getByLabelText("选择 明确父亲"));
+    expect(screen.getByLabelText("选择 自动母亲")).not.toBeChecked();
+    expect(screen.getByLabelText("选择 自动母亲")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("选择 明确父亲"));
+    expect(screen.getByLabelText("选择 自动母亲")).toBeEnabled();
+    expect(screen.getByLabelText("选择 自动母亲")).not.toBeChecked();
   });
 });

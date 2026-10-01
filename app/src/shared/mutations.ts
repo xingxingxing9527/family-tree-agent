@@ -8,10 +8,25 @@ type MembershipValues = {
   generationMarker: string | null;
 };
 
+export const MAX_MUTATION_INTENTS = 1_000;
+export const MAX_MUTATION_CHANGES = 2_000;
+
+export type MutationOriginKind = "explicit" | "spouse_default";
+
 export type MutationIntent =
   | { type: "person.create"; draft: PersonDraft }
   | { type: "person.update"; personId: string; expectedVersion: number; patch: PersonPatch }
   | { type: "parentChild.add"; draft: ParentChildDraft }
+  | {
+    type: "parentFamily.add";
+    knownParentId: string;
+    childId: string;
+    parentRole: "father" | "mother";
+    completionPolicy: "spouse-default";
+    selectedSpouseId?: string;
+    skipCompletion?: boolean;
+    sourceDescription: string;
+  }
   | { type: "marriage.add"; draft: MarriageDraft }
   | { type: "marriage.divorce"; marriageId: string; endDate: PartialDate | null; expectedVersion: number }
   | { type: "person.childrenCompleteness.set"; personId: string; complete: boolean; sourceDescription: string; expectedVersion: number }
@@ -31,11 +46,14 @@ export interface MutationChange {
   entityId: string | null;
   summary: string;
   fieldChanges: Array<{ field: string; before: unknown; after: unknown }>;
+  originKind: MutationOriginKind;
+  selectedByDefault: boolean;
+  dependsOnChangeIds: string[];
 }
 
 export interface MutationIssue {
   changeId: string;
-  severity: "warning" | "error";
+  severity: "info" | "warning" | "error";
   code: string;
   message: string;
 }

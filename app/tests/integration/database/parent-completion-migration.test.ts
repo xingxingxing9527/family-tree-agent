@@ -101,6 +101,34 @@ describe("parent completion provenance migration", () => {
     }
   });
 
+  it("stores spouse-default provenance without a marriage id when no episode is uniquely attributable", () => {
+    const database = openDatabase(":memory:");
+    applyMigrations(database);
+    const facts = new FactCommandService(database, workspaceId);
+    try {
+      for (const [id, name] of [["parent", "补全父母"], ["child", "孩子"]] as const) {
+        facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`person:${id}`) });
+      }
+      facts.execute({
+        type: "parentChild.add",
+        draft: {
+          id: "unattributed-parent",
+          workspaceId,
+          parentId: "parent",
+          childId: "child",
+          parentRole: "mother",
+          originKind: "spouse_default",
+          inferredFromMarriageId: null
+        },
+        source: source("unattributed-parent")
+      });
+      expect(new RelationRepository(database, workspaceId).getParentChild("unattributed-parent"))
+        .toMatchObject({ originKind: "spouse_default", inferredFromMarriageId: null });
+    } finally {
+      database.close();
+    }
+  });
+
   it("rejects a spouse-default parent when its inferred marriage is not active in this workspace", () => {
     const database = openDatabase(":memory:");
     applyMigrations(database);

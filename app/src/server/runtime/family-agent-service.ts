@@ -29,7 +29,10 @@ const unavailable = <T>(message = "Browser file transfer is not available yet"):
   ok: false,
   error: { code: "PATH_DENIED", message }
 });
-const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "INTERNAL", message: string): AppResult<T> => ({ ok: false, error: { code, message } });
+const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "INTERNAL", message: string, details?: unknown): AppResult<T> => ({
+  ok: false,
+  error: { code, message, ...(details === undefined ? {} : { details }) }
+});
 
 class MemoryModelKeyStore {
   constructor(private key: string | null) {}
@@ -227,7 +230,7 @@ export class FamilyAgentService implements FamilyAgentApi {
     catch (error) {
       if (error instanceof MutationValidationError) {
         const code = error.code === "NOT_FOUND" ? "NOT_FOUND" : error.code === "VALIDATION" ? "VALIDATION" : "CONFLICT";
-        return failure(code, error.message);
+        return failure(code, error.message, error.details);
       }
       return failure("INTERNAL", "Unable to complete mutation request");
     }

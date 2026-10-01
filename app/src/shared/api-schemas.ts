@@ -7,6 +7,7 @@ import {
   stageMutationRequestSchema
 } from "./chat.js";
 import { parsePartialDate } from "./domain.js";
+import { MAX_MUTATION_CHANGES, MAX_MUTATION_INTENTS } from "./mutations.js";
 
 export const rpcRequestSchema = z.object({ input: z.unknown() }).strict();
 export const noInputSchema = z.union([z.null(), z.object({}).strict()]);
@@ -55,6 +56,16 @@ const mutationIntent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("person.create"), draft: personDraft }).strict(),
   z.object({ type: z.literal("person.update"), personId: id, expectedVersion, patch: personPatch }).strict(),
   z.object({ type: z.literal("parentChild.add"), draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict() }).strict(),
+  z.object({
+    type: z.literal("parentFamily.add"),
+    knownParentId: id,
+    childId: id,
+    parentRole: z.enum(["father", "mother"]),
+    completionPolicy: z.literal("spouse-default"),
+    selectedSpouseId: id.optional(),
+    skipCompletion: z.boolean().optional(),
+    sourceDescription
+  }).strict().refine((value) => value.knownParentId !== value.childId, { message: "People must be different" }),
   z.object({ type: z.literal("marriage.add"), draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict() }).strict(),
   z.object({ type: z.literal("marriage.divorce"), marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
   z.object({ type: z.literal("person.childrenCompleteness.set"), personId: id, complete: z.boolean(), sourceDescription, expectedVersion }).strict(),
@@ -178,9 +189,9 @@ export const RPC_INPUT_SCHEMAS = {
     revise: reviseDraftRequestSchema
   },
   mutations: {
-    stage: z.object({ intents: z.array(mutationIntent).min(1).max(100) }).strict(),
-    confirm: z.object({ draftId: uuid, draftVersion: z.number().int().min(1), selectedChangeIds: z.array(uuid).min(1).max(100), acknowledgedWarningCodes: z.array(z.string().trim().min(1).max(200)).max(100) }).strict(),
-    revise: z.object({ draftId: uuid, intents: z.array(mutationIntent).min(1).max(100) }).strict()
+    stage: z.object({ intents: z.array(mutationIntent).min(1).max(MAX_MUTATION_INTENTS) }).strict(),
+    confirm: z.object({ draftId: uuid, draftVersion: z.number().int().min(1), selectedChangeIds: z.array(uuid).min(1).max(MAX_MUTATION_CHANGES), acknowledgedWarningCodes: z.array(z.string().trim().min(1).max(200)).max(MAX_MUTATION_CHANGES) }).strict(),
+    revise: z.object({ draftId: uuid, intents: z.array(mutationIntent).min(1).max(MAX_MUTATION_INTENTS) }).strict()
   },
   modelSettings: {
     status: noInputSchema,

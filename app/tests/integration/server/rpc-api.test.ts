@@ -127,6 +127,52 @@ describe("typed family RPC API", () => {
     expect(families).toMatchObject({ ok: true, value: [{ originPersonId: confirmed.body.value.changedEntityIds[0] }] });
   });
 
+  it("returns the parent completion stale machine code through Web RPC without partial writes", async () => {
+    const father = await rpc("people", "save", { draft: { ...personDraft("明确父亲"), gender: "male" }, confirmWarnings: true });
+    const mother = await rpc("people", "save", { draft: { ...personDraft("建议母亲"), gender: "female" }, confirmWarnings: true });
+    const child = await rpc("people", "save", { draft: personDraft("孩子"), confirmWarnings: true });
+    const fatherId = father.body.value.entityId as string;
+    const motherId = mother.body.value.entityId as string;
+    const childId = child.body.value.entityId as string;
+    await rpc("relations", "addMarriage", {
+      draft: { spouseAId: fatherId, spouseBId: motherId, start: null, sourceDescription: "结婚证" },
+      confirmWarnings: true
+    });
+    const staged = await rpc("mutations", "stage", { intents: [{
+      type: "parentFamily.add",
+      knownParentId: fatherId,
+      childId,
+      parentRole: "father",
+      completionPolicy: "spouse-default",
+      sourceDescription: "出生证明"
+    }] });
+    expect(staged.body).toMatchObject({ ok: true, value: { changes: [{ originKind: "explicit" }, { originKind: "spouse_default" }] } });
+
+    await rpc("people", "update", {
+      personId: childId,
+      expectedVersion: 1,
+      patch: {
+        birth: { calendar: "solar", year: 2020, month: 1, day: null, leapMonth: false, precision: "month" },
+        sourceDescription: "并发修改"
+      },
+      confirmWarnings: true
+    });
+    const preview = staged.body.value;
+    const confirmed = await rpc("mutations", "confirm", {
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: preview.changes.map((change: { id: string }) => change.id),
+      acknowledgedWarningCodes: []
+    });
+
+    expect(confirmed.body).toEqual({
+      ok: false,
+      error: { code: "CONFLICT", message: expect.any(String), details: { code: "PARENT_COMPLETION_STALE" } }
+    });
+    const person = await rpc("people", "get", { personId: childId });
+    expect(person.body.value.parents).toEqual([]);
+  });
+
   it("plans a relative path through the allowlisted Web RPC", async () => {
     const anchor = await rpc("people", "save", { draft: { ...personDraft("王小明"), gender: "male" }, confirmWarnings: true });
     const target = await rpc("people", "save", { draft: { ...personDraft("王守义"), gender: "male" }, confirmWarnings: true });
