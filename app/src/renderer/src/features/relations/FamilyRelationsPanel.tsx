@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import type {
   FamilyAgentApi,
   MarriageDraft,
@@ -19,6 +19,7 @@ type ParentFamilyIntent = Extract<MutationIntent, { type: "parentFamily.add" }>;
 type RelativePurpose = "父亲" | "母亲" | "配偶" | "子女" | "更正人物";
 
 export interface RelativeQuickCreateRequest {
+  ownerPersonId: string;
   purpose: RelativePurpose;
   onCreated(person: PersonListItem): void;
 }
@@ -49,6 +50,11 @@ interface MarriageEventDraft {
   status: "" | "active" | "divorced";
   start: PartialDate | null;
   end: PartialDate | null;
+}
+
+interface OwnerRequest {
+  ownerPersonId: string;
+  generation: number;
 }
 
 const roleName = (role: ParentRole): "父亲" | "母亲" => role === "father" ? "父亲" : "母亲";
@@ -83,6 +89,9 @@ export function FamilyRelationsPanel({
   const [planning, setPlanning] = useState(false);
   const searchRequestId = useRef(0);
   const nextMarriageKey = useRef(2);
+  const ownerPersonId = useRef(detail.person.id);
+  const ownerGeneration = useRef(0);
+  const mounted = useRef(true);
 
   const mutationCommitted = useCallback(async (): Promise<void> => {
     setPendingPlan(null);
@@ -95,6 +104,40 @@ export function FamilyRelationsPanel({
     await onChanged();
   }, [onChanged]);
   const staged = useStagedMutation(mutations, mutationCommitted);
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      ownerGeneration.current += 1;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    ownerPersonId.current = detail.person.id;
+    ownerGeneration.current += 1;
+    searchRequestId.current += 1;
+    nextMarriageKey.current = 2;
+    setPeople([]);
+    setQuery("");
+    setLoadingPeople(true);
+    setParentSelections({ father: "", mother: "" });
+    setSelectedChildren(new Set());
+    setChildParentRole("");
+    setMarriageEvents([emptyMarriageEvent(1)]);
+    setCorrection(null);
+    setPendingPlan(null);
+    setResolutions({});
+    setNotices([]);
+    setError(null);
+    setPlanning(false);
+    staged.reset();
+  }, [detail.person.id, staged.reset]);
+
+  const captureOwner = (): OwnerRequest => ({ ownerPersonId: detail.person.id, generation: ownerGeneration.current });
+  const ownerIsCurrent = (request: OwnerRequest): boolean => mounted.current
+    && ownerPersonId.current === request.ownerPersonId
+    && ownerGeneration.current === request.generation;
 
   const mergePerson = useCallback((created: PersonListItem): void => {
     setPeople((current) => current.some(({ id }) => id === created.id) ? current : [...current, created]);
@@ -143,6 +186,8 @@ export function FamilyRelationsPanel({
 
   const planAndStage = async (family: ParentFamilyIntent[], prefixIntents: MutationIntent[] = []): Promise<void> => {
     if (!mutations || family.length === 0 || planning) return;
+    const owner = captureOwner();
+    if (!ownerIsCurrent(owner)) return;
     setPlanning(true);
     setError(null);
     setNotices([]);
@@ -154,12 +199,14 @@ export function FamilyRelationsPanel({
           childId: intent.childId,
           parentRole: intent.parentRole
         });
+        if (!ownerIsCurrent(owner)) return;
         if (!result.ok) {
           setError(result.error.message);
           return;
         }
         planned.push({ key: `${intent.childId}:${intent.parentRole}:${index}`, intent, plan: result.value });
       }
+      if (!ownerIsCurrent(owner)) return;
       setNotices(planned
         .filter(({ plan }) => plan.status === "no_candidate")
         .map(({ plan }) => `${plan.explicit.childName}：另一位父母尚未确认`));
@@ -168,11 +215,13 @@ export function FamilyRelationsPanel({
         setResolutions({});
         return;
       }
+      if (!ownerIsCurrent(owner)) return;
       await staged.stage([...prefixIntents, ...family]);
+      if (!ownerIsCurrent(owner)) return;
     } catch {
-      setError("无法规划家庭关系，请稍后重试");
+      if (ownerIsCurrent(owner)) setError("无法规划家庭关系，请稍后重试");
     } finally {
-      setPlanning(false);
+      if (ownerIsCurrent(owner)) setPlanning(false);
     }
   };
 
@@ -248,9 +297,13 @@ export function FamilyRelationsPanel({
   };
 
   const quickCreate = (purpose: RelativePurpose, onCreated: (person: PersonListItem) => void): void => {
+    const owner = captureOwner();
+    if (!ownerIsCurrent(owner)) return;
     onRequestQuickCreate?.({
+      ownerPersonId: owner.ownerPersonId,
       purpose,
       onCreated: (created) => {
+        if (!ownerIsCurrent(owner)) return;
         mergePerson(created);
         onCreated(created);
       }

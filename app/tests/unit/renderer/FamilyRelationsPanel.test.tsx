@@ -34,6 +34,7 @@ const person = (
 });
 
 const current = person("current", "中心人物", "male");
+const secondCurrent = person("current-b", "第二人物", "female");
 const father = person("father", "现有父亲", "male");
 const mother = person("mother", "候选母亲", "female");
 const daughter = person("daughter", "女儿一", "female");
@@ -41,7 +42,13 @@ const son = person("son", "儿子二", "male");
 const spouseOne = person("spouse-1", "配偶甲", "female");
 const spouseTwo = person("spouse-2", "配偶乙", "female");
 const replacement = person("replacement", "更正父亲", "male");
-const allPeople = [current, father, mother, daughter, son, spouseOne, spouseTwo, replacement];
+const allPeople = [current, secondCurrent, father, mother, daughter, son, spouseOne, spouseTwo, replacement];
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => { resolve = complete; });
+  return { promise, resolve };
+}
 
 const related = (
   relationId: string,
@@ -143,6 +150,29 @@ const ambiguousPlan = (input: { knownParentId: string; childId: string; parentRo
     message: "存在多个可能的另一位父母",
     evidenceIds: ["marriage-a", "marriage-b"]
   }]
+});
+
+const uniquePlan = (input: { knownParentId: string; childId: string; parentRole: "father" | "mother" }): ParentCompletionPlanDto => ({
+  ...noCandidatePlan(input),
+  status: "suggested",
+  basis: "unique_spouse",
+  suggested: {
+    parentId: spouseOne.id,
+    parentName: spouseOne.displayName,
+    childId: input.childId,
+    childName: allPeople.find((entry) => entry.id === input.childId)?.displayName ?? "孩子",
+    parentRole: input.parentRole === "father" ? "mother" : "father",
+    inferredFromMarriageId: "marriage-unique"
+  },
+  candidates: [{
+    personId: spouseOne.id,
+    personName: spouseOne.displayName,
+    intervalRelation: "inside",
+    marriageEpisodes: [{ id: "marriage-unique", status: "active", start: null, end: null, rowVersion: 1 }],
+    reason: "唯一已确认配偶",
+    evidenceIds: ["marriage-unique"]
+  }],
+  issues: []
 });
 
 function createHarness(plan: (input: { knownParentId: string; childId: string; parentRole: "father" | "mother" }) => ParentCompletionPlanDto = noCandidatePlan) {
@@ -277,6 +307,155 @@ describe("FamilyRelationsPanel", () => {
       }
     ] satisfies MutationIntent[]);
     expect(screen.getAllByText(/另一位父母尚未确认/u)).toHaveLength(2);
+  });
+
+  it("stages a unique completion plan without asking the administrator to resolve it", async () => {
+    const { mutations } = renderPanel(detail(), uniquePlan);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
+    fireEvent.click(screen.getByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
+
+    await waitFor(() => expect(mutations.stage).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("heading", { name: "请选择另一位父母，或暂时跳过" })).not.toBeInTheDocument();
+    expect(vi.mocked(mutations.stage).mock.calls[0]?.[0].intents).toEqual([{
+      type: "parentFamily.add",
+      knownParentId: current.id,
+      childId: daughter.id,
+      parentRole: "father",
+      completionPolicy: "spouse-default",
+      sourceDescription: "人物中心关系录入"
+    }]);
+  });
+
+  it("clears the previous person's preview, correction and selections when the owner changes", async () => {
+    const harness = createHarness();
+    const onRequestQuickCreate = vi.fn();
+    const view = render(<FamilyRelationsPanel
+      detail={detail({ parents: [related("edge-father", father, "father")] })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+      onRequestQuickCreate={onRequestQuickCreate}
+    />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
+    fireEvent.click(screen.getByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "更正父亲 现有父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+
+    view.rerender(<FamilyRelationsPanel
+      detail={detail({ person: secondCurrent })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+      onRequestQuickCreate={onRequestQuickCreate}
+    />);
+
+    expect(await screen.findByText("当前人物固定为：第二人物")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "确认写入" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "更正父亲关系" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择子女 女儿一" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).not.toBeChecked();
+  });
+
+  it("does not stage an old person's plan when its deferred result arrives after an owner change", async () => {
+    const harness = createHarness();
+    const pendingPlan = deferred<Awaited<ReturnType<FamilyAgentApi["relations"]["planParentCompletion"]>>>();
+    vi.mocked(harness.relationsApi.planParentCompletion).mockReturnValue(pendingPlan.promise);
+    const view = render(<FamilyRelationsPanel
+      detail={detail()}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+    />);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
+    fireEvent.click(screen.getByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
+    await waitFor(() => expect(harness.relationsApi.planParentCompletion).toHaveBeenCalledTimes(1));
+
+    view.rerender(<FamilyRelationsPanel
+      detail={detail({ person: secondCurrent })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+    />);
+    await act(async () => {
+      pendingPlan.resolve({ ok: true, value: noCandidatePlan({ knownParentId: current.id, childId: daughter.id, parentRole: "father" }) });
+      await pendingPlan.promise;
+      await Promise.resolve();
+    });
+
+    expect(harness.mutations.stage).not.toHaveBeenCalled();
+    expect(screen.queryByText(/女儿一：另一位父母尚未确认/u)).not.toBeInTheDocument();
+  });
+
+  it("does not show an old person's deferred mutation preview after an owner change", async () => {
+    const harness = createHarness();
+    const pendingStage = deferred<Awaited<ReturnType<MutationApi["stage"]>>>();
+    vi.mocked(harness.mutations.stage).mockReturnValue(pendingStage.promise);
+    const view = render(<FamilyRelationsPanel
+      detail={detail({ parents: [related("edge-father", father, "father")] })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+    />);
+    fireEvent.click(screen.getByRole("button", { name: "移除父亲 现有父亲" }));
+    await waitFor(() => expect(harness.mutations.stage).toHaveBeenCalledTimes(1));
+
+    view.rerender(<FamilyRelationsPanel
+      detail={detail({ person: secondCurrent })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+    />);
+    await act(async () => {
+      pendingStage.resolve({ ok: true, value: preview() });
+      await pendingStage.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("dialog", { name: "确认写入" })).not.toBeInTheDocument();
+    expect(screen.getByText("当前人物固定为：第二人物")).toBeVisible();
+  });
+
+  it("ignores a deferred quick-create callback owned by the previous person", async () => {
+    const harness = createHarness();
+    const onRequestQuickCreate = vi.fn();
+    const lateCreated = deferred<PersonListItem>();
+    const view = render(<FamilyRelationsPanel
+      detail={detail()}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+      onRequestQuickCreate={onRequestQuickCreate}
+    />);
+    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): void };
+    void lateCreated.promise.then(request.onCreated);
+
+    view.rerender(<FamilyRelationsPanel
+      detail={detail({ person: secondCurrent })}
+      peopleApi={harness.peopleApi}
+      relationsApi={harness.relationsApi}
+      mutations={harness.mutations}
+      onChanged={vi.fn()}
+      onRequestQuickCreate={onRequestQuickCreate}
+    />);
+    await act(async () => {
+      lateCreated.resolve(person("late-child", "迟到子女"));
+      await lateCreated.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("checkbox", { name: "选择子女 迟到子女" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择子女 女儿一" })).not.toBeChecked();
   });
 
   it("shows ambiguous candidate names and marriage ranges and stages the administrator selection", async () => {
@@ -438,6 +617,51 @@ describe("FamilyRelationsPanel", () => {
     expect(await screen.findByRole("checkbox", { name: "选择子女 新建子女" })).toBeChecked();
     expect(api.mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({ type: "person.create" })] });
     expect(api.people.save).not.toHaveBeenCalled();
+  });
+
+  it("does not return a quick-created ID after loadPeople completes for a different selected person", async () => {
+    const { api, createdChild } = createPageApi();
+    const refresh = deferred<Awaited<ReturnType<FamilyAgentApi["people"]["list"]>>>();
+    const onDataChanged = vi.fn();
+    let pageListCalls = 0;
+    vi.mocked(api.people.list).mockImplementation(async (input) => {
+      const pageList = !Object.prototype.hasOwnProperty.call(input, "query");
+      if (!pageList) return { ok: true, value: [current, secondCurrent, daughter] };
+      pageListCalls += 1;
+      if (pageListCalls === 1) return { ok: true, value: [current, secondCurrent, daughter] };
+      return refresh.promise;
+    });
+    vi.mocked(api.people.get).mockImplementation(async ({ personId }) => ({
+      ok: true,
+      value: personId === createdChild.id
+        ? detail({ person: createdChild })
+        : personId === secondCurrent.id
+          ? detail({ person: secondCurrent })
+          : detail()
+    }));
+    render(<PeoplePage
+      workspace={{ id: "workspace-1", name: "测试谱", directory: "opaque", originPersonId: current.id, lastOpenedAt: null, schemaVersion: 7 }}
+      api={api}
+      initialSelectedPersonId={current.id}
+      onDataChanged={onDataChanged}
+    />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
+    await waitFor(() => expect(pageListCalls).toBe(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "查看第二人物" }));
+    expect(await screen.findByText("当前人物固定为：第二人物")).toBeVisible();
+    await act(async () => {
+      refresh.resolve({ ok: true, value: [current, secondCurrent, daughter, createdChild] });
+      await refresh.promise;
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole("checkbox", { name: "选择子女 新建子女" })).not.toBeInTheDocument();
+    expect(onDataChanged).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the legacy pairwise editor in a default-collapsed advanced section", async () => {

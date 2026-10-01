@@ -98,4 +98,64 @@ describe("MutationReviewDialog", () => {
     expect(screen.getByLabelText("选择 自动母亲")).toBeEnabled();
     expect(screen.getByLabelText("选择 自动母亲")).not.toBeChecked();
   });
+
+  it("preserves correction provenance and prunes transitive dependent selections", () => {
+    const preview: MutationPreview = {
+      id: "draft-correction",
+      workspaceId: "workspace-1",
+      version: 1,
+      expiresAt: "2026-10-01T00:30:00.000Z",
+      expectedVersions: { "old-edge": 3 },
+      changes: [
+        {
+          id: "remove-old",
+          disposition: "update",
+          entityType: "parentChild",
+          entityId: "old-edge",
+          summary: "移除系统补全的旧父亲",
+          fieldChanges: [{ field: "relation", before: { originKind: "spouse_default", inferredFromMarriageId: "marriage-1" }, after: null }],
+          originKind: "spouse_default",
+          selectedByDefault: true,
+          dependsOnChangeIds: []
+        },
+        {
+          id: "replacement",
+          disposition: "create",
+          entityType: "parentChild",
+          entityId: "new-edge",
+          summary: "录入更正后的父亲",
+          fieldChanges: [],
+          originKind: "explicit",
+          selectedByDefault: true,
+          dependsOnChangeIds: ["remove-old"]
+        },
+        {
+          id: "automatic",
+          disposition: "create",
+          entityType: "parentChild",
+          entityId: "auto-edge",
+          summary: "根据婚姻补全母亲",
+          fieldChanges: [],
+          originKind: "spouse_default",
+          selectedByDefault: true,
+          dependsOnChangeIds: ["replacement"]
+        }
+      ],
+      issues: [],
+      canConfirm: true
+    };
+    const confirm = vi.fn();
+    render(<MutationReviewDialog preview={preview} onCancel={vi.fn()} onConfirm={confirm} />);
+
+    expect(screen.getAllByText("系统自动补全")).toHaveLength(2);
+    expect(screen.getByText("人工录入")).toBeVisible();
+    fireEvent.click(screen.getByLabelText("选择 移除系统补全的旧父亲"));
+
+    expect(screen.getByLabelText("选择 录入更正后的父亲")).not.toBeChecked();
+    expect(screen.getByLabelText("选择 录入更正后的父亲")).toBeDisabled();
+    expect(screen.getByLabelText("选择 根据婚姻补全母亲")).not.toBeChecked();
+    expect(screen.getByLabelText("选择 根据婚姻补全母亲")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "确认写入" })).toBeDisabled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
 });

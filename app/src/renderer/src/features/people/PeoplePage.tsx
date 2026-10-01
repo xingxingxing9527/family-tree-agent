@@ -44,6 +44,21 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   const [loading, setLoading] = useState(true);
   const listRequestId = useRef(0);
   const detailRequestId = useRef(0);
+  const selectedPersonId = useRef<string | null>(initialSelectedPersonId);
+  const relativeCreationGeneration = useRef(0);
+
+  const cancelRelativeCreation = useCallback((): void => {
+    relativeCreationGeneration.current += 1;
+    setRelativeCreation(null);
+  }, []);
+
+  const openRelativeCreation = useCallback((request: RelativeQuickCreateRequest): void => {
+    if (request.ownerPersonId !== selectedPersonId.current) return;
+    relativeCreationGeneration.current += 1;
+    setRelativeCreation(request);
+    setCreating(false);
+    setEditing(false);
+  }, []);
 
   const loadPeople = useCallback(async (): Promise<void> => {
     const activeRequest = ++listRequestId.current;
@@ -58,6 +73,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   }, [api, workspace.id]);
 
   const loadDetail = useCallback(async (personId: string): Promise<void> => {
+    selectedPersonId.current = personId;
     const activeRequest = ++detailRequestId.current;
     try {
       const result = await api.people.get({ personId });
@@ -68,14 +84,18 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   }, [api, onSelectedPersonChange, workspace.id]);
 
   useEffect(() => {
+    cancelRelativeCreation();
+    selectedPersonId.current = initialSelectedPersonId;
     setSelected(null);
     void loadPeople();
     if (initialSelectedPersonId) void loadDetail(initialSelectedPersonId);
     else onSelectedPersonChange(null);
     return () => { listRequestId.current += 1; detailRequestId.current += 1; };
-  }, [initialSelectedPersonId, loadDetail, loadPeople, onSelectedPersonChange, workspace.id]);
+  }, [cancelRelativeCreation, initialSelectedPersonId, loadDetail, loadPeople, onSelectedPersonChange, workspace.id]);
 
   const personSaved = async (detail: PersonDetailReadModel): Promise<void> => {
+    cancelRelativeCreation();
+    selectedPersonId.current = detail.person.id;
     setSelected(detail);
     setCreating(false);
     setEditing(false);
@@ -86,9 +106,13 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   const relativePersonSaved = async (detail: PersonDetailReadModel): Promise<void> => {
     const request = relativeCreation;
     if (!request) return;
+    const generation = relativeCreationGeneration.current;
     setRelativeCreation(null);
     await loadPeople();
-    request.onCreated({ ...detail.person, aliases: detail.aliases });
+    if (generation === relativeCreationGeneration.current && selectedPersonId.current === request.ownerPersonId) {
+      request.onCreated({ ...detail.person, aliases: detail.aliases });
+      relativeCreationGeneration.current += 1;
+    }
     onDataChanged();
   };
 
@@ -105,7 +129,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <p className="eyebrow text-secondary">当前谱册</p>
           <h1 id="people-page-title">{workspace.name}</h1>
         </div>
-        <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); setRelativeCreation(null); }}>新增人物</button>
+        <button className="button primary-button" type="button" onClick={() => { setCreating(true); setEditing(false); cancelRelativeCreation(); }}>新增人物</button>
       </header>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <div className="people-layout">
@@ -119,7 +143,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
               type="button"
               key={person.id}
               aria-label={`查看${person.displayName}`}
-              onClick={() => { setCreating(false); setEditing(false); setRelativeCreation(null); void loadDetail(person.id); }}
+              onClick={() => { setCreating(false); setEditing(false); cancelRelativeCreation(); void loadDetail(person.id); }}
             >
               <strong>{person.displayName}</strong>
               <span className="text-secondary">{person.aliases.join("、") || "无别名"}</span>
@@ -129,7 +153,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
         <div className="people-content">
           {relativeCreation && <section className="relative-person-creation" aria-labelledby="relative-person-creation-title">
             <h2 id="relative-person-creation-title">快速新建关系人物：{relativeCreation.purpose}</h2>
-            <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void relativePersonSaved(detail)} onCancel={() => setRelativeCreation(null)} />
+            <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void relativePersonSaved(detail)} onCancel={cancelRelativeCreation} />
           </section>}
           {creating && <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void personSaved(detail)} onCancel={() => setCreating(false)} />}
           {editing && selected && (
@@ -145,7 +169,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
             />
           )}
           {!creating && !editing && selected && (
-            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => { setEditing(true); setRelativeCreation(null); }} onChanged={relationsChanged} onRequestQuickCreate={(request) => { setRelativeCreation(request); setCreating(false); setEditing(false); }} onUseAsViewpoint={onUseAsViewpoint} onAskAbout={onAskAbout} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
+            <><PersonDetail key={selected.person.id} detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => { setEditing(true); cancelRelativeCreation(); }} onChanged={relationsChanged} onRequestQuickCreate={openRelativeCreation} onUseAsViewpoint={onUseAsViewpoint} onAskAbout={onAskAbout} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
           {people.length >= 2 && <details className="advanced-relations"><summary>高级关系录入</summary><RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} onSaved={relationsChanged} /></details>}

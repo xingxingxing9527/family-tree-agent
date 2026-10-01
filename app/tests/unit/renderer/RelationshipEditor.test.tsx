@@ -61,6 +61,28 @@ describe("RelationshipEditor", () => {
     expect(relationsApi.addParentChild).not.toHaveBeenCalled();
   });
 
+  it("keeps the advanced pairwise marriage flow on the staged mutation path", async () => {
+    const { peopleApi, relationsApi } = createApis();
+    const mutations = createMutationApi();
+    render(<RelationshipEditor people={people} peopleApi={peopleApi} relationsApi={relationsApi} mutations={mutations} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("配偶一"), { target: { value: "parent-1" } });
+    fireEvent.change(screen.getByLabelText("配偶二"), { target: { value: "child-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存婚姻" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [{
+      type: "marriage.add",
+      draft: {
+        spouseAId: "parent-1",
+        spouseBId: "child-1",
+        start: null,
+        sourceDescription: "表单录入"
+      }
+    }] });
+    expect(relationsApi.addMarriage).not.toHaveBeenCalled();
+  });
+
   it("discards a warning preview when visible draft fields change instead of confirming the old hidden draft", async () => {
     const { peopleApi, relationsApi } = createApis();
     render(<RelationshipEditor people={people} peopleApi={peopleApi} relationsApi={relationsApi} onSaved={vi.fn()} />);
