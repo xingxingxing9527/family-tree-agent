@@ -103,17 +103,20 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
     onDataChanged();
   };
 
-  const relativePersonSaved = async (detail: PersonDetailReadModel): Promise<void> => {
+  const relativePersonPersisted = useCallback(async (): Promise<void> => {
+    await loadPeople();
+    onDataChanged();
+  }, [loadPeople, onDataChanged]);
+
+  const relativePersonSaved = (detail: PersonDetailReadModel): void => {
     const request = relativeCreation;
     if (!request) return;
     const generation = relativeCreationGeneration.current;
     setRelativeCreation(null);
-    await loadPeople();
     if (generation === relativeCreationGeneration.current && selectedPersonId.current === request.ownerPersonId) {
       request.onCreated({ ...detail.person, aliases: detail.aliases });
       relativeCreationGeneration.current += 1;
     }
-    onDataChanged();
   };
 
   const relationsChanged = async (): Promise<void> => {
@@ -153,7 +156,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
         <div className="people-content">
           {relativeCreation && <section className="relative-person-creation" aria-labelledby="relative-person-creation-title">
             <h2 id="relative-person-creation-title">快速新建关系人物：{relativeCreation.purpose}</h2>
-            <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void relativePersonSaved(detail)} onCancel={cancelRelativeCreation} />
+            <PersonEditor api={api.people} mutations={api.mutations} onSaved={relativePersonSaved} onMutationPersisted={relativePersonPersisted} onCancel={cancelRelativeCreation} />
           </section>}
           {creating && <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void personSaved(detail)} onCancel={() => setCreating(false)} />}
           {editing && selected && (

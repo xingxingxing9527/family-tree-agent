@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MutationApi, MutationIntent, MutationPreview, MutationReceipt } from "../../../../shared/mutations";
 
-export function useStagedMutation(api: MutationApi | undefined, onCommitted?: (receipt: MutationReceipt) => void | Promise<void>) {
+interface StagedMutationOptions {
+  onPersisted?(receipt: MutationReceipt): void | Promise<void>;
+}
+
+export function useStagedMutation(
+  api: MutationApi | undefined,
+  onCommitted?: (receipt: MutationReceipt) => void | Promise<void>,
+  { onPersisted }: StagedMutationOptions = {}
+) {
   const [preview, setPreview] = useState<MutationPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +50,12 @@ export function useStagedMutation(api: MutationApi | undefined, onCommitted?: (r
     setBusy(true); setError(null);
     try {
       const result = await api.confirm({ draftId: preview.id, draftVersion: preview.version, selectedChangeIds, acknowledgedWarningCodes });
+      if (!result.ok) {
+        if (requestIsCurrent(generation)) setError(result.error.message);
+        return false;
+      }
+      await onPersisted?.(result.value);
       if (!requestIsCurrent(generation)) return false;
-      if (!result.ok) { setError(result.error.message); return false; }
       setPreview(null);
       await onCommitted?.(result.value);
       return requestIsCurrent(generation);
@@ -53,7 +65,7 @@ export function useStagedMutation(api: MutationApi | undefined, onCommitted?: (r
     } finally {
       if (requestIsCurrent(generation)) setBusy(false);
     }
-  }, [api, busy, onCommitted, preview]);
+  }, [api, busy, onCommitted, onPersisted, preview]);
 
   const reset = useCallback((): void => {
     requestGeneration.current += 1;

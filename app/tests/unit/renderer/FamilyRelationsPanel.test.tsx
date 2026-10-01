@@ -664,6 +664,63 @@ describe("FamilyRelationsPanel", () => {
     expect(onDataChanged).toHaveBeenCalledTimes(1);
   });
 
+  it("refreshes once without refilling the old owner when quick-create confirmation resolves after switching people", async () => {
+    const { api, createdChild } = createPageApi();
+    const pendingConfirm = deferred<Awaited<ReturnType<MutationApi["confirm"]>>>();
+    const onDataChanged = vi.fn();
+    let pageListCalls = 0;
+    vi.mocked(api.mutations.confirm).mockReturnValue(pendingConfirm.promise);
+    vi.mocked(api.people.list).mockImplementation(async (input) => {
+      if (Object.prototype.hasOwnProperty.call(input, "query")) {
+        return { ok: true, value: [current, secondCurrent, daughter] };
+      }
+      pageListCalls += 1;
+      return {
+        ok: true,
+        value: pageListCalls === 1
+          ? [current, secondCurrent, daughter]
+          : [current, secondCurrent, daughter, createdChild]
+      };
+    });
+    vi.mocked(api.people.get).mockImplementation(async ({ personId }) => ({
+      ok: true,
+      value: personId === secondCurrent.id
+        ? detail({ person: secondCurrent })
+        : personId === createdChild.id
+          ? detail({ person: createdChild })
+          : detail()
+    }));
+    render(<PeoplePage
+      workspace={{ id: "workspace-1", name: "测试谱", directory: "opaque", originPersonId: current.id, lastOpenedAt: null, schemaVersion: 7 }}
+      api={api}
+      initialSelectedPersonId={current.id}
+      onDataChanged={onDataChanged}
+    />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
+    await waitFor(() => expect(api.mutations.confirm).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: `查看${secondCurrent.displayName}` }));
+    expect(await screen.findByText(`当前人物固定为：${secondCurrent.displayName}`)).toBeVisible();
+    await act(async () => {
+      pendingConfirm.resolve({ ok: true, value: { draftId: "draft-1", operationGroupId: "group-1", changedEntityIds: [createdChild.id] } });
+      await pendingConfirm.promise;
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(onDataChanged).toHaveBeenCalledTimes(1));
+    expect(pageListCalls).toBe(2);
+    expect(screen.getByRole("button", { name: `查看${createdChild.displayName}` })).toBeVisible();
+    expect(api.people.get).not.toHaveBeenCalledWith({ personId: createdChild.id });
+    expect(screen.queryByRole("heading", { name: /快速新建关系人物/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "确认写入" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: `选择子女 ${createdChild.displayName}` })).not.toBeInTheDocument();
+    expect(screen.getByText(`当前人物固定为：${secondCurrent.displayName}`)).toBeVisible();
+  });
+
   it("keeps the legacy pairwise editor in a default-collapsed advanced section", async () => {
     const { api } = createPageApi();
     render(<PeoplePage

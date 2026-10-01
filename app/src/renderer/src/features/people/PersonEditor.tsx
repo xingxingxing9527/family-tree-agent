@@ -13,6 +13,7 @@ interface PersonEditorProps {
   expectedVersion?: number;
   initialValue?: PersonDraft;
   onSaved?(detail: PersonDetailReadModel): void;
+  onMutationPersisted?(receipt: MutationReceipt): void | Promise<void>;
   onCancel?(): void;
 }
 
@@ -26,7 +27,7 @@ const emptyDraft: PersonDraft = {
   sourceDescription: "表单录入"
 };
 
-export function PersonEditor({ api, mutations, personId, expectedVersion, initialValue = emptyDraft, onSaved, onCancel }: PersonEditorProps): JSX.Element {
+export function PersonEditor({ api, mutations, personId, expectedVersion, initialValue = emptyDraft, onSaved, onMutationPersisted, onCancel }: PersonEditorProps): JSX.Element {
   const [draft, setDraft] = useState<PersonDraft>(initialValue);
   const [aliasText, setAliasText] = useState(initialValue.aliases.join("、"));
   const [warnings, setWarnings] = useState<DomainWarningDto[]>([]);
@@ -40,7 +41,7 @@ export function PersonEditor({ api, mutations, personId, expectedVersion, initia
     if (refreshed.ok) onSaved?.(refreshed.value);
     else setError(refreshed.error.message);
   }, [api, onSaved]);
-  const staged = useStagedMutation(mutations, mutationCommitted);
+  const staged = useStagedMutation(mutations, mutationCommitted, { onPersisted: onMutationPersisted });
 
   const buildDraft = (): PersonDraft => ({
     ...draft,
