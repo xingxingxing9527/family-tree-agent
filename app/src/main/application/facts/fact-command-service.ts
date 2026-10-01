@@ -14,6 +14,13 @@ interface PreparedCommand {
   warnings: DomainIssue[];
 }
 
+export interface FactCommandPreview {
+  errors: DomainIssue[];
+  warnings: DomainIssue[];
+  changes: Array<{ entityType: string; entityId: string | null; disposition: "create" | "update" }>;
+  expectedVersions: Record<string, number>;
+}
+
 interface IdRow { workspace_id: string; }
 interface RedirectRow { new_person_id: string; }
 
@@ -55,6 +62,27 @@ export class FactCommandService {
     }
 
     return this.unitOfWork.run(command.type, (ctx) => this.executeInTransaction(ctx, command, options));
+  }
+
+  preview(command: FactCommand): FactCommandPreview {
+    const prepared = this.prepare(command);
+    const expectedVersions: Record<string, number> = {};
+    if ("expectedVersion" in command) {
+      const entityId = "personId" in command ? command.personId : "marriageId" in command ? command.marriageId : "entityId" in command ? command.entityId : null;
+      if (entityId) expectedVersions[entityId] = command.expectedVersion;
+    }
+    const entityType = command.type === "fact.softDelete"
+      ? command.entityType
+      : command.type.startsWith("person.") ? "person" : command.type.startsWith("parentChild") ? "parentChild" : "marriage";
+    const entityId = command.type === "person.create" || command.type === "parentChild.add" || command.type === "marriage.add"
+      ? command.draft.id ?? null
+      : "personId" in command ? command.personId : "marriageId" in command ? command.marriageId : "entityId" in command ? command.entityId : null;
+    return {
+      errors: [...prepared.errors],
+      warnings: [...prepared.warnings],
+      changes: [{ entityType, entityId, disposition: command.type === "person.create" || command.type === "parentChild.add" || command.type === "marriage.add" ? "create" : "update" }],
+      expectedVersions
+    };
   }
 
   executeInTransaction(ctx: TransactionContext, command: FactCommand, options: ExecuteFactCommandOptions = {}): MutationResult {

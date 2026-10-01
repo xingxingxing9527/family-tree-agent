@@ -1,10 +1,14 @@
-import React, { useState, type FormEvent, type JSX } from "react";
+import React, { useCallback, useState, type FormEvent, type JSX } from "react";
 import type { FamilyAgentApi, DomainWarningDto, PersonDetailReadModel, PersonDraft } from "../../../../shared/contracts";
+import type { MutationApi, MutationReceipt } from "../../../../shared/mutations";
+import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
+import { useStagedMutation } from "../mutations/useStagedMutation";
 import { PartialDateField } from "./PartialDateField";
 import "./people.css";
 
 interface PersonEditorProps {
   api: FamilyAgentApi["people"];
+  mutations?: MutationApi;
   personId?: string;
   expectedVersion?: number;
   initialValue?: PersonDraft;
@@ -22,12 +26,21 @@ const emptyDraft: PersonDraft = {
   sourceDescription: "表单录入"
 };
 
-export function PersonEditor({ api, personId, expectedVersion, initialValue = emptyDraft, onSaved, onCancel }: PersonEditorProps): JSX.Element {
+export function PersonEditor({ api, mutations, personId, expectedVersion, initialValue = emptyDraft, onSaved, onCancel }: PersonEditorProps): JSX.Element {
   const [draft, setDraft] = useState<PersonDraft>(initialValue);
   const [aliasText, setAliasText] = useState(initialValue.aliases.join("、"));
   const [warnings, setWarnings] = useState<DomainWarningDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const mutationCommitted = useCallback(async (receipt: MutationReceipt): Promise<void> => {
+    const savedId = receipt.changedEntityIds[0];
+    if (!savedId) return;
+    const refreshed = await api.get({ personId: savedId });
+    if (refreshed.ok) onSaved?.(refreshed.value);
+    else setError(refreshed.error.message);
+  }, [api, onSaved]);
+  const staged = useStagedMutation(mutations, mutationCommitted);
 
   const buildDraft = (): PersonDraft => ({
     ...draft,
@@ -67,6 +80,13 @@ export function PersonEditor({ api, personId, expectedVersion, initialValue = em
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    if (mutations) {
+      const value = buildDraft();
+      void staged.stage([personId
+        ? { type: "person.update", personId, expectedVersion: expectedVersion!, patch: value }
+        : { type: "person.create", draft: value }]);
+      return;
+    }
     void persist(false);
   };
 
@@ -75,6 +95,7 @@ export function PersonEditor({ api, personId, expectedVersion, initialValue = em
       <h2 id="person-editor-title" className="text-primary">{personId ? "编辑人物" : "新增人物"}</h2>
       <p className="text-secondary form-help">日期一旦填写，历法、年份和月份均为必填项。日期中的“日”可以留空。</p>
       {error && <div className="error-banner" role="alert">{error}</div>}
+      {staged.error && <div className="error-banner" role="alert">{staged.error}</div>}
       {warnings.length > 0 && (
         <div className="warning-banner" role="alert">
           <strong>请确认以下提醒</strong>
@@ -114,9 +135,10 @@ export function PersonEditor({ api, personId, expectedVersion, initialValue = em
         </label>
         <div className="button-row">
           {onCancel && <button className="button secondary-button" type="button" onClick={onCancel}>取消</button>}
-          <button className="button primary-button" type="submit" disabled={saving}>{saving ? "保存中…" : "保存人物"}</button>
+          <button className="button primary-button" type="submit" disabled={saving || staged.busy}>{saving || staged.busy ? "处理中…" : "保存人物"}</button>
         </div>
       </form>
+      {staged.preview && <MutationReviewDialog preview={staged.preview} busy={staged.busy} onCancel={staged.cancel} onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)} />}
     </section>
   );
 }

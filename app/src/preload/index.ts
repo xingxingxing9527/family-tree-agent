@@ -69,6 +69,11 @@ const desktopApi: DesktopApi = {
     summarizeLineage: (input) => ipcRenderer.invoke("query:summarize-lineage", input),
     searchWiki: (input) => ipcRenderer.invoke("query:search-wiki", input)
   },
+  mutations: {
+    stage: (input) => ipcRenderer.invoke("mutations:stage", input),
+    confirm: (input) => ipcRenderer.invoke("mutations:confirm", input),
+    revise: (input) => ipcRenderer.invoke("mutations:revise", input)
+  },
   chat: {
     authorize: (input) => ipcRenderer.invoke("chat:authorize-online", input),
     stageMutation: (input) => ipcRenderer.invoke("chat:stage-mutation", input),

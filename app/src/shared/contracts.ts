@@ -1,5 +1,6 @@
 import type { PartialDate } from "./domain.js";
 import type { ConversationAnswer, ConversationConfirmationReceipt, ConversationDraftPreview, ConversationMutationDraft } from "./chat.js";
+import type { MutationApi } from "./mutations.js";
 
 export type AppErrorCode =
   | "VALIDATION"
@@ -512,6 +513,7 @@ export interface FamilyAgentApi {
   media: MediaApi;
   wiki: WikiApi;
   query: QueryApi;
+  mutations: MutationApi;
   chat: {
     authorize(input: { sessionId: string; operation: "extract"; payload: { text: string; candidatePeople: PersonCandidate[] } } | { sessionId: string; operation: "ask"; payload: { question: string; viewpointId: string; selectedPersonId: string | null } }): Promise<AppResult<{ authorizationToken: string; expiresAt: string }>>;
     stageMutation(input: { sessionId: string; authorizationToken: string; payload: { text: string; candidatePeople: PersonCandidate[] } }): Promise<AppResult<ConversationDraftPreview>>;

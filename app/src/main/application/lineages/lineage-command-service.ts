@@ -26,13 +26,21 @@ export class LineageCommandService {
   constructor(private readonly database: WorkspaceDatabase, private readonly workspaceId: string) {}
 
   createLineage(input: { name: string; founderPersonId: string; description: string | null }): LineageMutation<LineageRecord> {
+    return this.run("lineage.create", (ctx) => this.createLineageInTransaction(ctx, input));
+  }
+
+  createLineageInTransaction(ctx: TransactionContext, input: { id?: string; name: string; founderPersonId: string; description: string | null }): LineageRecord {
     const name = this.text(input.name, "name", 200);
     const description = this.optionalText(input.description, "description", 10_000);
     this.requirePerson(input.founderPersonId);
-    return this.run("lineage.create", (ctx) => ctx.lineages.create(ctx, { name, founderPersonId: input.founderPersonId, description }));
+    return ctx.lineages.create(ctx, { id: input.id, name, founderPersonId: input.founderPersonId, description });
   }
 
   updateLineage(input: { lineageId: string; expectedVersion: number; patch: { name?: string; founderPersonId?: string; description?: string | null } }): LineageMutation<LineageRecord> {
+    return this.run("lineage.update", (ctx) => this.updateLineageInTransaction(ctx, input));
+  }
+
+  updateLineageInTransaction(ctx: TransactionContext, input: { lineageId: string; expectedVersion: number; patch: { name?: string; founderPersonId?: string; description?: string | null } }): LineageRecord {
     const lineage = this.requireLineage(input.lineageId);
     this.requireVersion(lineage.rowVersion, input.expectedVersion, "lineage", lineage.id);
     if (Object.keys(input.patch).length === 0) throw new LineageCommandError("VALIDATION", "Lineage patch cannot be empty", { field: "patch" });
@@ -43,31 +51,41 @@ export class LineageCommandService {
       ...(founderPersonId === undefined ? {} : { founderPersonId }),
       ...(input.patch.description === undefined ? {} : { description: this.optionalText(input.patch.description, "description", 10_000) })
     };
-    return this.run("lineage.update", (ctx) => ctx.lineages.update(ctx, lineage.id, patch));
+    return ctx.lineages.update(ctx, lineage.id, patch);
   }
 
   archiveLineage(input: { lineageId: string; expectedVersion: number }): LineageMutation<LineageRecord> {
+    return this.run("lineage.archive", (ctx) => this.archiveLineageInTransaction(ctx, input));
+  }
+
+  archiveLineageInTransaction(ctx: TransactionContext, input: { lineageId: string; expectedVersion: number }): LineageRecord {
     const lineage = this.requireLineage(input.lineageId);
     this.requireVersion(lineage.rowVersion, input.expectedVersion, "lineage", lineage.id);
-    return this.run("lineage.archive", (ctx) => ctx.lineages.archive(ctx, lineage.id));
+    return ctx.lineages.archive(ctx, lineage.id);
   }
 
   addMembership(input: { lineageId: string; personId: string } & MembershipValues): LineageMutation<MembershipRecord> {
+    return this.run("lineage-membership.create", (ctx) => this.addMembershipInTransaction(ctx, input));
+  }
+
+  addMembershipInTransaction(ctx: TransactionContext, input: { id?: string; lineageId: string; personId: string } & MembershipValues): MembershipRecord {
     this.requireLineage(input.lineageId);
     this.requirePerson(input.personId);
     const values = this.membershipValues(input);
-    return this.run("lineage-membership.create", (ctx) => {
-      if (values.isPrimary) this.demoteOtherPrimaries(ctx, input.personId);
-      try {
-        return ctx.lineages.addMembership(ctx, { lineageId: input.lineageId, personId: input.personId, ...values });
-      } catch (error) {
-        if (this.isConstraint(error)) throw new LineageCommandError("CONFLICT", "This person already has an active membership in the lineage");
-        throw error;
-      }
-    });
+    if (values.isPrimary) this.demoteOtherPrimaries(ctx, input.personId);
+    try {
+      return ctx.lineages.addMembership(ctx, { id: input.id, lineageId: input.lineageId, personId: input.personId, ...values });
+    } catch (error) {
+      if (this.isConstraint(error)) throw new LineageCommandError("CONFLICT", "This person already has an active membership in the lineage");
+      throw error;
+    }
   }
 
   updateMembership(input: { membershipId: string; expectedVersion: number; patch: Partial<MembershipValues> }): LineageMutation<MembershipRecord> {
+    return this.run("lineage-membership.update", (ctx) => this.updateMembershipInTransaction(ctx, input));
+  }
+
+  updateMembershipInTransaction(ctx: TransactionContext, input: { membershipId: string; expectedVersion: number; patch: Partial<MembershipValues> }): MembershipRecord {
     const membership = this.requireMembership(input.membershipId);
     this.requireVersion(membership.rowVersion, input.expectedVersion, "lineage_membership", membership.id);
     if (Object.keys(input.patch).length === 0) throw new LineageCommandError("VALIDATION", "Membership patch cannot be empty", { field: "patch" });
@@ -75,22 +93,22 @@ export class LineageCommandService {
     if (patch.lineageRole !== undefined && patch.lineageRole !== "blood" && this.requireLineage(membership.lineageId).founderPersonId === membership.personId) {
       throw new LineageCommandError("VALIDATION", "The active founder membership must remain a blood membership", { field: "lineageRole", entityId: membership.id, entityType: "lineage_membership" });
     }
-    return this.run("lineage-membership.update", (ctx) => {
-      if (patch.isPrimary === true) this.demoteOtherPrimaries(ctx, membership.personId, membership.id);
-      return ctx.lineages.updateMembership(ctx, membership.id, patch);
-    });
+    if (patch.isPrimary === true) this.demoteOtherPrimaries(ctx, membership.personId, membership.id);
+    return ctx.lineages.updateMembership(ctx, membership.id, patch);
   }
 
   removeMembership(input: { membershipId: string; expectedVersion: number }): LineageMutation<MembershipRecord> {
+    return this.run("lineage-membership.remove", (ctx) => this.removeMembershipInTransaction(ctx, input));
+  }
+
+  removeMembershipInTransaction(ctx: TransactionContext, input: { membershipId: string; expectedVersion: number }): MembershipRecord {
     const membership = this.requireMembership(input.membershipId);
     this.requireVersion(membership.rowVersion, input.expectedVersion, "lineage_membership", membership.id);
-    return this.run("lineage-membership.remove", (ctx) => {
-      try { return ctx.lineages.archiveMembership(ctx, membership.id); }
-      catch (error) {
-        if (/founder/i.test(error instanceof Error ? error.message : "")) throw new LineageCommandError("VALIDATION", "The active founder membership cannot be removed");
-        throw error;
-      }
-    });
+    try { return ctx.lineages.archiveMembership(ctx, membership.id); }
+    catch (error) {
+      if (/founder/i.test(error instanceof Error ? error.message : "")) throw new LineageCommandError("VALIDATION", "The active founder membership cannot be removed");
+      throw error;
+    }
   }
 
   private run<T>(kind: string, operation: (ctx: TransactionContext) => T): LineageMutation<T> {

@@ -4,6 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LineageApi, PersonListItem, WorkspaceLineageReadModel } from "../../../src/shared/contracts";
+import type { MutationApi } from "../../../src/shared/mutations";
 import { LineageSettings } from "../../../src/renderer/src/features/lineages/LineageSettings";
 
 const people: PersonListItem[] = [
@@ -35,6 +36,18 @@ function api(): LineageApi {
   };
 }
 
+function mutationApi(): MutationApi {
+  return {
+    stage: vi.fn().mockResolvedValue({ ok: true, value: {
+      id: "draft-1", workspaceId: "workspace-1", version: 1, expiresAt: "2099-01-01T00:00:00.000Z", expectedVersions: {},
+      changes: [{ id: "change-1", disposition: "create", entityType: "lineage", entityId: "lineage-new", summary: "创建支系 长房", fieldChanges: [] }],
+      issues: [], canConfirm: true
+    } }),
+    confirm: vi.fn(),
+    revise: vi.fn()
+  };
+}
+
 afterEach(cleanup);
 
 describe("LineageSettings", () => {
@@ -53,6 +66,20 @@ describe("LineageSettings", () => {
     await waitFor(() => expect(lineagesApi.createLineage).toHaveBeenCalledWith({ name: "长房", founderPersonId: "founder", description: "东支" }));
     expect(complete).toHaveBeenCalledOnce();
     expect(onChanged).toHaveBeenCalledOnce();
+  });
+
+  it("stages Web lineage changes before the legacy lineage gateway", async () => {
+    const lineagesApi = api();
+    const mutations = mutationApi();
+    render(<LineageSettings lineages={[]} people={people} api={lineagesApi} mutations={mutations} />);
+
+    fireEvent.change(screen.getByLabelText("支系名称"), { target: { value: "长房" } });
+    fireEvent.change(screen.getByLabelText("支系始祖"), { target: { value: "founder" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建支系" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [{ type: "lineage.create", name: "长房", founderPersonId: "founder", description: null }] });
+    expect(lineagesApi.createLineage).not.toHaveBeenCalled();
   });
 
   it("shows generation-marker and declared/computed conflict and edits or removes the exact membership", async () => {

@@ -54,7 +54,7 @@ function safeRestoreError<T>(error: unknown, fallback: string): AppResult<T> {
 class BrowserRestoreController implements RestoreController {
   private readonly states = new Map<string, WorkspaceManagerState>();
 
-  constructor(private readonly runtime: FamilyRuntime) {}
+  constructor(private readonly runtime: FamilyRuntime, private readonly beforeDeactivate: () => void | Promise<void>) {}
 
   resolveTarget(workspaceId: string): Promise<RestoreTarget | null> {
     return this.runtime.workspaceManager.resolveRestoreTarget(workspaceId);
@@ -98,6 +98,7 @@ class BrowserRestoreController implements RestoreController {
   async deactivate(target: RestoreTarget): Promise<void> {
     this.states.set(target.workspaceId, await this.runtime.workspaceManager.captureRestoreState());
     await this.runtime.workspaceManager.deactivateForRestore(target.workspaceId);
+    await this.beforeDeactivate();
   }
 
   async commitActivation(target: RestoreTarget, manifest: Parameters<RestoreController["commitActivation"]>[1], schemaVersion: number): Promise<void> {
@@ -126,8 +127,8 @@ class BrowserRestoreController implements RestoreController {
 export class BrowserRestoreManager {
   private readonly restore: RestoreService;
 
-  constructor(private readonly runtime: FamilyRuntime, private readonly uploads: UploadStore) {
-    this.restore = new RestoreService(new BrowserRestoreController(runtime));
+  constructor(private readonly runtime: FamilyRuntime, private readonly uploads: UploadStore, beforeDeactivate: () => void | Promise<void> = () => undefined) {
+    this.restore = new RestoreService(new BrowserRestoreController(runtime, beforeDeactivate));
   }
 
   async inspectBackup(input: { fileToken: string; targetWorkspaceId: string }): Promise<AppResult<BackupInspectionDto>> {

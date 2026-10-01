@@ -4,6 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppResult, FamilyAgentApi, PersonDetailReadModel, PersonDraft } from "../../../src/shared/contracts";
+import type { MutationApi } from "../../../src/shared/mutations";
 import { PersonEditor } from "../../../src/renderer/src/features/people/PersonEditor";
 
 afterEach(cleanup);
@@ -35,6 +36,21 @@ function createPeopleApi(
     get: vi.fn().mockResolvedValue({ ok: true, value: savedDetail }),
     save: vi.fn().mockResolvedValue({ ok: true, value: { entityId: "person-1", saved: true, warnings: [] } }),
     update: vi.fn().mockResolvedValue(updateResult)
+  };
+}
+
+function createMutationApi(): MutationApi {
+  return {
+    stage: vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        id: "draft-1", workspaceId: "workspace-1", version: 1, expiresAt: "2099-01-01T00:00:00.000Z", expectedVersions: { "person-1": 1 },
+        changes: [{ id: "change-1", disposition: "update", entityType: "person", entityId: "person-1", summary: "更新人物资料", fieldChanges: [] }],
+        issues: [], canConfirm: true
+      }
+    }),
+    confirm: vi.fn(),
+    revise: vi.fn()
   };
 }
 
@@ -113,6 +129,19 @@ describe("PersonEditor", () => {
 
     await waitFor(() => expect(api.get).toHaveBeenCalledWith({ personId: "person-1" }));
     expect(onSaved).toHaveBeenCalledWith(savedDetail);
+  });
+
+  it("stages Web edits for review before calling the legacy person gateway", async () => {
+    const api = createPeopleApi();
+    const mutations = createMutationApi();
+    render(<PersonEditor api={api} mutations={mutations} personId="person-1" expectedVersion={1} initialValue={existingDraft} />);
+
+    fireEvent.change(screen.getByLabelText("备注"), { target: { value: "待确认的新备注" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({ type: "person.update", personId: "person-1", expectedVersion: 1 })] });
+    expect(api.update).not.toHaveBeenCalled();
   });
 
   it("marks primary and secondary copy with the established readable color roles", () => {

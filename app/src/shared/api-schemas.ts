@@ -51,6 +51,20 @@ const lineagePatch = z.object({ name: z.string().trim().min(1).max(200).optional
   .refine((value) => Object.keys(value).length > 0, { message: "Patch cannot be empty" });
 const membershipPatch = z.object({ lineageRole: lineageRole.optional(), isPrimary: z.boolean().optional(), declaredGeneration: declaredGeneration.optional(), generationMarker: generationMarker.optional() }).strict()
   .refine((value) => Object.keys(value).length > 0, { message: "Patch cannot be empty" });
+const mutationIntent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("person.create"), draft: personDraft }).strict(),
+  z.object({ type: z.literal("person.update"), personId: id, expectedVersion, patch: personPatch }).strict(),
+  z.object({ type: z.literal("parentChild.add"), draft: z.object({ parentId: id, childId: id, parentRole: z.enum(["father", "mother"]), sourceDescription }).strict() }).strict(),
+  z.object({ type: z.literal("marriage.add"), draft: z.object({ spouseAId: id, spouseBId: id, start: nullableDate, sourceDescription }).strict() }).strict(),
+  z.object({ type: z.literal("marriage.divorce"), marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
+  z.object({ type: z.literal("person.childrenCompleteness.set"), personId: id, complete: z.boolean(), sourceDescription, expectedVersion }).strict(),
+  z.object({ type: z.literal("lineage.create"), name: z.string().trim().min(1).max(200), founderPersonId: id, description: nullableText(10_000) }).strict(),
+  z.object({ type: z.literal("lineage.update"), lineageId: id, expectedVersion, patch: lineagePatch }).strict(),
+  z.object({ type: z.literal("lineage.archive"), lineageId: id, expectedVersion }).strict(),
+  z.object({ type: z.literal("lineageMembership.add"), lineageId: id, personId: id, lineageRole, isPrimary: z.boolean(), declaredGeneration, generationMarker }).strict(),
+  z.object({ type: z.literal("lineageMembership.update"), membershipId: id, expectedVersion, patch: membershipPatch }).strict(),
+  z.object({ type: z.literal("lineageMembership.remove"), membershipId: id, expectedVersion }).strict()
+]);
 
 const mergeDecision = z.object({
   primaryPersonId: id,
@@ -142,6 +156,11 @@ export const RPC_INPUT_SCHEMAS = {
     ask: askRequestSchema,
     confirm: confirmDraftRequestSchema,
     revise: reviseDraftRequestSchema
+  },
+  mutations: {
+    stage: z.object({ intents: z.array(mutationIntent).min(1).max(100) }).strict(),
+    confirm: z.object({ draftId: uuid, draftVersion: z.number().int().min(1), selectedChangeIds: z.array(uuid).min(1).max(100), acknowledgedWarningCodes: z.array(z.string().trim().min(1).max(200)).max(100) }).strict(),
+    revise: z.object({ draftId: uuid, intents: z.array(mutationIntent).min(1).max(100) }).strict()
   },
   modelSettings: {
     status: noInputSchema,

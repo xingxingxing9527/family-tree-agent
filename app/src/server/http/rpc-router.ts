@@ -69,6 +69,11 @@ function allowlist(service: FamilyAgentApi): RpcAllowlist {
       confirm: entry(RPC_INPUT_SCHEMAS.chat.confirm, (input) => service.chat.confirm(input)),
       revise: entry(RPC_INPUT_SCHEMAS.chat.revise, (input) => service.chat.revise(input))
     },
+    mutations: {
+      stage: entry(RPC_INPUT_SCHEMAS.mutations.stage, (input) => service.mutations.stage(input)),
+      confirm: entry(RPC_INPUT_SCHEMAS.mutations.confirm, (input) => service.mutations.confirm(input)),
+      revise: entry(RPC_INPUT_SCHEMAS.mutations.revise, (input) => service.mutations.revise(input))
+    },
     modelSettings: {
       status: entry(RPC_INPUT_SCHEMAS.modelSettings.status, () => service.modelSettings.status())
     },

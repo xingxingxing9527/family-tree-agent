@@ -1,19 +1,43 @@
-import React, { type JSX } from "react";
-import type { FamilyAgentApi, PersonDetailReadModel } from "../../../../shared/contracts";
+import React, { useCallback, useEffect, useState, type JSX } from "react";
+import type { ChildrenCountStatusDto, FamilyAgentApi, PersonDetailReadModel } from "../../../../shared/contracts";
+import type { MutationApi } from "../../../../shared/mutations";
 import { MarriageHistory } from "../relations/MarriageHistory";
+import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
+import { useStagedMutation } from "../mutations/useStagedMutation";
 import { formatPartialDate } from "./format-partial-date";
 import { MediaGallery } from "./MediaGallery";
 
 interface PersonDetailProps {
   detail: PersonDetailReadModel;
+  peopleApi: FamilyAgentApi["people"];
   relationsApi: FamilyAgentApi["relations"];
+  mutations?: MutationApi;
   mediaApi: FamilyAgentApi["media"];
   onEdit(): void;
   onChanged(): Promise<void>;
 }
 
-export function PersonDetail({ detail, relationsApi, mediaApi, onEdit, onChanged }: PersonDetailProps): JSX.Element {
+export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged }: PersonDetailProps): JSX.Element {
   const gender = detail.person.gender === "male" ? "男" : detail.person.gender === "female" ? "女" : "未知";
+  const [childrenStatus, setChildrenStatus] = useState<ChildrenCountStatusDto | null>(null);
+  useEffect(() => {
+    if (typeof peopleApi.getChildrenCountStatus !== "function") return undefined;
+    let current = true;
+    void peopleApi.getChildrenCountStatus({ personId: detail.person.id }).then((result) => { if (current && result.ok) setChildrenStatus(result.value); });
+    return () => { current = false; };
+  }, [detail.person.id, detail.person.rowVersion, peopleApi]);
+  const completenessCommitted = useCallback(async (): Promise<void> => { await onChanged(); }, [onChanged]);
+  const staged = useStagedMutation(mutations, completenessCommitted);
+  const changeCompleteness = (): void => {
+    if (!childrenStatus || !mutations) return;
+    void staged.stage([{
+      type: "person.childrenCompleteness.set",
+      personId: detail.person.id,
+      complete: childrenStatus.completeness !== "complete",
+      sourceDescription: "管理员核对",
+      expectedVersion: detail.person.rowVersion
+    }]);
+  };
   return (
     <section className="detail-card" aria-labelledby="person-detail-title">
       <div className="section-heading-row">
@@ -24,6 +48,7 @@ export function PersonDetail({ detail, relationsApi, mediaApi, onEdit, onChanged
         <button className="button secondary-button" type="button" onClick={onEdit}>编辑人物</button>
       </div>
       <dl className="detail-grid">
+        <div><dt>人物编号</dt><dd>{detail.person.personCode}</dd></div>
         <div><dt>别名</dt><dd>{detail.aliases.join("、") || "未记录"}</dd></div>
         <div><dt>性别</dt><dd>{gender}</dd></div>
         <div><dt>出生</dt><dd>{formatPartialDate(detail.person.birth)}</dd></div>
@@ -46,10 +71,14 @@ export function PersonDetail({ detail, relationsApi, mediaApi, onEdit, onChanged
         <section>
           <h3>子女</h3>
           <p>{detail.children.map((entry) => entry.person.displayName).join("、") || "未记录"}</p>
+          {childrenStatus && <p>{childrenStatus.completeness === "complete" ? "已确认完整" : "可能仍待补充"} · 已记录 {childrenStatus.count} 人</p>}
+          {childrenStatus && mutations && <button type="button" className="button secondary-button" disabled={staged.busy} onClick={changeCompleteness}>{childrenStatus.completeness === "complete" ? "改为仍待补充" : "确认子女资料完整"}</button>}
         </section>
       </div>
-      <MarriageHistory marriages={detail.marriages} api={relationsApi} onChanged={onChanged} />
+      {staged.error && <div className="error-banner" role="alert">{staged.error}</div>}
+      <MarriageHistory marriages={detail.marriages} api={relationsApi} mutations={mutations} onChanged={onChanged} />
       <MediaGallery personId={detail.person.id} media={mediaApi} />
+      {staged.preview && <MutationReviewDialog preview={staged.preview} busy={staged.busy} onCancel={staged.cancel} onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)} />}
     </section>
   );
 }

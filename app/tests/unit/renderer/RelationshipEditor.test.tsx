@@ -4,6 +4,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FamilyAgentApi, PersonListItem } from "../../../src/shared/contracts";
+import type { MutationApi } from "../../../src/shared/mutations";
 import { RelationshipEditor } from "../../../src/renderer/src/features/relations/RelationshipEditor";
 import { MarriageHistory } from "../../../src/renderer/src/features/relations/MarriageHistory";
 
@@ -33,7 +34,33 @@ function createApis(): { peopleApi: FamilyAgentApi["people"]; relationsApi: Fami
   };
 }
 
+function createMutationApi(): MutationApi {
+  return {
+    stage: vi.fn().mockImplementation(async ({ intents }) => ({ ok: true, value: {
+      id: "draft-1", workspaceId: "workspace-1", version: 1, expiresAt: "2099-01-01T00:00:00.000Z", expectedVersions: {},
+      changes: [{ id: "change-1", disposition: intents[0].type.includes("divorce") ? "update" : "create", entityType: intents[0].type, entityId: "entity-1", summary: "待确认关系", fieldChanges: [] }],
+      issues: [], canConfirm: true
+    } })),
+    confirm: vi.fn(),
+    revise: vi.fn()
+  };
+}
+
 describe("RelationshipEditor", () => {
+  it("stages Web parent-child entry before the legacy relationship gateway", async () => {
+    const { peopleApi, relationsApi } = createApis();
+    const mutations = createMutationApi();
+    render(<RelationshipEditor people={people} peopleApi={peopleApi} relationsApi={relationsApi} mutations={mutations} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("父母人物"), { target: { value: "parent-1" } });
+    fireEvent.change(screen.getByLabelText("子女人物"), { target: { value: "child-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存亲子关系" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({ type: "parentChild.add", draft: expect.objectContaining({ parentId: "parent-1", childId: "child-1" }) })] });
+    expect(relationsApi.addParentChild).not.toHaveBeenCalled();
+  });
+
   it("discards a warning preview when visible draft fields change instead of confirming the old hidden draft", async () => {
     const { peopleApi, relationsApi } = createApis();
     render(<RelationshipEditor people={people} peopleApi={peopleApi} relationsApi={relationsApi} onSaved={vi.fn()} />);
@@ -80,5 +107,18 @@ describe("RelationshipEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "登记离婚" }));
     fireEvent.click(screen.getByRole("button", { name: "确认离婚" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("无法登记离婚");
+  });
+
+  it("stages a Web divorce before the legacy relationship gateway", async () => {
+    const { relationsApi } = createApis();
+    const mutations = createMutationApi();
+    render(<MarriageHistory marriages={[{ id: "marriage-1", spouse: people[1]!, status: "active", start: null, end: null, rowVersion: 3 }]} api={relationsApi} mutations={mutations} onChanged={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "登记离婚" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认离婚" }));
+
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [{ type: "marriage.divorce", marriageId: "marriage-1", endDate: null, expectedVersion: 3 }] });
+    expect(relationsApi.divorce).not.toHaveBeenCalled();
   });
 });

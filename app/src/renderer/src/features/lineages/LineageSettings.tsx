@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState, type FormEvent, type JSX } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type JSX } from "react";
 import type { AppResult, FactMutationReceipt, LineageApi, PersonListItem, WorkspaceLineageMembershipReadModel, WorkspaceLineageReadModel } from "../../../../shared/contracts";
+import type { MutationApi, MutationIntent, MutationReceipt } from "../../../../shared/mutations";
 import type { PreparedMutationRefresh } from "../../app/WorkspaceContext";
+import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
+import { useStagedMutation } from "../mutations/useStagedMutation";
 
 type MembershipForm = {
   lineageRole: "blood" | "married_in" | "associated";
@@ -26,10 +29,11 @@ const generationLabel = (membership: WorkspaceLineageMembershipReadModel): strin
   return value.displayed === null ? "世代：未确定" : `世代：第${value.displayed}代（${value.source === "declared" ? "声明" : "计算"}）`;
 };
 
-export function LineageSettings({ lineages, people, api, prepareMutation, onChanged }: {
+export function LineageSettings({ lineages, people, api, mutations, prepareMutation, onChanged }: {
   lineages: WorkspaceLineageReadModel[];
   people: PersonListItem[];
   api: LineageApi;
+  mutations?: MutationApi;
   prepareMutation?(): PreparedMutationRefresh;
   onChanged?(): void;
 }): JSX.Element {
@@ -47,6 +51,20 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
   const [pendingDestructive, setPendingDestructive] = useState<PendingDestructiveAction | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const stagedMessage = useRef("");
+  const stagedAfter = useRef<(() => void) | null>(null);
+  const stagedRefresh = useRef<PreparedMutationRefresh | null>(null);
+
+  const mutationCommitted = useCallback(async (_receipt: MutationReceipt): Promise<void> => {
+    if (stagedRefresh.current) await stagedRefresh.current.complete();
+    stagedAfter.current?.();
+    onChanged?.();
+    setMessage(stagedMessage.current);
+    stagedMessage.current = "";
+    stagedAfter.current = null;
+    stagedRefresh.current = null;
+  }, [onChanged]);
+  const staged = useStagedMutation(mutations, mutationCommitted);
 
   useEffect(() => {
     if (!people.some((person) => person.id === founderPersonId)) setFounderPersonId(people[0]?.id ?? "");
@@ -74,14 +92,57 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
     } finally { setPending(false); }
   };
 
+  const stageIntent = async (intent: MutationIntent, successMessage: string, after?: () => void): Promise<boolean> => {
+    if (!mutations || staged.busy) return false;
+    setMessage(null);
+    stagedMessage.current = successMessage;
+    stagedAfter.current = after ?? null;
+    stagedRefresh.current = prepareMutation?.() ?? null;
+    const didStage = await staged.stage([intent]);
+    if (!didStage) {
+      stagedMessage.current = "";
+      stagedAfter.current = null;
+      stagedRefresh.current = null;
+    }
+    return didStage;
+  };
+
+  const cancelStaged = (): void => {
+    staged.cancel();
+    stagedMessage.current = "";
+    stagedAfter.current = null;
+    stagedRefresh.current = null;
+  };
+
   const createLineage = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    if (mutations) {
+      await stageIntent(
+        { type: "lineage.create", name: lineageName, founderPersonId, description: description.trim() || null },
+        "支系已创建",
+        () => { setLineageName(""); setDescription(""); }
+      );
+      return;
+    }
     const saved = await mutate(() => api.createLineage({ name: lineageName, founderPersonId, description: description.trim() || null }), "支系已创建");
     if (saved) { setLineageName(""); setDescription(""); }
   };
 
   const addMembership = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    const intent: MutationIntent = {
+      type: "lineageMembership.add",
+      lineageId: selectedLineageId,
+      personId: memberPersonId,
+      lineageRole: newMembership.lineageRole,
+      isPrimary: newMembership.isPrimary,
+      declaredGeneration: newMembership.declaredGeneration ? Number(newMembership.declaredGeneration) : null,
+      generationMarker: newMembership.generationMarker.trim() || null
+    };
+    if (mutations) {
+      await stageIntent(intent, "人物归属已添加", () => setNewMembership(emptyMembership()));
+      return;
+    }
     const saved = await mutate(() => api.addMembership({
       lineageId: selectedLineageId,
       personId: memberPersonId,
@@ -99,6 +160,15 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
   };
 
   const saveLineage = async (lineage: WorkspaceLineageReadModel): Promise<void> => {
+    if (mutations) {
+      await stageIntent({
+        type: "lineage.update",
+        lineageId: lineage.id,
+        expectedVersion: lineage.rowVersion,
+        patch: { name: lineageEdit.name, founderPersonId: lineageEdit.founderPersonId, description: lineageEdit.description.trim() || null }
+      }, "支系已更新", () => setEditingLineageId(null));
+      return;
+    }
     if (await mutate(() => api.updateLineage({
       lineageId: lineage.id,
       expectedVersion: lineage.rowVersion,
@@ -112,6 +182,20 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
   };
 
   const saveMembership = async (membership: WorkspaceLineageMembershipReadModel): Promise<void> => {
+    if (mutations) {
+      await stageIntent({
+        type: "lineageMembership.update",
+        membershipId: membership.id,
+        expectedVersion: membership.rowVersion,
+        patch: {
+          lineageRole: membershipEdit.lineageRole,
+          isPrimary: membershipEdit.isPrimary,
+          declaredGeneration: membershipEdit.declaredGeneration ? Number(membershipEdit.declaredGeneration) : null,
+          generationMarker: membershipEdit.generationMarker.trim() || null
+        }
+      }, "人物归属已更新", () => setEditingMembershipId(null));
+      return;
+    }
     if (await mutate(() => api.updateMembership({
       membershipId: membership.id,
       expectedVersion: membership.rowVersion,
@@ -126,6 +210,14 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
 
   const confirmDestructive = async (): Promise<void> => {
     if (!pendingDestructive) return;
+    if (mutations) {
+      const action = pendingDestructive;
+      const didStage = action.kind === "archive-lineage"
+        ? await stageIntent({ type: "lineage.archive", lineageId: action.lineage.id, expectedVersion: action.lineage.rowVersion }, "支系已归档")
+        : await stageIntent({ type: "lineageMembership.remove", membershipId: action.membership.id, expectedVersion: action.membership.rowVersion }, "人物归属已移除");
+      if (didStage) setPendingDestructive(null);
+      return;
+    }
     const saved = pendingDestructive.kind === "archive-lineage"
       ? await mutate(() => api.archiveLineage({ lineageId: pendingDestructive.lineage.id, expectedVersion: pendingDestructive.lineage.rowVersion }), "支系已归档")
       : await mutate(() => api.removeMembership({ membershipId: pendingDestructive.membership.id, expectedVersion: pendingDestructive.membership.rowVersion }), "人物归属已移除");
@@ -140,12 +232,13 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
       <article><h3>支系始祖</h3><p>每个支系独立计算世代；声明世代和字辈都属于这条支系归属。</p></article>
     </div>
     {message && <p role="status" className="status-copy">{message}</p>}
+    {staged.error && <p role="alert" className="error-banner">{staged.error}</p>}
     <form className="lineage-form" onSubmit={(event) => void createLineage(event)}>
       <h3>创建支系</h3>
       <label>支系名称<input value={lineageName} maxLength={200} required onChange={(event) => setLineageName(event.target.value)} /></label>
       <label>支系始祖<select value={founderPersonId} required onChange={(event) => setFounderPersonId(event.target.value)}><option value="">请选择人物</option>{people.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label>
       <label>支系说明<textarea value={description} maxLength={10_000} onChange={(event) => setDescription(event.target.value)} /></label>
-      <button className="button secondary-button" type="submit" disabled={pending || !lineageName.trim() || !founderPersonId}>创建支系</button>
+      <button className="button secondary-button" type="submit" disabled={pending || staged.busy || !lineageName.trim() || !founderPersonId}>创建支系</button>
       {people.length === 0 && <p className="empty-copy">请先在人物库创建始祖人物。</p>}
     </form>
 
@@ -196,5 +289,6 @@ export function LineageSettings({ lineages, people, api, prepareMutation, onChan
       <p>{pendingDestructive.kind === "archive-lineage" ? "归档后该支系会从当前活动视图隐藏。" : "移除后该人物不再属于此支系。"}</p>
       <div className="button-row"><button className="button danger-button" type="button" disabled={pending} onClick={() => void confirmDestructive()}>{pendingDestructive.kind === "archive-lineage" ? "确认归档支系" : "确认移除归属"}</button><button className="button secondary-button" type="button" disabled={pending} onClick={() => setPendingDestructive(null)}>取消</button></div>
     </section></div>}
+    {staged.preview && <MutationReviewDialog preview={staged.preview} busy={staged.busy} onCancel={cancelStaged} onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)} />}
   </section>;
 }

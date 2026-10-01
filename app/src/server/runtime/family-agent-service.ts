@@ -8,7 +8,7 @@ import { ImportCommitter } from "../../main/application/import/import-committer.
 import { ImportPlanAccessError, ImportPlanner, ImportPlanStore } from "../../main/application/import/import-planner.js";
 import { exportImportTemplate, parseImport } from "../../main/application/import/workbook-parser.js";
 import { applyMigrations } from "../../main/database/migrations/index.js";
-import { openDatabase } from "../../main/database/open-database.js";
+import { openDatabase, type WorkspaceDatabase } from "../../main/database/open-database.js";
 import { WorkspaceChatGateway } from "../../main/ipc/chat-ipc.js";
 import { WorkspaceLineageGateway } from "../../main/ipc/lineage-ipc.js";
 import { WorkspaceMergeGateway } from "../../main/ipc/merge-ipc.js";
@@ -17,6 +17,7 @@ import { WorkspaceWikiGateway } from "../../main/ipc/wiki-ipc.js";
 import { OpenAIResponsesAdapter } from "../../main/llm/openai-responses-adapter.js";
 import type { ModelAdapter } from "../../main/llm/model-adapter.js";
 import { ManagedMediaService, openSelectedMediaFile } from "../../main/media/media-service.js";
+import { MutationValidationError, StagedMutationService } from "../../main/application/mutations/staged-mutation-service.js";
 import type { DownloadStore } from "../http/download-store.js";
 import type { UploadStore } from "../http/upload-store.js";
 import { BrowserRestoreManager } from "./browser-restore-manager.js";
@@ -26,7 +27,7 @@ const unavailable = <T>(message = "Browser file transfer is not available yet"):
   ok: false,
   error: { code: "PATH_DENIED", message }
 });
-const failure = <T>(code: "NOT_FOUND" | "CONFLICT" | "INTERNAL", message: string): AppResult<T> => ({ ok: false, error: { code, message } });
+const failure = <T>(code: "VALIDATION" | "NOT_FOUND" | "CONFLICT" | "INTERNAL", message: string): AppResult<T> => ({ ok: false, error: { code, message } });
 
 class MemoryModelKeyStore {
   constructor(private key: string | null) {}
@@ -54,6 +55,7 @@ export class FamilyAgentService implements FamilyAgentApi {
   readonly media: FamilyAgentApi["media"];
   readonly wiki: FamilyAgentApi["wiki"];
   readonly query: FamilyAgentApi["query"];
+  readonly mutations: FamilyAgentApi["mutations"];
   readonly chat: FamilyAgentApi["chat"];
   readonly modelSettings: FamilyAgentApi["modelSettings"];
   readonly dataManagement: FamilyAgentApi["dataManagement"];
@@ -61,6 +63,7 @@ export class FamilyAgentService implements FamilyAgentApi {
   private readonly chatGateway: WorkspaceChatGateway;
   private readonly importPlans = new ImportPlanStore();
   private readonly restoreManager: BrowserRestoreManager | null;
+  private mutationSession: { contextId: string; database: WorkspaceDatabase; service: StagedMutationService } | null = null;
   private disposed = false;
 
   constructor(private readonly runtime: FamilyRuntime, options: Omit<FamilyAgentServiceOptions, "runtime"> = {}) {
@@ -72,7 +75,7 @@ export class FamilyAgentService implements FamilyAgentApi {
     const keys = new MemoryModelKeyStore(options.initialModelKey ?? process.env.FAMILY_AGENT_OPENAI_API_KEY?.trim() ?? null);
     const modelFactory = options.modelFactory ?? ((apiKey: string) => new OpenAIResponsesAdapter({ apiKey, model: process.env.FAMILY_AGENT_MODEL?.trim() || "gpt-4o-mini" }));
     this.chatGateway = new WorkspaceChatGateway(runtime.workspaceManager, keys, modelFactory);
-    this.restoreManager = options.uploads ? new BrowserRestoreManager(runtime, options.uploads) : null;
+    this.restoreManager = options.uploads ? new BrowserRestoreManager(runtime, options.uploads, () => this.disposeMutationSession()) : null;
     const gated = <T>(operation: () => Promise<T>): Promise<T> => runtime.mutationGate.runOperation(operation);
 
     this.app = { getVersion: async () => "1.0.0" };
@@ -140,6 +143,11 @@ export class FamilyAgentService implements FamilyAgentApi {
       summarizeLineage: (input) => gated(() => query.summarizeLineage(input)),
       searchWiki: (input) => gated(() => query.searchWiki(input))
     };
+    this.mutations = {
+      stage: (input) => gated(() => this.withStagedMutation((service) => service.stage(input))),
+      confirm: (input) => gated(() => this.confirmStagedMutation(input)),
+      revise: (input) => gated(() => this.withStagedMutation((service) => service.revise(input)))
+    };
     this.chat = {
       authorize: (input) => gated(() => this.chatGateway.authorize(input)),
       stageMutation: (input) => gated(() => this.chatGateway.stageMutation(input)),
@@ -169,6 +177,7 @@ export class FamilyAgentService implements FamilyAgentApi {
     this.disposed = true;
     this.chatGateway.dispose();
     await this.restoreManager?.dispose();
+    this.disposeMutationSession();
   }
 
   private async listAudit(): ReturnType<FamilyAgentApi["dataManagement"]["listAudit"]> {
@@ -183,6 +192,39 @@ export class FamilyAgentService implements FamilyAgentApi {
   private contextId(): string | null {
     const context = this.runtime.workspaceManager.getOpenWorkspaceContext();
     return context ? `${context.workspaceId}\u0000${context.openContextId}` : null;
+  }
+
+  private async withStagedMutation<T>(operation: (service: StagedMutationService) => T): Promise<AppResult<T>> {
+    const context = this.runtime.workspaceManager.getOpenWorkspaceContext();
+    const contextId = this.contextId();
+    if (!context || !contextId) return failure("NOT_FOUND", "No workspace is open");
+    if (this.mutationSession?.contextId !== contextId) {
+      this.disposeMutationSession();
+      const database = openDatabase(context.databasePath);
+      applyMigrations(database);
+      this.mutationSession = { contextId, database, service: new StagedMutationService(database, context.workspaceId) };
+    }
+    try { return { ok: true, value: operation(this.mutationSession.service) }; }
+    catch (error) {
+      if (error instanceof MutationValidationError) {
+        const code = error.code === "NOT_FOUND" ? "NOT_FOUND" : error.code === "VALIDATION" ? "VALIDATION" : "CONFLICT";
+        return failure(code, error.message);
+      }
+      return failure("INTERNAL", "Unable to complete mutation request");
+    }
+  }
+
+  private async confirmStagedMutation(input: Parameters<FamilyAgentApi["mutations"]["confirm"]>[0]): ReturnType<FamilyAgentApi["mutations"]["confirm"]> {
+    const result = await this.withStagedMutation((service) => service.confirm(input));
+    if (!result.ok) return result;
+    try { await this.runtime.workspaceManager.synchronizeOriginPerson(); }
+    catch { return failure("INTERNAL", "Mutation was committed but the family origin could not be refreshed"); }
+    return result;
+  }
+
+  private disposeMutationSession(): void {
+    this.mutationSession?.database.close();
+    this.mutationSession = null;
   }
 
   private async parseUploadedImport(input: Parameters<FamilyAgentApi["imports"]["parse"]>[0], uploads?: UploadStore): ReturnType<FamilyAgentApi["imports"]["parse"]> {

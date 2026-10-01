@@ -114,11 +114,12 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           ))}
         </aside>
         <div className="people-content">
-          {creating && <PersonEditor api={api.people} onSaved={(detail) => void personSaved(detail)} onCancel={() => setCreating(false)} />}
+          {creating && <PersonEditor api={api.people} mutations={api.mutations} onSaved={(detail) => void personSaved(detail)} onCancel={() => setCreating(false)} />}
           {editing && selected && (
             <PersonEditor
               key={`${selected.person.id}:${selected.person.rowVersion}`}
               api={api.people}
+              mutations={api.mutations}
               personId={selected.person.id}
               expectedVersion={selected.person.rowVersion}
               initialValue={draftFromDetail(selected)}
@@ -127,10 +128,10 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
             />
           )}
           {!creating && !editing && selected && (
-            <><PersonDetail detail={selected} relationsApi={api.relations} mediaApi={api.media} onEdit={() => setEditing(true)} onChanged={relationsChanged} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
+            <><PersonDetail detail={selected} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} mediaApi={api.media} onEdit={() => setEditing(true)} onChanged={relationsChanged} /><MergePanel personId={selected.person.id} api={api.merges} onMerged={() => void relationsChanged()} /></>
           )}
           {!creating && !editing && !selected && <section className="empty-state"><h2>选择人物</h2><p className="text-secondary">从左侧人物库打开详情，或新增第一位家庭成员。</p></section>}
-          {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} onSaved={relationsChanged} />}
+          {people.length >= 2 && <RelationshipEditor people={people} peopleApi={api.people} relationsApi={api.relations} mutations={api.mutations} onSaved={relationsChanged} />}
           <MergeHistory api={api.merges} prepareMutation={prepareMutation} />
         </div>
       </div>

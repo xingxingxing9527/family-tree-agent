@@ -109,6 +109,24 @@ describe("typed family RPC API", () => {
     expect(complete.body).toEqual({ ok: true, value: { count: 0, completeness: "complete" } });
   });
 
+  it("stages and atomically confirms browser mutations while synchronizing the family origin", async () => {
+    const staged = await rpc("mutations", "stage", { intents: [{ type: "person.create", draft: personDraft("王建国") }] });
+    expect(staged.response.statusCode).toBe(200);
+    expect(staged.body).toMatchObject({ ok: true, value: { version: 1, changes: [{ disposition: "create" }] } });
+
+    const preview = staged.body.value;
+    const confirmed = await rpc("mutations", "confirm", {
+      draftId: preview.id,
+      draftVersion: preview.version,
+      selectedChangeIds: [preview.changes[0].id],
+      acknowledgedWarningCodes: []
+    });
+    expect(confirmed.body).toMatchObject({ ok: true, value: { operationGroupId: expect.any(String), changedEntityIds: [expect.any(String)] } });
+
+    const families = await runtime.listFamilies();
+    expect(families).toMatchObject({ ok: true, value: [{ originPersonId: confirmed.body.value.changedEntityIds[0] }] });
+  });
+
   it("does not serialize filesystem paths", async () => {
     const snapshot = await rpc("query", "workspaceSnapshot", null);
     expect(snapshot.response.statusCode).toBe(200);

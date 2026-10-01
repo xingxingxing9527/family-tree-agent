@@ -1,23 +1,35 @@
-import React, { useState, type JSX } from "react";
+import React, { useCallback, useState, type JSX } from "react";
 import type { FamilyAgentApi, MarriageReadModel } from "../../../../shared/contracts";
+import type { MutationApi } from "../../../../shared/mutations";
 import type { PartialDate } from "../../../../shared/domain";
+import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
+import { useStagedMutation } from "../mutations/useStagedMutation";
 import { PartialDateField } from "../people/PartialDateField";
 import { formatPartialDate } from "../people/format-partial-date";
 
 interface MarriageHistoryProps {
   marriages: MarriageReadModel[];
   api: FamilyAgentApi["relations"];
+  mutations?: MutationApi;
   onChanged(): Promise<void>;
 }
 
-export function MarriageHistory({ marriages, api, onChanged }: MarriageHistoryProps): JSX.Element {
+export function MarriageHistory({ marriages, api, mutations, onChanged }: MarriageHistoryProps): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<PartialDate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mutationCommitted = useCallback(async (): Promise<void> => {
+    setEditingId(null); setEndDate(null); await onChanged();
+  }, [onChanged]);
+  const staged = useStagedMutation(mutations, mutationCommitted);
 
   const divorce = async (marriage: MarriageReadModel): Promise<void> => {
     if (busy) return;
+    if (mutations) {
+      await staged.stage([{ type: "marriage.divorce", marriageId: marriage.id, endDate, expectedVersion: marriage.rowVersion }]);
+      return;
+    }
     setError(null); setBusy(true);
     try {
       const result = await api.divorce({ marriageId: marriage.id, endDate, expectedVersion: marriage.rowVersion });
@@ -36,6 +48,7 @@ export function MarriageHistory({ marriages, api, onChanged }: MarriageHistoryPr
     <section className="marriage-history" aria-labelledby="marriage-history-title">
       <h3 id="marriage-history-title">婚姻历史</h3>
       {error && <div className="error-banner" role="alert">{error}</div>}
+      {staged.error && <div className="error-banner" role="alert">{staged.error}</div>}
       {marriages.length === 0 && <p className="text-secondary">暂无婚姻记录。</p>}
       {marriages.map((marriage) => (
         <article className="marriage-record" key={marriage.id}>
@@ -61,6 +74,7 @@ export function MarriageHistory({ marriages, api, onChanged }: MarriageHistoryPr
           )}
         </article>
       ))}
+      {staged.preview && <MutationReviewDialog preview={staged.preview} busy={staged.busy} onCancel={staged.cancel} onConfirm={(ids, warnings) => void staged.confirm(ids, warnings)} />}
     </section>
   );
 }
