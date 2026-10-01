@@ -1,5 +1,11 @@
 import { z } from "zod";
-import type { PersonCandidate, RelationshipResultDto } from "./contracts.js";
+import type {
+  ParentCompletionBasisDto,
+  ParentCompletionCandidateDto,
+  ParentCompletionStatusDto,
+  PersonCandidate,
+  RelationshipResultDto
+} from "./contracts.js";
 
 const boundedId = z.string().trim().min(1).max(200);
 const boundedText = z.string().max(4_000);
@@ -95,6 +101,16 @@ export interface ConversationDraftChangeDto {
   entityId: string;
   summary: string;
   dependsOnChangeIds: string[];
+  originKind?: "explicit" | "spouse_default";
+  selectedByDefault?: boolean;
+  selectionGroupId?: string;
+  parentCompletion?: {
+    status: ParentCompletionStatusDto;
+    basis: ParentCompletionBasisDto;
+    reason: string;
+    candidatePersonId?: string;
+    candidates: ParentCompletionCandidateDto[];
+  };
   fieldChanges: Array<{ field: string; before: unknown; after: unknown }>;
 }
 

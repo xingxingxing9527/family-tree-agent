@@ -10,6 +10,7 @@ import { applyMigrations } from "../../../src/main/database/migrations";
 import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database/open-database";
 import type { ConversationMutationDraft } from "../../../src/shared/chat";
 import { WorkspaceMutationGate } from "../../../src/main/workspaces/workspace-mutation-gate";
+import { FactCommandService } from "../../../src/main/application/facts/fact-command-service";
 
 const workspaceId = "workspace-controlled-chat";
 const emptyDraft: ConversationMutationDraft = {
@@ -106,6 +107,57 @@ describe("controlled conversational model boundary", () => {
     await expect(gateway.stageMutation({ sessionId: "session-1", authorizationToken: second.value.authorizationToken, payload }))
       .resolves.toMatchObject({ ok: false, error: { code: "PATH_DENIED" } });
     expect(model.extractDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps server-planned parent completion metadata across the controlled chat boundary", async () => {
+    const facts = new FactCommandService(database, workspaceId);
+    for (const [id, displayName, gender] of [["father", "父亲", "male"], ["mother", "母亲", "female"]] as const) {
+      facts.execute({
+        type: "person.create",
+        draft: { id, workspaceId, displayName, gender },
+        source: { sourceKey: id, title: id, kind: "test" }
+      });
+    }
+    facts.execute({
+      type: "marriage.add",
+      draft: { id: "parents-marriage", workspaceId, spouseAId: "father", spouseBId: "mother", start: null },
+      source: { sourceKey: "parents-marriage", title: "parents-marriage", kind: "test" }
+    });
+    const extracted: ConversationMutationDraft = {
+      candidatePeople: [
+        { referenceId: "father", statedFields: [], displayName: "父亲", aliases: [], gender: "male", birth: null, death: null, notes: null, matchedPersonId: "father" },
+        { referenceId: "child", statedFields: ["displayName", "aliases", "gender", "birth", "death", "notes"], displayName: "孩子", aliases: [], gender: "unknown", birth: null, death: null, notes: null, matchedPersonId: null }
+      ],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 0.99 }],
+      marriages: [], sources: [], fieldConfidence: [], unresolvedReferences: []
+    };
+    const model = { extractDraft: vi.fn().mockResolvedValue(extracted), continueWithTools: vi.fn() };
+    const gateway = new ControlledChatGateway(
+      () => ({ workspaceId }), new DisclosureCapabilityService(), new DraftService(database, workspaceId, model),
+      new ConversationService(model, new QueryToolRegistry(database, workspaceId))
+    );
+    const payload = { text: "父亲和母亲的孩子", candidatePeople: [] };
+    const authorized = await gateway.authorize({ sessionId: "session-parent", operation: "extract", payload });
+    expect(authorized.ok).toBe(true);
+    if (!authorized.ok) return;
+
+    const staged = await gateway.stageMutation({
+      sessionId: "session-parent",
+      authorizationToken: authorized.value.authorizationToken,
+      payload
+    });
+
+    expect(staged.ok).toBe(true);
+    if (!staged.ok) return;
+    expect(staged.value.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entityType: "parentChild", originKind: "explicit", selectedByDefault: true }),
+      expect.objectContaining({
+        entityType: "parentChild",
+        originKind: "spouse_default",
+        selectedByDefault: true,
+        parentCompletion: expect.objectContaining({ basis: "unique_spouse" })
+      })
+    ]));
   });
 
   it("does not read the encrypted key or construct a provider client before live IPC authorization", async () => {

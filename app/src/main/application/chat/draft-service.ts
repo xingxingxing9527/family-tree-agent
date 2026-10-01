@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { conversationMutationDraftSchema, type ConversationConfirmationReceipt, type ConversationDraftChangeDto, type ConversationDraftPreview, type ConversationMutationDraft } from "../../../shared/chat.js";
-import type { PersonCandidate } from "../../../shared/contracts.js";
+import type { ParentCompletionPlanDto, PersonCandidate } from "../../../shared/contracts.js";
 import type { WorkspaceDatabase } from "../../database/open-database.js";
+import type { PersonRecord } from "../../database/repositories/person-repository.js";
 import { createUnitOfWork, type TransactionContext } from "../../database/unit-of-work.js";
 import { FactCommandError, FactCommandService } from "../facts/fact-command-service.js";
 import type { FactCommand } from "../facts/fact-commands.js";
@@ -9,6 +10,11 @@ import { FactQueries } from "../facts/fact-queries.js";
 import type { ModelAdapter } from "../../llm/model-adapter.js";
 import { validateMarriageFact, validateParentChildFact } from "../../domain/validation/fact-validator.js";
 import { validatePartialDate, type DomainIssue } from "../../domain/validation/partial-date-validator.js";
+import {
+  ParentCompletionService,
+  type ParentCompletionPlanningResult,
+  type ParentCompletionRequest
+} from "../relations/parent-completion-service.js";
 import { selectRelevantCandidates } from "./context-minimizer.js";
 
 type DraftStatus = "active" | "superseded" | "confirmed" | "invalidated";
@@ -16,7 +22,13 @@ interface InternalChange {
   public: ConversationDraftChangeDto;
   expectedVersion?: number;
   readVersions: Readonly<Record<string, number>>;
+  parentCompletion?: StoredParentCompletionPlan;
   command(expectedVersions: Readonly<Record<string, number>>): FactCommand;
+}
+interface StoredParentCompletionPlan {
+  input: ParentCompletionRequest;
+  expected: ParentCompletionPlanningResult;
+  prospectivePeople: readonly PersonRecord[];
 }
 interface IssueFingerprint { changeId: string; severity: "warning" | "conflict"; code: string; message: string; occurrence: number; }
 interface PlanValidation { fingerprints: IssueFingerprint[]; }
@@ -34,6 +46,26 @@ export class DraftValidationError extends Error {
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase();
 const equalJson = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
+const parentRoleName = (role: "father" | "mother"): string => role === "father" ? "父亲" : "母亲";
+const complementaryRole = (role: "father" | "mother"): "father" | "mother" => role === "father" ? "mother" : "father";
+const completionBasisName = (basis: ParentCompletionPlanDto["basis"]): string => {
+  if (basis === "unique_spouse") return "唯一已确认配偶";
+  if (basis === "birth_interval") return "孩子出生时间与婚姻区间唯一匹配";
+  if (basis === "administrator_selected") return "管理员指定的已确认配偶";
+  return "已确认婚姻关系";
+};
+const completionReason = (plan: ParentCompletionPlanDto): string => {
+  if (plan.status === "unchanged" && plan.suggested) {
+    return `${plan.suggested.parentName}已是${plan.suggested.childName}的${parentRoleName(plan.suggested.parentRole)}，无需变更`;
+  }
+  if (["no_candidate", "ambiguous", "conflict"].includes(plan.status) && plan.issues[0]) return plan.issues[0].message;
+  const suggestedCandidate = plan.suggested
+    ? plan.candidates.find((candidate) => candidate.personId === plan.suggested?.parentId)
+    : undefined;
+  if (suggestedCandidate) return suggestedCandidate.reason;
+  if (plan.issues[0]) return plan.issues[0].message;
+  return "根据已确认婚姻关系检查另一位父母";
+};
 const deepFreeze = <T>(value: T): T => {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -81,8 +113,9 @@ export class DraftService {
     const stagedVersions: Record<string, number> = {};
     const warnings: Array<{ code: string; message: string }> = [];
     const conflicts: Array<{ code: string; message: string }> = [];
+    const parentCompletionWarnings: IssueFingerprint[] = [];
     const unresolved = draft.unresolvedReferences.map((entry) => ({ ...entry, candidatePersonIds: [...entry.candidatePersonIds] }));
-    const resolved = new Map<string, { entityId: string; dependencyId?: string; birth: ConversationMutationDraft["candidatePeople"][number]["birth"]; rowVersion?: number }>();
+    const resolved = new Map<string, { entityId: string; dependencyId?: string; person: PersonRecord }>();
     const existingReferenceByPersonId = new Map<string, string>();
     const snapshotVersions = (personIds: readonly string[]): Readonly<Record<string, number>> => Object.freeze(Object.fromEntries(
       [...new Set(personIds)].flatMap((personId) => {
@@ -123,10 +156,30 @@ export class DraftService {
         if (!stated.has("displayName") || !stated.has("gender")) throw new DraftValidationError("MISSING_IDENTITY", "A new person requires explicit display name and gender fields");
         const entityId = randomUUID();
         const changeId = randomUUID();
-        resolved.set(candidate.referenceId, { entityId, dependencyId: changeId, birth: candidate.birth });
+        const timestamp = new Date(this.now()).toISOString();
+        resolved.set(candidate.referenceId, {
+          entityId,
+          dependencyId: changeId,
+          person: {
+            id: entityId,
+            workspaceId: this.workspaceId,
+            personCode: `draft:${entityId}`,
+            displayName: candidate.displayName,
+            gender: candidate.gender,
+            birth: candidate.birth,
+            death: candidate.death,
+            notes: candidate.notes,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            deletedAt: null,
+            rowVersion: 0,
+            childrenComplete: false
+          }
+        });
         internal.push({
           public: {
             id: changeId, kind: "create", entityType: "person", entityId, summary: `创建人物 ${candidate.displayName}`, dependsOnChangeIds: [],
+            originKind: "explicit", selectedByDefault: true,
             fieldChanges: [
               { field: "displayName", before: null, after: candidate.displayName }, { field: "aliases", before: [], after: candidate.aliases },
               { field: "gender", before: null, after: candidate.gender }, { field: "birth", before: null, after: candidate.birth },
@@ -162,7 +215,10 @@ export class DraftService {
           ["birth", match.birth, merged.birth], ["death", match.death, merged.death], ["notes", match.notes, merged.notes]
         ].filter(([field, before, after]) => stated.has(field as never) && !equalJson(before, after)).map(([field, before, after]) => ({ field: field as string, before, after }));
         internal.push({
-          public: { id: changeId, kind: "update", entityType: "person", entityId: match.id, summary: `更新人物 ${candidate.displayName}`, dependsOnChangeIds: [], fieldChanges },
+          public: {
+            id: changeId, kind: "update", entityType: "person", entityId: match.id, summary: `更新人物 ${candidate.displayName}`,
+            dependsOnChangeIds: [], originKind: "explicit", selectedByDefault: true, fieldChanges
+          },
           expectedVersion: match.rowVersion,
           readVersions: snapshotVersions([match.id, ...existingEdgesForPerson(queries.listParentChild(), match.id)]),
           command: (versions) => ({
@@ -171,42 +227,221 @@ export class DraftService {
             source: this.source(id, changeId, draft, "对话修订")
           })
         });
-        resolved.set(candidate.referenceId, { entityId: match.id, dependencyId: changeId, birth: merged.birth, rowVersion: match.rowVersion });
+        resolved.set(candidate.referenceId, {
+          entityId: match.id,
+          dependencyId: changeId,
+          person: { ...match, ...merged }
+        });
       } else {
-        resolved.set(candidate.referenceId, { entityId: match.id, birth: merged.birth, rowVersion: match.rowVersion });
+        resolved.set(candidate.referenceId, { entityId: match.id, person: { ...match, ...merged } });
       }
     }
 
     const candidateByRef = new Map(draft.candidatePeople.map((candidate) => [candidate.referenceId, candidate]));
     const existingEdges = queries.listParentChild().map((edge) => ({ parentId: edge.parentId, childId: edge.childId }));
+    const prospectivePeople = [...new Map([...resolved.values()].map(({ person }) => [person.id, person])).values()];
+    const dependencyByPersonId = new Map([...resolved.values()].flatMap(({ entityId, dependencyId }) =>
+      dependencyId ? [[entityId, dependencyId] as const] : []));
     const prospectiveFact = (reference: string) => {
       const candidate = candidateByRef.get(reference); const resolution = resolved.get(reference);
-      return candidate && resolution ? { id: resolution.entityId, workspaceId: this.workspaceId, birth: resolution.birth } : null;
+      return candidate && resolution ? { id: resolution.entityId, workspaceId: this.workspaceId, birth: resolution.person.birth } : null;
+    };
+    const planCompletion = (input: ParentCompletionRequest): StoredParentCompletionPlan => ({
+      input,
+      expected: this.planParentCompletion(queries, prospectivePeople, input),
+      prospectivePeople
+    });
+    const completionDependencies = (explicitChangeId: string | undefined, plan: ParentCompletionPlanDto): string[] => [...new Set([
+      ...(explicitChangeId ? [explicitChangeId] : []),
+      ...plan.evidence.flatMap((entry) => entry.entityType === "person"
+        ? [dependencyByPersonId.get(entry.id)].filter((value): value is string => Boolean(value))
+        : [])
+    ])];
+    const completionReadVersions = (plan: ParentCompletionPlanDto): Readonly<Record<string, number>> => snapshotVersions(
+      plan.evidence.flatMap((entry) => entry.entityType === "person" ? [entry.id] : [])
+    );
+    const addCompletionWarnings = (changeId: string, plan: ParentCompletionPlanDto): void => {
+      const occurrences = new Map<string, number>();
+      for (const issue of plan.issues.filter(({ severity }) => severity === "warning")) {
+        const occurrence = (occurrences.get(issue.code) ?? 0) + 1;
+        occurrences.set(issue.code, occurrence);
+        parentCompletionWarnings.push({ changeId, severity: "warning", code: issue.code, message: issue.message, occurrence });
+      }
     };
     const plannedEdges = [...existingEdges];
     for (const relation of draft.parentChildFacts) {
       const parent = resolved.get(relation.parentRef); const child = resolved.get(relation.childRef);
       if (!parent || !child) { this.addMissing(unresolved, !parent ? relation.parentRef : relation.childRef); continue; }
+      const occupiedExplicitRole = queries.listParentChild().find((edge) => edge.childId === child.entityId && edge.parentRole === relation.parentRole);
+      const explicitAlreadyConfirmed = occupiedExplicitRole?.parentId === parent.entityId;
       const validation = validateParentChildFact(prospectiveFact(relation.parentRef)!, prospectiveFact(relation.childRef)!, plannedEdges);
       addIssues(validation.errors, conflicts); addIssues(validation.warnings, warnings);
-      if (queries.listParentChild().some((edge) => edge.childId === child.entityId && edge.parentRole === relation.parentRole)) {
+      if (occupiedExplicitRole && !explicitAlreadyConfirmed) {
         addIssues([{ code: "PARENT_ROLE_OCCUPIED", message: `The child already has an active biological ${relation.parentRole}` }], conflicts);
       }
-      plannedEdges.push({ parentId: parent.entityId, childId: child.entityId });
-      const changeId = randomUUID();
-      const entityId = randomUUID();
-      internal.push({
-        public: {
-          id: changeId, kind: "create", entityType: "parentChild", entityId, summary: "创建亲子关系",
-          dependsOnChangeIds: [parent.dependencyId, child.dependencyId].filter((value): value is string => Boolean(value)),
-          fieldChanges: [{ field: "parentId", before: null, after: parent.entityId }, { field: "childId", before: null, after: child.entityId }, { field: "parentRole", before: null, after: relation.parentRole }]
-        },
-        readVersions: snapshotVersions([parent.entityId, child.entityId]),
-        command: () => ({
-          type: "parentChild.add", draft: { id: entityId, workspaceId: this.workspaceId, parentId: parent.entityId, childId: child.entityId, parentRole: relation.parentRole },
-          source: this.source(id, changeId, draft, "对话亲子事实", relation.sourceRef)
-        })
+      let explicitChange: InternalChange | undefined;
+      if (!explicitAlreadyConfirmed) {
+        plannedEdges.push({ parentId: parent.entityId, childId: child.entityId });
+        const changeId = randomUUID();
+        const entityId = randomUUID();
+        explicitChange = {
+          public: {
+            id: changeId, kind: "create", entityType: "parentChild", entityId,
+            summary: `${parent.person.displayName} → ${child.person.displayName}：${parentRoleName(relation.parentRole)}`,
+            originKind: "explicit", selectedByDefault: true,
+            dependsOnChangeIds: [parent.dependencyId, child.dependencyId].filter((value): value is string => Boolean(value)),
+            fieldChanges: [{ field: "parentId", before: null, after: parent.entityId }, { field: "childId", before: null, after: child.entityId }, { field: "parentRole", before: null, after: relation.parentRole }]
+          },
+          readVersions: snapshotVersions([parent.entityId, child.entityId]),
+          command: () => ({
+            type: "parentChild.add",
+            draft: {
+              id: entityId,
+              workspaceId: this.workspaceId,
+              parentId: parent.entityId,
+              childId: child.entityId,
+              parentRole: relation.parentRole,
+              originKind: "explicit",
+              inferredFromMarriageId: null
+            },
+            source: this.source(id, changeId, draft, "对话亲子事实", relation.sourceRef)
+          })
+        };
+        internal.push(explicitChange);
+      }
+      const explicitChangeId = explicitChange?.public.id;
+      const selectionGroupId = explicitChangeId ?? randomUUID();
+
+      const explicitComplement = draft.parentChildFacts.some((candidate) => {
+        if (candidate === relation || candidate.parentRole !== complementaryRole(relation.parentRole)) return false;
+        const candidateChild = resolved.get(candidate.childRef);
+        const candidateParent = resolved.get(candidate.parentRef);
+        return Boolean(candidateChild && candidateParent && candidateChild.entityId === child.entityId);
       });
+      if (explicitComplement) {
+        if (explicitChange) {
+          explicitChange.public.parentCompletion = {
+            status: "unchanged",
+            basis: null,
+            reason: `${child.person.displayName}的另一位父母已在本次草稿中明确录入，不再自动补全`,
+            candidates: []
+          };
+        }
+        continue;
+      }
+
+      const input: ParentCompletionRequest = {
+        knownParentId: parent.entityId,
+        childId: child.entityId,
+        parentRole: relation.parentRole
+      };
+      const planning = planCompletion(input);
+      const plan = planning.expected.plan;
+      if (plan.status === "suggested" && plan.suggested) {
+        const automaticId = randomUUID();
+        const automaticEntityId = randomUUID();
+        addCompletionWarnings(automaticId, plan);
+        internal.push({
+          public: {
+            id: automaticId,
+            kind: "create",
+            entityType: "parentChild",
+            entityId: automaticEntityId,
+            summary: `${plan.suggested.parentName} → ${plan.suggested.childName}：${parentRoleName(plan.suggested.parentRole)}（依据：${completionBasisName(plan.basis)}）`,
+            originKind: "spouse_default",
+            selectedByDefault: true,
+            dependsOnChangeIds: completionDependencies(explicitChangeId, plan),
+            parentCompletion: {
+              status: plan.status,
+              basis: plan.basis,
+              reason: completionReason(plan),
+              candidatePersonId: plan.suggested.parentId,
+              candidates: plan.candidates
+            },
+            fieldChanges: [
+              { field: "parentId", before: null, after: plan.suggested.parentId },
+              { field: "childId", before: null, after: plan.suggested.childId },
+              { field: "parentRole", before: null, after: plan.suggested.parentRole }
+            ]
+          },
+          readVersions: completionReadVersions(plan),
+          parentCompletion: planning,
+          command: () => ({
+            type: "parentChild.add",
+            draft: {
+              id: automaticEntityId,
+              workspaceId: this.workspaceId,
+              parentId: plan.suggested!.parentId,
+              childId: plan.suggested!.childId,
+              parentRole: plan.suggested!.parentRole,
+              originKind: "spouse_default",
+              inferredFromMarriageId: plan.suggested!.inferredFromMarriageId ?? null
+            },
+            source: this.source(id, automaticId, draft, "根据已确认婚姻自动补全")
+          })
+        });
+        continue;
+      }
+
+      if (explicitChange) {
+        explicitChange.public.parentCompletion = {
+          status: plan.status,
+          basis: plan.basis,
+          reason: completionReason(plan),
+          candidates: plan.candidates
+        };
+      }
+      if (plan.status !== "ambiguous") continue;
+
+      for (const candidate of plan.candidates) {
+        const candidateInput: ParentCompletionRequest = { ...input, selectedSpouseId: candidate.personId };
+        const candidatePlanning = planCompletion(candidateInput);
+        const selectedPlan = candidatePlanning.expected.plan;
+        if (selectedPlan.status !== "suggested" || !selectedPlan.suggested) continue;
+        const automaticId = randomUUID();
+        const automaticEntityId = randomUUID();
+        addCompletionWarnings(automaticId, selectedPlan);
+        internal.push({
+          public: {
+            id: automaticId,
+            kind: "create",
+            entityType: "parentChild",
+            entityId: automaticEntityId,
+            summary: `${selectedPlan.suggested.parentName} → ${selectedPlan.suggested.childName}：${parentRoleName(selectedPlan.suggested.parentRole)}（管理员候选）`,
+            originKind: "spouse_default",
+            selectedByDefault: false,
+            selectionGroupId,
+            dependsOnChangeIds: completionDependencies(explicitChangeId, selectedPlan),
+            parentCompletion: {
+              status: selectedPlan.status,
+              basis: selectedPlan.basis,
+              reason: candidate.reason,
+              candidatePersonId: candidate.personId,
+              candidates: plan.candidates
+            },
+            fieldChanges: [
+              { field: "parentId", before: null, after: selectedPlan.suggested.parentId },
+              { field: "childId", before: null, after: selectedPlan.suggested.childId },
+              { field: "parentRole", before: null, after: selectedPlan.suggested.parentRole }
+            ]
+          },
+          readVersions: completionReadVersions(selectedPlan),
+          parentCompletion: candidatePlanning,
+          command: () => ({
+            type: "parentChild.add",
+            draft: {
+              id: automaticEntityId,
+              workspaceId: this.workspaceId,
+              parentId: selectedPlan.suggested!.parentId,
+              childId: selectedPlan.suggested!.childId,
+              parentRole: selectedPlan.suggested!.parentRole,
+              originKind: "spouse_default",
+              inferredFromMarriageId: selectedPlan.suggested!.inferredFromMarriageId ?? null
+            },
+            source: this.source(id, automaticId, draft, "根据管理员选择的已确认婚姻配偶自动补全")
+          })
+        });
+      }
     }
     for (const marriage of draft.marriages) {
       const spouseA = resolved.get(marriage.spouseARef); const spouseB = resolved.get(marriage.spouseBRef);
@@ -220,6 +455,7 @@ export class DraftService {
       internal.push({
         public: {
           id: changeId, kind: "create", entityType: "marriage", entityId, summary: "创建婚姻关系",
+          originKind: "explicit", selectedByDefault: true,
           dependsOnChangeIds: [spouseA.dependencyId, spouseB.dependencyId].filter((value): value is string => Boolean(value)),
           fieldChanges: [{ field: "spouseAId", before: null, after: spouseA.entityId }, { field: "spouseBId", before: null, after: spouseB.entityId }, { field: "start", before: null, after: marriage.start }]
         },
@@ -231,9 +467,10 @@ export class DraftService {
       });
     }
 
-    const canonicalValidation = this.validatePlan(internal, stagedVersions);
-    warnings.splice(0, warnings.length, ...canonicalValidation.fingerprints.filter((entry) => entry.severity === "warning"));
-    conflicts.splice(0, conflicts.length, ...canonicalValidation.fingerprints.filter((entry) => entry.severity === "conflict"));
+    const canonicalValidation = this.validatePreviewPlan(internal, stagedVersions);
+    const canonicalFingerprints = [...canonicalValidation.fingerprints, ...parentCompletionWarnings];
+    warnings.splice(0, warnings.length, ...canonicalFingerprints.filter((entry) => entry.severity === "warning"));
+    conflicts.splice(0, conflicts.length, ...canonicalFingerprints.filter((entry) => entry.severity === "conflict"));
 
     const preview = deepFreeze<ConversationDraftPreview>({
       id, workspaceId: this.workspaceId, version, expiresAt: new Date(this.now() + this.ttlMs).toISOString(),
@@ -246,7 +483,7 @@ export class DraftService {
       preview,
       changes: new Map(internal.map((change) => [change.public.id, change])),
       expectedVersions: Object.freeze({ ...stagedVersions }),
-      fingerprints: Object.freeze(canonicalValidation.fingerprints.map((entry) => Object.freeze({ ...entry }))),
+      fingerprints: Object.freeze(canonicalFingerprints.map((entry) => Object.freeze({ ...entry }))),
       status: "active"
     });
     return preview;
@@ -281,6 +518,14 @@ export class DraftService {
       }
     }
     const selectedChanges = [...stored.changes.values()].filter((change) => selected.has(change.public.id));
+    const selectedGroups = new Map<string, number>();
+    for (const change of selectedChanges) {
+      if (!change.public.selectionGroupId) continue;
+      selectedGroups.set(change.public.selectionGroupId, (selectedGroups.get(change.public.selectionGroupId) ?? 0) + 1);
+    }
+    if ([...selectedGroups.values()].some((count) => count > 1)) {
+      throw new DraftValidationError("INVALID_SELECTION", "At most one parent-completion candidate may be selected");
+    }
     const expectedFingerprints = stored.fingerprints.filter((entry) => selected.has(entry.changeId));
     if (expectedFingerprints.some((entry) => entry.severity === "conflict")) throw new DraftValidationError("CONFLICT", "Selected draft changes contain conflicts");
     const requiredWarnings = [...new Set(expectedFingerprints.filter((entry) => entry.severity === "warning").map((entry) => entry.code))].sort();
@@ -292,11 +537,12 @@ export class DraftService {
     const service = new FactCommandService(this.database, this.workspaceId);
     const result = createUnitOfWork(this.database, this.workspaceId).run("conversation.confirm", (ctx) => {
       const currentQueries = new FactQueries(this.database, this.workspaceId);
+      const currentCompletionWarnings = this.requireFreshParentCompletionPlans(currentQueries, selectedChanges);
       for (const change of selectedChanges) for (const [personId, rowVersion] of Object.entries(change.readVersions)) {
         if (currentQueries.getPerson(personId)?.rowVersion !== rowVersion) throw new DraftValidationError("VERSION_CONFLICT", "A person read by the draft changed; restage before confirmation");
       }
       const currentValidation = this.validatePlanInSavepoint(ctx, selectedChanges, stored.expectedVersions);
-      if (!this.sameFingerprints(expectedFingerprints, currentValidation.fingerprints)) {
+      if (!this.sameFingerprints(expectedFingerprints, [...currentValidation.fingerprints, ...currentCompletionWarnings])) {
         throw new DraftValidationError("VERSION_CONFLICT", "Draft validation changed; restage before confirmation");
       }
       const changedEntityIds: string[] = [];
@@ -335,6 +581,63 @@ export class DraftService {
 
   private evictTerminalDrafts(): void {
     for (const [id, draft] of this.drafts) if (draft.status !== "active" || Date.parse(draft.preview.expiresAt) < this.now()) this.drafts.delete(id);
+  }
+
+  private planParentCompletion(
+    queries: FactQueries,
+    prospectivePeople: readonly PersonRecord[],
+    input: ParentCompletionRequest
+  ): ParentCompletionPlanningResult {
+    const people = new Map(queries.listPeople().map((person) => [person.id, person]));
+    for (const person of prospectivePeople) people.set(person.id, person);
+    return new ParentCompletionService({
+      listPeople: () => [...people.values()],
+      listParentChild: () => queries.listParentChild(),
+      // Deliberately persisted-only: an unconfirmed marriage from this conversation is not evidence.
+      listMarriages: () => queries.listMarriages()
+    }).plan(input);
+  }
+
+  private requireFreshParentCompletionPlans(
+    queries: FactQueries,
+    changes: readonly InternalChange[]
+  ): IssueFingerprint[] {
+    const warnings: IssueFingerprint[] = [];
+    for (const change of changes) {
+      const stored = change.parentCompletion;
+      if (!stored) continue;
+      const current = this.planParentCompletion(queries, stored.prospectivePeople, stored.input);
+      if (current.planningFingerprint !== stored.expected.planningFingerprint || !equalJson(current.plan, stored.expected.plan)) {
+        throw new DraftValidationError("VERSION_CONFLICT", "父母补全依据在预览后发生变化，请刷新后重试");
+      }
+      const occurrences = new Map<string, number>();
+      for (const issue of current.plan.issues.filter(({ severity }) => severity === "warning")) {
+        const occurrence = (occurrences.get(issue.code) ?? 0) + 1;
+        occurrences.set(issue.code, occurrence);
+        warnings.push({ changeId: change.public.id, severity: "warning", code: issue.code, message: issue.message, occurrence });
+      }
+    }
+    return warnings;
+  }
+
+  private validatePreviewPlan(changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): PlanValidation {
+    const baseChanges = changes.filter((change) => !change.public.selectionGroupId);
+    const fingerprints = [...this.validatePlan(baseChanges, expectedVersions).fingerprints];
+    const changesById = new Map(changes.map((change) => [change.public.id, change]));
+    for (const alternative of changes.filter((change) => Boolean(change.public.selectionGroupId))) {
+      const included = new Set<string>();
+      const include = (changeId: string): void => {
+        if (included.has(changeId)) return;
+        const change = changesById.get(changeId);
+        if (!change) return;
+        included.add(changeId);
+        for (const dependencyId of change.public.dependsOnChangeIds) include(dependencyId);
+      };
+      include(alternative.public.id);
+      const validation = this.validatePlan(changes.filter((change) => included.has(change.public.id)), expectedVersions);
+      fingerprints.push(...validation.fingerprints.filter((entry) => entry.changeId === alternative.public.id));
+    }
+    return { fingerprints };
   }
 
   private validatePlan(changes: readonly InternalChange[], expectedVersions: Readonly<Record<string, number>>): PlanValidation {

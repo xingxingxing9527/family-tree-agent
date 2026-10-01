@@ -142,6 +142,110 @@ describe("controlled chat UI", () => {
     expect(onConfirm).toHaveBeenCalledWith(["c1"], { draftVersion: 1, acknowledgedWarningCodes: ["PARENT_AGE_OUTLIER"] });
   });
 
+  it("shows parent-completion origins and Chinese reasoning while allowing the automatic relation to be cancelled", () => {
+    const onConfirm = vi.fn();
+    const preview: ConversationDraftPreview = {
+      id: "parent-completion", workspaceId: "workspace", version: 1, expiresAt: "2099-01-01T00:00:00Z",
+      changes: [
+        {
+          id: "child", kind: "create", entityType: "person", entityId: "child-person", summary: "创建人物 孩子",
+          originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [], fieldChanges: []
+        },
+        {
+          id: "explicit", kind: "create", entityType: "parentChild", entityId: "edge-father", summary: "父亲 → 孩子：父亲",
+          originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: ["child"], fieldChanges: []
+        },
+        {
+          id: "automatic", kind: "create", entityType: "parentChild", entityId: "edge-mother", summary: "母亲 → 孩子：母亲（依据：唯一已确认配偶）",
+          originKind: "spouse_default", selectedByDefault: true, dependsOnChangeIds: ["child", "explicit"], fieldChanges: [],
+          parentCompletion: {
+            status: "suggested", basis: "unique_spouse", reason: "已确认婚姻中唯一的配偶候选", candidatePersonId: "mother", candidates: []
+          }
+        }
+      ],
+      creates: 3, updates: 0, warnings: [], conflicts: [], unresolvedReferences: []
+    };
+
+    render(<MutationDraftPreview preview={preview} onConfirm={onConfirm} />);
+
+    expect(screen.getAllByText("人工录入")).toHaveLength(2);
+    expect(screen.getByText("系统自动补全")).toBeVisible();
+    expect(screen.getByText("已确认婚姻中唯一的配偶候选")).toBeVisible();
+    fireEvent.click(screen.getByRole("checkbox", { name: /选择系统自动补全.*母亲 → 孩子/u }));
+    fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
+    expect(onConfirm).toHaveBeenCalledWith(["child", "explicit"], { draftVersion: 1, acknowledgedWarningCodes: [] });
+  });
+
+  it("prunes excluded people and explicit relations from dependent completion choices", () => {
+    const preview: ConversationDraftPreview = {
+      id: "dependencies", workspaceId: "workspace", version: 1, expiresAt: "2099-01-01T00:00:00Z",
+      changes: [
+        { id: "child", kind: "create", entityType: "person", entityId: "child-person", summary: "创建人物 孩子", originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [], fieldChanges: [] },
+        { id: "explicit", kind: "create", entityType: "parentChild", entityId: "edge-father", summary: "父亲 → 孩子：父亲", originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: ["child"], fieldChanges: [] },
+        { id: "automatic", kind: "create", entityType: "parentChild", entityId: "edge-mother", summary: "母亲 → 孩子：母亲", originKind: "spouse_default", selectedByDefault: true, dependsOnChangeIds: ["child", "explicit"], fieldChanges: [] }
+      ],
+      creates: 3, updates: 0, warnings: [], conflicts: [], unresolvedReferences: []
+    };
+    render(<MutationDraftPreview preview={preview} onConfirm={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /选择人工录入.*创建人物 孩子/u }));
+
+    expect(screen.getByRole("checkbox", { name: /父亲 → 孩子/u })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /母亲 → 孩子/u })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /母亲 → 孩子/u })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "确认写入" })).toBeDisabled();
+  });
+
+  it("renders no-candidate information and makes ambiguous spouse choices mutually exclusive", () => {
+    const onConfirm = vi.fn();
+    const preview: ConversationDraftPreview = {
+      id: "ambiguous", workspaceId: "workspace", version: 1, expiresAt: "2099-01-01T00:00:00Z",
+      changes: [
+        { id: "explicit", kind: "create", entityType: "parentChild", entityId: "edge-father", summary: "父亲 → 孩子：父亲", originKind: "explicit", selectedByDefault: true, dependsOnChangeIds: [], fieldChanges: [], parentCompletion: {
+          status: "ambiguous", basis: null, reason: "孩子存在多个配偶候选，婚姻和出生时间不足以唯一判断",
+          candidates: [{
+            personId: "former", personName: "前配偶", intervalRelation: "unknown", reason: "已确认婚姻配偶，但出生时间证据不足以唯一判断",
+            evidenceIds: ["marriage:former-marriage"],
+            marriageEpisodes: [{
+              id: "former-marriage", status: "divorced", rowVersion: 1,
+              start: { calendar: "solar", year: 1990, month: 1, day: null, leapMonth: false, precision: "month" },
+              end: { calendar: "solar", year: 1999, month: 1, day: null, leapMonth: false, precision: "month" }
+            }]
+          }]
+        } },
+        { id: "former", kind: "create", entityType: "parentChild", entityId: "edge-former", summary: "前配偶 → 孩子：母亲（管理员候选）", originKind: "spouse_default", selectedByDefault: false, selectionGroupId: "explicit", dependsOnChangeIds: ["explicit"], fieldChanges: [], parentCompletion: { status: "ambiguous", basis: "administrator_selected", reason: "已确认婚姻配偶，但出生时间证据不足以唯一判断", candidatePersonId: "former", candidates: [] } },
+        { id: "current", kind: "create", entityType: "parentChild", entityId: "edge-current", summary: "现配偶 → 孩子：母亲（管理员候选）", originKind: "spouse_default", selectedByDefault: false, selectionGroupId: "explicit", dependsOnChangeIds: ["explicit"], fieldChanges: [], parentCompletion: { status: "ambiguous", basis: "administrator_selected", reason: "已确认婚姻配偶，但出生时间证据不足以唯一判断", candidatePersonId: "current", candidates: [] } }
+      ],
+      creates: 3, updates: 0, warnings: [], conflicts: [], unresolvedReferences: []
+    };
+    const { rerender } = render(<MutationDraftPreview preview={preview} onConfirm={onConfirm} />);
+
+    expect(screen.getByText("孩子存在多个配偶候选，婚姻和出生时间不足以唯一判断")).toBeVisible();
+    expect(screen.getByText("可选择一位已确认婚姻配偶，或跳过系统自动补全：")).toBeVisible();
+    expect(screen.getByText(/婚姻记录：已离异，1990年1月至1999年1月/u)).toBeVisible();
+    const former = screen.getByRole("checkbox", { name: /前配偶/u });
+    const current = screen.getByRole("checkbox", { name: /现配偶/u });
+    expect(former).not.toBeChecked();
+    expect(current).not.toBeChecked();
+    fireEvent.click(former);
+    fireEvent.click(current);
+    expect(former).not.toBeChecked();
+    expect(current).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "确认写入" }));
+    expect(onConfirm).toHaveBeenCalledWith(["explicit", "current"], { draftVersion: 1, acknowledgedWarningCodes: [] });
+
+    rerender(<MutationDraftPreview preview={{
+      ...preview,
+      id: "no-candidate",
+      changes: [{
+        ...preview.changes[0]!,
+        parentCompletion: { status: "no_candidate", basis: null, reason: "孩子的另一位父母尚未确认", candidates: [] }
+      }]
+    }} onConfirm={onConfirm} />);
+    expect(screen.getByText("孩子的另一位父母尚未确认")).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: /已阅读并确认/u })).not.toBeInTheDocument();
+  });
+
   it("resets selected changes when editing produces a new immutable draft version", () => {
     const onConfirm = vi.fn();
     const preview: ConversationDraftPreview = {

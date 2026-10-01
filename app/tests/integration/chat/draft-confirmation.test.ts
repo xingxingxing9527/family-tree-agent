@@ -23,6 +23,62 @@ const counts = (database: WorkspaceDatabase) => ({
   operations: database.prepare("SELECT COUNT(*) FROM operation_group").pluck().get()
 });
 
+const solarMonth = (year: number, month = 1) => ({
+  calendar: "solar" as const, year, month, day: null, leapMonth: false, precision: "month" as const
+});
+
+const source = (key: string) => ({ sourceKey: key, title: key, kind: "test" });
+
+const seedPerson = (
+  facts: FactCommandService,
+  id: string,
+  displayName: string,
+  gender: "male" | "female" | "unknown"
+): void => {
+  facts.execute({ type: "person.create", draft: { id, workspaceId, displayName, gender }, source: source(id) });
+};
+
+const seedMarriage = (
+  facts: FactCommandService,
+  id: string,
+  spouseAId: string,
+  spouseBId: string,
+  options: { status?: "active" | "divorced"; start?: ReturnType<typeof solarMonth>; end?: ReturnType<typeof solarMonth> } = {}
+): void => {
+  facts.execute({
+    type: "marriage.add",
+    draft: {
+      id, workspaceId, spouseAId, spouseBId,
+      status: options.status ?? "active",
+      start: options.start ?? null,
+      end: options.end ?? null
+    },
+    source: source(id)
+  });
+};
+
+const existingPerson = (
+  referenceId: string,
+  matchedPersonId: string,
+  displayName: string,
+  gender: "male" | "female" | "unknown"
+) => ({
+  referenceId, statedFields: [] as const, displayName, aliases: [], gender,
+  birth: null, death: null, notes: null, matchedPersonId
+});
+
+const newChild = (referenceId = "child", displayName = "孩子") => ({
+  referenceId,
+  statedFields: ["displayName", "aliases", "gender", "birth", "death", "notes"] as const,
+  displayName,
+  aliases: [],
+  gender: "unknown" as const,
+  birth: null,
+  death: null,
+  notes: null,
+  matchedPersonId: null
+});
+
 describe("DraftService confirmation", () => {
   let database: WorkspaceDatabase;
   beforeEach(() => { database = openDatabase(":memory:"); applyMigrations(database); });
@@ -40,6 +96,221 @@ describe("DraftService confirmation", () => {
     const receipt = service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, []);
     expect(receipt.changedEntityIds).toHaveLength(3);
     expect(counts(database)).toEqual({ people: 2, relations: 1, operations: 1 });
+  });
+
+  it("completes a newly stated child from a marriage confirmed before the conversation draft", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    seedPerson(facts, "father", "父亲", "male");
+    seedPerson(facts, "mother", "母亲", "female");
+    seedMarriage(facts, "parents-marriage", "father", "mother");
+    const service = new DraftService(database, workspaceId);
+
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [existingPerson("father", "father", "父亲", "male"), newChild()],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 0.96 }]
+    });
+    const childChange = preview.changes.find((change) => change.entityType === "person")!;
+    const relations = preview.changes.filter((change) => change.entityType === "parentChild");
+    const explicit = relations.find((change) => change.originKind === "explicit")!;
+    const automatic = relations.find((change) => change.originKind === "spouse_default")!;
+
+    expect(relations).toHaveLength(2);
+    expect(explicit).toMatchObject({ selectedByDefault: true });
+    expect(automatic).toMatchObject({
+      selectedByDefault: true,
+      summary: "母亲 → 孩子：母亲（依据：唯一已确认配偶）",
+      dependsOnChangeIds: expect.arrayContaining([childChange.id, explicit.id]),
+      parentCompletion: {
+        status: "suggested",
+        basis: "unique_spouse",
+        reason: "已确认婚姻中唯一的配偶候选"
+      }
+    });
+
+    service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, []);
+    expect(new FactQueries(database, workspaceId).listParentChild()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ parentId: "father", parentRole: "father", originKind: "explicit" }),
+      expect.objectContaining({ parentId: "mother", parentRole: "mother", originKind: "spouse_default", inferredFromMarriageId: "parents-marriage" })
+    ]));
+  });
+
+  it("does not use a marriage proposed in the same unconfirmed draft as completion evidence", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    seedPerson(facts, "father", "父亲", "male");
+    seedPerson(facts, "mother", "母亲", "female");
+    const service = new DraftService(database, workspaceId);
+
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [
+        existingPerson("father", "father", "父亲", "male"),
+        existingPerson("mother", "mother", "母亲", "female"),
+        newChild()
+      ],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }],
+      marriages: [{ spouseARef: "father", spouseBRef: "mother", start: solarMonth(2000), sourceRef: null, confidence: 1 }]
+    });
+    const relationChanges = preview.changes.filter((change) => change.entityType === "parentChild");
+
+    expect(preview.changes.filter((change) => change.entityType === "marriage")).toHaveLength(1);
+    expect(relationChanges).toHaveLength(1);
+    expect(relationChanges[0]).toMatchObject({
+      originKind: "explicit",
+      parentCompletion: {
+        status: "no_candidate",
+        reason: expect.stringContaining("已确认婚姻")
+      }
+    });
+    expect(preview.changes.some((change) => change.originKind === "spouse_default")).toBe(false);
+
+    service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, []);
+    const childId = preview.changes.find((change) => change.entityType === "person")!.entityId;
+    const followUp = new DraftService(database, workspaceId);
+    const followUpPreview = followUp.stage({
+      ...familyDraft,
+      candidatePeople: [
+        existingPerson("father", "father", "父亲", "male"),
+        existingPerson("child", childId, "孩子", "unknown")
+      ],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }],
+      marriages: []
+    });
+    expect(followUpPreview.conflicts).toEqual([]);
+    expect(followUpPreview.changes).toEqual([
+      expect.objectContaining({ originKind: "spouse_default", selectedByDefault: true, dependsOnChangeIds: [] })
+    ]);
+    followUp.confirm(followUpPreview.id, followUpPreview.version, [followUpPreview.changes[0]!.id], {}, []);
+    expect(new FactQueries(database, workspaceId).listParentChild()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ parentId: "father", parentRole: "father", originKind: "explicit" }),
+      expect.objectContaining({ parentId: "mother", parentRole: "mother", originKind: "spouse_default" })
+    ]));
+  });
+
+  it("replans selected completion evidence inside confirmation and rolls back when the marriage changed", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    seedPerson(facts, "father", "父亲", "male");
+    seedPerson(facts, "mother", "母亲", "female");
+    seedMarriage(facts, "parents-marriage", "father", "mother");
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [existingPerson("father", "father", "父亲", "male"), newChild()],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    });
+    expect(preview.changes.some((change) => change.originKind === "spouse_default")).toBe(true);
+
+    facts.execute({
+      type: "marriage.divorce",
+      marriageId: "parents-marriage",
+      expectedVersion: 1,
+      endDate: solarMonth(2020),
+      source: source("divorce-after-preview")
+    });
+
+    expect(() => service.confirm(
+      preview.id,
+      preview.version,
+      preview.changes.map((change) => change.id),
+      {},
+      preview.warnings.map((warning) => warning.code)
+    )).toThrowError(expect.objectContaining({ code: "VERSION_CONFLICT" }));
+    expect(new FactQueries(database, workspaceId).listParentChild()).toEqual([]);
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='conversation.confirm'").pluck().get()).toBe(0);
+  });
+
+  it("shows no-spouse information without blocking the explicit parent relation", () => {
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage(familyDraft);
+    const relation = preview.changes.find((change) => change.entityType === "parentChild")!;
+
+    expect(relation).toMatchObject({
+      originKind: "explicit",
+      selectedByDefault: true,
+      parentCompletion: {
+        status: "no_candidate",
+        reason: expect.stringContaining("另一位父母")
+      }
+    });
+    expect(preview.conflicts).toEqual([]);
+    expect(() => service.confirm(preview.id, preview.version, preview.changes.map((change) => change.id), {}, [])).not.toThrow();
+    expect(new FactQueries(database, workspaceId).listParentChild()).toHaveLength(1);
+  });
+
+  it("offers ambiguous persisted spouses as unselected server-planned choices and accepts at most one", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    for (const [id, name, gender] of [["father", "父亲", "male"], ["former", "前配偶", "female"], ["current", "现配偶", "female"]] as const) {
+      seedPerson(facts, id, name, gender);
+    }
+    seedMarriage(facts, "former-marriage", "father", "former", { status: "divorced", start: solarMonth(1990), end: solarMonth(1999) });
+    seedMarriage(facts, "current-marriage", "father", "current", { start: solarMonth(2000) });
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage({
+      ...familyDraft,
+      candidatePeople: [existingPerson("father", "father", "父亲", "male"), newChild()],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    });
+    const explicit = preview.changes.find((change) => change.entityType === "parentChild" && change.originKind === "explicit")!;
+    const candidates = preview.changes.filter((change) => change.originKind === "spouse_default");
+
+    expect(candidates).toHaveLength(2);
+    expect(candidates.map((change) => change.selectedByDefault)).toEqual([false, false]);
+    expect(candidates.map((change) => change.parentCompletion?.candidatePersonId).sort()).toEqual(["current", "former"]);
+    expect(candidates.every((change) => change.dependsOnChangeIds.includes(explicit.id))).toBe(true);
+    expect(new Set(candidates.map((change) => change.selectionGroupId))).toEqual(new Set([explicit.id]));
+    expect(() => service.confirm(
+      preview.id,
+      preview.version,
+      preview.changes.filter((change) => change.selectedByDefault || change === candidates[0]).map((change) => change.id),
+      {},
+      []
+    )).not.toThrow();
+    expect(new FactQueries(database, workspaceId).listParentChild().filter((edge) => edge.originKind === "spouse_default")).toHaveLength(1);
+
+    const secondService = new DraftService(database, workspaceId);
+    const secondPreview = secondService.stage({
+      ...familyDraft,
+      candidatePeople: [existingPerson("father", "father", "父亲", "male"), newChild("second-child", "另一个孩子")],
+      parentChildFacts: [{ parentRef: "father", childRef: "second-child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    });
+    const secondCandidates = secondPreview.changes.filter((change) => change.originKind === "spouse_default");
+    expect(() => secondService.confirm(
+      secondPreview.id,
+      secondPreview.version,
+      secondPreview.changes.filter((change) => change.selectedByDefault || secondCandidates.includes(change)).map((change) => change.id),
+      {},
+      []
+    )).toThrowError(expect.objectContaining({ code: "INVALID_SELECTION" }));
+  });
+
+  it("keeps the explicit relation when automatic completion is cancelled and rejects missing automatic dependencies", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    seedPerson(facts, "father", "父亲", "male");
+    seedPerson(facts, "mother", "母亲", "female");
+    seedMarriage(facts, "parents-marriage", "father", "mother");
+    const draft: ConversationMutationDraft = {
+      ...familyDraft,
+      candidatePeople: [existingPerson("father", "father", "父亲", "male"), newChild()],
+      parentChildFacts: [{ parentRef: "father", childRef: "child", parentRole: "father", sourceRef: null, confidence: 1 }]
+    };
+
+    const service = new DraftService(database, workspaceId);
+    const preview = service.stage(draft);
+    const explicit = preview.changes.find((change) => change.originKind === "explicit" && change.entityType === "parentChild")!;
+    const automatic = preview.changes.find((change) => change.originKind === "spouse_default")!;
+    const child = preview.changes.find((change) => change.entityType === "person")!;
+    expect(() => service.confirm(preview.id, preview.version, [child.id, automatic.id], {}, [])).toThrow(/dependency/i);
+
+    const cancellable = new DraftService(database, workspaceId);
+    const cancellablePreview = cancellable.stage(draft);
+    const selected = cancellablePreview.changes
+      .filter((change) => change.originKind !== "spouse_default")
+      .map((change) => change.id);
+    cancellable.confirm(cancellablePreview.id, cancellablePreview.version, selected, {}, []);
+    expect(new FactQueries(database, workspaceId).listParentChild()).toEqual([
+      expect.objectContaining({ parentId: "father", parentRole: "father", originKind: "explicit" })
+    ]);
+    expect(explicit).toBeDefined();
   });
 
   it("blocks duplicate unresolved names and invalid dependency subsets without writing", () => {
