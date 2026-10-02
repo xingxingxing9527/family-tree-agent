@@ -51,7 +51,12 @@ function desktopApi(workspaces: WorkspaceSummary[]) {
     wiki: { list: vi.fn().mockResolvedValue({ ok: true, value: [] }), create: vi.fn(), update: vi.fn(), remove: vi.fn(), get: vi.fn() },
     query: {
       workspaceSnapshot: vi.fn(async () => ({ ok: true, value: { workspaceId: activeId, people: [], sources: [], lineages: [] } })),
-      projectTree: vi.fn().mockResolvedValue({ ok: true, value: { topology: { key: "empty", nodes: [], edges: [] }, viewpointId: null, labels: {} } }),
+      projectTree: vi.fn().mockResolvedValue({ ok: true, value: {
+        topology: { key: "empty", nodes: [], edges: [] },
+        viewpointId: null,
+        labels: {},
+        scope: { view: "full", subjectId: null, lineageId: null, visiblePersonCount: 0 }
+      } }),
       searchPeople: vi.fn().mockResolvedValue({ ok: true, value: [] }), getPerson: vi.fn(), listRelatives: vi.fn(), calculateRelationship: vi.fn(), summarizeLineage: vi.fn(), searchWiki: vi.fn()
     },
     chat: { authorize: vi.fn(), stageMutation: vi.fn(), ask: vi.fn(), confirm: vi.fn(), revise: vi.fn() },
@@ -101,6 +106,44 @@ describe("complete application shell", () => {
     fireEvent.click(screen.getByRole("link", { name: "问答" }));
 
     expect(await screen.findByLabelText("回答视角")).toHaveValue("person-b");
+  });
+
+  it("opens lineage settings from the tree's missing-primary action", async () => {
+    const { api } = desktopApi([workspaceA]);
+    const center = { id: "person-a", personCode: "P000001", displayName: "王明", aliases: [], gender: "male" as const, birth: null, death: null, notes: null, rowVersion: 1 };
+    vi.mocked(api.query.workspaceSnapshot).mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: workspaceA.id,
+        people: [center],
+        sources: [],
+        lineages: [{
+          id: "lineage-a",
+          name: "王氏",
+          founderPersonId: center.id,
+          description: null,
+          memberCount: 1,
+          rowVersion: 1,
+          memberships: [{
+            id: "membership-a",
+            lineageId: "lineage-a",
+            personId: center.id,
+            role: "blood",
+            isPrimary: false,
+            declaredGeneration: null,
+            generationMarker: null,
+            generation: { declared: null, computed: 1, displayed: 1, source: "computed", conflict: false },
+            rowVersion: 1
+          }]
+        }]
+      }
+    });
+    window.location.hash = `#/workspace/${workspaceA.id}/tree`;
+    renderApp(api);
+
+    fireEvent.click(await screen.findByRole("button", { name: "本家支系" }));
+    fireEvent.click(await screen.findByRole("button", { name: "前往设置本家支系" }));
+    await waitFor(() => expect(window.location.hash).toBe(`#/workspace/${workspaceA.id}/settings`));
   });
 
   it("opens a person-scoped question from the person detail quick actions", async () => {

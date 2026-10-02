@@ -367,7 +367,7 @@ describe("FamilyTreeCanvas", () => {
 });
 
 describe("FamilyTreePage", () => {
-  it("offers full, branch, ancestor and descendant views while keeping viewpoint separate", async () => {
+  it("offers the four approved tree views while keeping viewpoint separate", async () => {
     const service = new TreeProjectionService({
       people: [
         { id: "a", displayName: "甲", birthYear: null, deathYear: null, generation: null },
@@ -392,29 +392,52 @@ describe("FamilyTreePage", () => {
       { id: "child", displayName: "孩子", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 },
       { id: "isolated", displayName: "旁支", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 }
     ];
-    const api = { projectTree: vi.fn(async (input: { view: "full" | "branch" | "ancestors" | "descendants"; subjectId?: string; viewpointId?: string; collapseDepth?: number }) => {
-      const unlabelled = input.view === "full" ? service.full(input.viewpointId ?? "", input.collapseDepth ?? 20)
-        : input.view === "branch" ? service.branch(input.subjectId!)
-          : input.view === "ancestors" ? service.ancestors(input.subjectId!) : service.descendants(input.subjectId!);
-      return { ok: true as const, value: input.viewpointId ? service.withViewpoint(unlabelled, input.viewpointId) : unlabelled };
+    const api = { projectTree: vi.fn(async (input: { view: "full" | "lineage" | "core" | "descendants"; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }) => {
+      const unlabelled = service.full(input.collapseDepth ?? Number.POSITIVE_INFINITY);
+      const projection = input.viewpointId ? service.withViewpoint(unlabelled, input.viewpointId) : unlabelled;
+      return { ok: true as const, value: {
+        ...projection,
+        scope: {
+          view: input.view,
+          subjectId: input.view === "full" ? null : input.subjectId ?? null,
+          lineageId: input.view === "lineage" ? input.lineageId ?? null : null,
+          visiblePersonCount: 4
+        }
+      } };
     }) };
     window.localStorage.clear();
     render(<ViewpointProvider workspaceId="workspace" visiblePersonIds={[]} validPersonIds={people.map((person) => person.id)} fallbackViewpointId="a" query={{ calculateRelationship: vi.fn() }}>
-      <FamilyTreePage api={api} people={people} />
+      <FamilyTreePage api={api} people={people} lineages={[{
+        id: "lineage-a",
+        name: "甲支",
+        founderPersonId: "a",
+        description: null,
+        memberCount: 1,
+        rowVersion: 1,
+        memberships: [{
+          id: "membership-a",
+          lineageId: "lineage-a",
+          personId: "a",
+          role: "blood",
+          isPrimary: true,
+          declaredGeneration: null,
+          generationMarker: null,
+          generation: { declared: null, computed: 1, displayed: 1, source: "computed", conflict: false },
+          rowVersion: 1
+        }]
+      }]} />
     </ViewpointProvider>);
 
     expect(screen.getByRole("button", { name: "全谱" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByRole("group", { name: "人物：旁支" })).toBeVisible();
-    fireEvent.change(screen.getByLabelText("视图中心"), { target: { value: "child" } });
-    fireEvent.click(screen.getByRole("button", { name: "祖先" }));
-
-    await waitFor(() => expect(screen.queryByRole("group", { name: "人物：旁支" })).not.toBeInTheDocument());
-    expect(await screen.findByRole("group", { name: "人物：甲" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "祖先" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByLabelText("围绕谁查看"), { target: { value: "child" } });
+    fireEvent.click(screen.getByRole("button", { name: "核心亲属" }));
+    await waitFor(() => expect(api.projectTree).toHaveBeenLastCalledWith(expect.objectContaining({ view: "core", subjectId: "child" })));
+    expect(screen.getByRole("button", { name: "核心亲属" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("当前视角"), { target: { value: "child" } });
     expect(await screen.findByText("本人")).toBeVisible();
 
-    for (const view of ["支系", "后代", "全谱"]) {
+    for (const view of ["本家支系", "子孙后代", "全谱"]) {
       fireEvent.click(screen.getByRole("button", { name: view }));
       expect(screen.getByRole("button", { name: view })).toHaveAttribute("aria-pressed", "true");
     }
