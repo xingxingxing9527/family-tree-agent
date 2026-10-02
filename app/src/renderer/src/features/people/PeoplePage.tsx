@@ -48,6 +48,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
   const detailRequestId = useRef(0);
   const selectedPersonId = useRef<string | null>(initialSelectedPersonId);
   const relativeCreationGeneration = useRef(0);
+  const relativeCreationSection = useRef<HTMLElement | null>(null);
 
   const cancelRelativeCreation = useCallback((): void => {
     relativeCreationGeneration.current += 1;
@@ -95,6 +96,13 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
     else onSelectedPersonChange(null);
     return () => { listRequestId.current += 1; detailRequestId.current += 1; };
   }, [cancelRelativeCreation, initialSelectedPersonId, loadDetail, loadPeople, onSelectedPersonChange, workspace.id]);
+
+  useEffect(() => {
+    if (!relativeCreation) return;
+    const section = relativeCreationSection.current;
+    section?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    section?.querySelector<HTMLInputElement>('input[aria-label="姓名"]')?.focus();
+  }, [relativeCreation]);
 
   const personSaved = async (detail: PersonDetailReadModel): Promise<void> => {
     cancelRelativeCreation();
@@ -160,7 +168,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           ))}
         </aside>
         <div className="people-content">
-          {relativeCreation && <section className="relative-person-creation" aria-labelledby="relative-person-creation-title">
+          {relativeCreation && <section ref={relativeCreationSection} className="relative-person-creation" aria-labelledby="relative-person-creation-title">
             <h2 id="relative-person-creation-title">快速新建关系人物：{relativeCreation.purpose}</h2>
             <PersonEditor api={api.people} mutations={api.mutations} onSaved={relativePersonSaved} onMutationPersisted={relativePersonPersisted} onCancel={cancelRelativeCreation} />
           </section>}

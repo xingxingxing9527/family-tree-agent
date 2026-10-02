@@ -9,7 +9,7 @@ function unionLabel(kind: "marriage" | "coParents" | "singleParent" | "unassigne
   if (ended) return "已结束婚姻";
   if (kind === "marriage") return "婚姻";
   if (kind === "coParents") return "双亲家庭";
-  if (kind === "singleParent") return "单亲家庭";
+  if (kind === "singleParent") return "仅录入一位父母";
   return "待分配家庭";
 }
 

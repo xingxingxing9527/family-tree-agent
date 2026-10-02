@@ -26,6 +26,101 @@ export interface LaidOutTree {
 
 const elk = new ELK();
 
+const NODE_SIZE = {
+  person: { width: 196, height: 112 },
+  union: { width: 136, height: 96 }
+} as const;
+
+interface PositionedNode {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface PositionedBlock {
+  originalX: number;
+  width: number;
+  members: Array<{ node: PositionedNode; offset: number }>;
+}
+
+function separateHorizontalOverlaps(topology: TreeProjectionTopologyDto, positions: Map<string, { x: number; y: number }>): void {
+  const nodesById = new Map(topology.nodes.map((node) => [node.id, node]));
+  const marriageNeighbours = new Map<string, Set<string>>();
+  for (const edge of topology.edges) {
+    const union = nodesById.get(edge.target);
+    if (edge.kind !== "parentUnion" || union?.kind !== "union" || union.display.kind === "singleParent") continue;
+    if (!marriageNeighbours.has(edge.source)) marriageNeighbours.set(edge.source, new Set());
+    if (!marriageNeighbours.has(edge.target)) marriageNeighbours.set(edge.target, new Set());
+    marriageNeighbours.get(edge.source)!.add(edge.target);
+    marriageNeighbours.get(edge.target)!.add(edge.source);
+  }
+  const nodes: PositionedNode[] = topology.nodes.flatMap((node) => {
+    const position = positions.get(node.id);
+    if (!position) return [];
+    const size = node.kind === "person" ? NODE_SIZE.person : NODE_SIZE.union;
+    return [{ id: node.id, ...position, ...size }];
+  }).sort((left, right) => left.y - right.y || left.x - right.x);
+  const rows: Array<{ bottom: number; nodes: PositionedNode[] }> = [];
+  for (const node of nodes) {
+    const row = rows.at(-1);
+    if (!row || node.y >= row.bottom) rows.push({ bottom: node.y + node.height, nodes: [node] });
+    else {
+      row.nodes.push(node);
+      row.bottom = Math.max(row.bottom, node.y + node.height);
+    }
+  }
+
+  const minimumGap = 20;
+  for (const row of rows) {
+    row.nodes.sort((left, right) => left.x - right.x || left.id.localeCompare(right.id));
+    const originalLeft = Math.min(...row.nodes.map((node) => node.x));
+    const originalRight = Math.max(...row.nodes.map((node) => node.x + node.width));
+    const rowNodesById = new Map(row.nodes.map((node) => [node.id, node]));
+    const visited = new Set<string>();
+    const blocks: PositionedBlock[] = [];
+    for (const node of row.nodes) {
+      if (visited.has(node.id)) continue;
+      const component: PositionedNode[] = [];
+      const pending = [node.id];
+      visited.add(node.id);
+      while (pending.length > 0) {
+        const currentId = pending.pop()!;
+        const current = rowNodesById.get(currentId);
+        if (current) component.push(current);
+        for (const neighbourId of marriageNeighbours.get(currentId) ?? []) {
+          if (!rowNodesById.has(neighbourId) || visited.has(neighbourId)) continue;
+          visited.add(neighbourId);
+          pending.push(neighbourId);
+        }
+      }
+      component.sort((left, right) => left.x - right.x || left.id.localeCompare(right.id));
+      let width = 0;
+      const members = component.map((member, index) => {
+        const offset = width;
+        width += member.width + (index === component.length - 1 ? 0 : minimumGap);
+        return { node: member, offset };
+      });
+      blocks.push({ originalX: Math.min(...component.map((member) => member.x)), width, members });
+    }
+    blocks.sort((left, right) => left.originalX - right.originalX || left.members[0]!.node.id.localeCompare(right.members[0]!.node.id));
+    let cursor = Number.NEGATIVE_INFINITY;
+    for (const block of blocks) {
+      const blockX = Math.max(block.originalX, cursor + minimumGap);
+      for (const member of block.members) member.node.x = blockX + member.offset;
+      cursor = blockX + block.width;
+    }
+    const adjustedLeft = Math.min(...row.nodes.map((node) => node.x));
+    const adjustedRight = Math.max(...row.nodes.map((node) => node.x + node.width));
+    const centerOffset = (originalLeft + originalRight - adjustedLeft - adjustedRight) / 2;
+    for (const node of row.nodes) {
+      const position = positions.get(node.id)!;
+      position.x = node.x + centerOffset;
+    }
+  }
+}
+
 export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promise<LaidOutTree> {
   const graph = await elk.layout({
     id: `tree:${topology.key}`,
@@ -37,11 +132,7 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
     },
-    children: topology.nodes.map((node) => ({
-      id: node.id,
-      width: node.kind === "person" ? 196 : 136,
-      height: node.kind === "person" ? 112 : 96
-    })),
+    children: topology.nodes.map((node) => ({ id: node.id, ...(node.kind === "person" ? NODE_SIZE.person : NODE_SIZE.union) })),
     edges: topology.edges.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] }))
   });
   const positions = new Map((graph.children ?? []).map((node) => [node.id, { x: node.x ?? 0, y: node.y ?? 0 }]));
@@ -60,6 +151,7 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
       orderedParents[1]!.x = Math.max(orderedParents[1]!.x, unionPosition.x + 156);
     }
   }
+  separateHorizontalOverlaps(topology, positions);
 
   return {
     nodes: topology.nodes.map((node) => ({

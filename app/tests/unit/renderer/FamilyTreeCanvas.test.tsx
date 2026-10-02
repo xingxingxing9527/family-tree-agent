@@ -86,6 +86,120 @@ describe("family tree layout", () => {
     expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-a", 112));
     expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-b", 112));
   });
+
+  it("keeps adjacent spouse families from overlapping after horizontal alignment", async () => {
+    const crowdedTopology: TreeProjectionTopology = {
+      key: "adjacent-families",
+      nodes: [
+        { id: "person:a", kind: "person", personId: "a", display: { displayName: "甲", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" } },
+        { id: "person:b", kind: "person", personId: "b", display: { displayName: "乙", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "married_in" } },
+        { id: "marriage:first", kind: "union", unionId: "marriage:first", display: { kind: "marriage", marriageStatus: "active", marriageStart: null, marriageEnd: null, warnings: [] } },
+        { id: "person:first-child", kind: "person", personId: "first-child", display: { displayName: "孩子一", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" } },
+        { id: "person:c", kind: "person", personId: "c", display: { displayName: "丙", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" } },
+        { id: "person:d", kind: "person", personId: "d", display: { displayName: "丁", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "married_in" } },
+        { id: "marriage:second", kind: "union", unionId: "marriage:second", display: { kind: "marriage", marriageStatus: "active", marriageStart: null, marriageEnd: null, warnings: [] } },
+        { id: "person:second-child", kind: "person", personId: "second-child", display: { displayName: "孩子二", birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" } }
+      ],
+      edges: [
+        { id: "first:a", source: "person:a", target: "marriage:first", kind: "parentUnion", marriageStatus: "active" },
+        { id: "first:b", source: "person:b", target: "marriage:first", kind: "parentUnion", marriageStatus: "active" },
+        { id: "first:child", source: "marriage:first", target: "person:first-child", kind: "unionChild", marriageStatus: "active" },
+        { id: "second:c", source: "person:c", target: "marriage:second", kind: "parentUnion", marriageStatus: "active" },
+        { id: "second:d", source: "person:d", target: "marriage:second", kind: "parentUnion", marriageStatus: "active" },
+        { id: "second:child", source: "marriage:second", target: "person:second-child", kind: "unionChild", marriageStatus: "active" }
+      ]
+    };
+
+    const laidOut = await layoutWithElk(crowdedTopology);
+    const boxes = laidOut.nodes.map((node) => ({
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: node.type === "person" ? 196 : 136,
+      height: node.type === "person" ? 112 : 96
+    }));
+    const overlaps: string[] = [];
+    for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < boxes.length; rightIndex += 1) {
+        const left = boxes[leftIndex]!;
+        const right = boxes[rightIndex]!;
+        if (left.x < right.x + right.width && left.x + left.width > right.x
+          && left.y < right.y + right.height && left.y + left.height > right.y) {
+          overlaps.push(`${left.id} / ${right.id}`);
+        }
+      }
+    }
+
+    expect(overlaps).toEqual([]);
+  });
+
+  it("keeps a cousin outside another cousin's marriage corridor", async () => {
+    const personNode = (index: number): TreeProjectionTopology["nodes"][number] => ({
+      id: `person:p${index}`,
+      kind: "person",
+      personId: `p${index}`,
+      display: { displayName: `人物${index}`, birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: "blood" }
+    });
+    const marriageNode = (index: number): TreeProjectionTopology["nodes"][number] => ({
+      id: `marriage:u${index}`,
+      kind: "union",
+      unionId: `marriage:u${index}`,
+      display: { kind: "marriage", marriageStatus: "active", marriageStart: null, marriageEnd: null, warnings: [] }
+    });
+    const childEdge = (union: number, person: number): TreeProjectionTopology["edges"][number] => ({
+      id: `child:u${union}:p${person}`,
+      source: `marriage:u${union}`,
+      target: `person:p${person}`,
+      kind: "unionChild",
+      marriageStatus: "active"
+    });
+    const parentEdge = (person: number, union: number): TreeProjectionTopology["edges"][number] => ({
+      id: `parent:p${person}:u${union}`,
+      source: `person:p${person}`,
+      target: `marriage:u${union}`,
+      kind: "parentUnion",
+      marriageStatus: "active"
+    });
+    const cousinTopology: TreeProjectionTopology = {
+      key: "cousin-beside-marriage",
+      nodes: [
+        ...Array.from({ length: 25 }, (_, index) => personNode(index)),
+        ...Array.from({ length: 9 }, (_, index) => marriageNode(index))
+      ],
+      edges: [
+        childEdge(1, 6), childEdge(2, 9), childEdge(2, 22), childEdge(3, 4), childEdge(3, 18), childEdge(4, 17),
+        childEdge(6, 2), childEdge(6, 19), childEdge(7, 12), childEdge(7, 13), childEdge(8, 3), childEdge(8, 7), childEdge(8, 8), childEdge(8, 14), childEdge(8, 15),
+        parentEdge(0, 7), parentEdge(1, 6), parentEdge(3, 6), parentEdge(5, 1), parentEdge(6, 3), parentEdge(7, 1), parentEdge(8, 7),
+        parentEdge(9, 0), parentEdge(10, 0), parentEdge(11, 5), parentEdge(13, 5), parentEdge(14, 4), parentEdge(15, 2), parentEdge(16, 2),
+        parentEdge(20, 8), parentEdge(21, 8), parentEdge(23, 4), parentEdge(24, 3)
+      ]
+    };
+
+    const laidOut = await layoutWithElk(cousinTopology);
+    const boxes = new Map(laidOut.nodes.map((node) => [node.id, {
+      x: node.position.x,
+      y: node.position.y,
+      width: node.type === "person" ? 196 : 136,
+      height: node.type === "person" ? 112 : 96
+    }]));
+    const union = boxes.get("marriage:u3")!;
+    const keke = boxes.get("person:p24")!;
+    const cousin = boxes.get("person:p17")!;
+    const centerX = (box: { x: number; width: number }) => box.x + box.width / 2;
+    const corridorLeft = Math.min(centerX(union), centerX(keke));
+    const corridorRight = Math.max(centerX(union), centerX(keke));
+
+    expect(centerX(cousin) < corridorLeft || centerX(cousin) > corridorRight).toBe(true);
+    expect(union.y + union.height / 2).toBe(keke.y + keke.height / 2);
+    const allBoxes = [...boxes.entries()];
+    const overlaps = allBoxes.flatMap(([leftId, left], leftIndex) => allBoxes.slice(leftIndex + 1).flatMap(([rightId, right]) => (
+      left.x < right.x + right.width && left.x + left.width > right.x
+      && left.y < right.y + right.height && left.y + left.height > right.y
+        ? [`${leftId} / ${rightId}`]
+        : []
+    )));
+    expect(overlaps).toEqual([]);
+  });
 });
 
 describe("FamilyTreeCanvas", () => {
@@ -154,6 +268,35 @@ describe("FamilyTreeCanvas", () => {
     render(<FamilyTreeCanvas projection={unresolved} />);
 
     expect(await screen.findByRole("group", { name: "家庭联合：待分配家庭" })).toHaveTextContent("子女归属待确认");
+  });
+
+  it("describes an incomplete parent record without implying marital status", async () => {
+    const incomplete: TreeProjection = {
+      topology: {
+        key: "one-recorded-parent",
+        nodes: [
+          topology.nodes[0]!,
+          {
+            id: "single:parent-a",
+            kind: "union",
+            unionId: "single:parent-a",
+            display: { kind: "singleParent", marriageStatus: null, marriageStart: null, marriageEnd: null, warnings: [] }
+          },
+          topology.nodes[3]!
+        ],
+        edges: [
+          { id: "single:parent", source: "person:parent-a", target: "single:parent-a", kind: "parentUnion", marriageStatus: null },
+          { id: "single:child", source: "single:parent-a", target: "person:child", kind: "unionChild", marriageStatus: null }
+        ]
+      },
+      viewpointId: null,
+      labels: {}
+    };
+
+    render(<FamilyTreeCanvas projection={incomplete} />);
+
+    expect(await screen.findByRole("group", { name: "家庭联合：仅录入一位父母" })).toBeVisible();
+    expect(screen.queryByText("单亲家庭")).not.toBeInTheDocument();
   });
 });
 

@@ -436,7 +436,7 @@ describe("FamilyRelationsPanel", () => {
       onChanged={vi.fn()}
       onRequestQuickCreate={onRequestQuickCreate}
     />);
-    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
     const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): void };
     void lateCreated.promise.then(request.onCreated);
 
@@ -616,7 +616,7 @@ describe("FamilyRelationsPanel", () => {
   it("returns a quick-created person to the pending child selection", async () => {
     const onRequestQuickCreate = vi.fn();
     renderPanel(detail(), undefined, onRequestQuickCreate);
-    fireEvent.click(screen.getByRole("button", { name: "快速新建子女" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
 
     expect(onRequestQuickCreate).toHaveBeenCalledTimes(1);
     const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): void };
@@ -624,6 +624,31 @@ describe("FamilyRelationsPanel", () => {
     act(() => request.onCreated(person("new-child", "新建子女")));
 
     expect(await screen.findByRole("checkbox", { name: "选择子女 新建子女" })).toBeChecked();
+  });
+
+  it("brings the mother quick-create form into view and focuses its name field", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+    const { api } = createPageApi();
+
+    try {
+      render(<PeoplePage
+        workspace={{ id: "workspace-1", name: "测试谱", directory: "opaque", originPersonId: current.id, lastOpenedAt: null, schemaVersion: 7 }}
+        api={api}
+        initialSelectedPersonId={current.id}
+      />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为母亲" }));
+
+      expect(screen.getByRole("heading", { name: "快速新建关系人物：母亲" })).toBeVisible();
+      await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveFocus());
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+    } finally {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    }
   });
 
   it("uses PeoplePage's existing staged PersonEditor for quick-create and returns the created ID", async () => {
@@ -634,7 +659,7 @@ describe("FamilyRelationsPanel", () => {
       initialSelectedPersonId={current.id}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
     expect(screen.getByRole("heading", { name: "快速新建关系人物：子女" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "新建子女" } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
@@ -672,7 +697,7 @@ describe("FamilyRelationsPanel", () => {
       onDataChanged={onDataChanged}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
@@ -723,7 +748,7 @@ describe("FamilyRelationsPanel", () => {
       onDataChanged={onDataChanged}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "快速新建子女" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));

@@ -387,7 +387,7 @@ export function FamilyRelationsPanel({
               </select>
             </label>
             <div className="button-row">
-              {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate(label, (created) => setParentSelections((current) => ({ ...current, [role]: created.id })))}>快速新建{label}</button>}
+              {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate(label, (created) => setParentSelections((current) => ({ ...current, [role]: created.id })))}>新建人物并设为{label}</button>}
               <button className="button primary-button" type="button" disabled={!parentSelections[role] || planning || staged.busy} onClick={() => void planAndStage([familyIntent(parentSelections[role], detail.person.id, role)])}>添加{label}并预览</button>
             </div>
           </>}
@@ -417,7 +417,7 @@ export function FamilyRelationsPanel({
           })}
         </div>
         <div className="button-row">
-          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("配偶", (created) => updateMarriage(marriageEvents[marriageEvents.length - 1]!.key, { spouseId: created.id }))}>快速新建配偶</button>}
+          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("配偶", (created) => updateMarriage(marriageEvents[marriageEvents.length - 1]!.key, { spouseId: created.id }))}>新建人物并设为配偶</button>}
           <button className="button secondary-button" type="button" onClick={() => setMarriageEvents((current) => [...current, emptyMarriageEvent(nextMarriageKey.current++)])}>新增婚姻事件</button>
           <button className="button primary-button" type="button" disabled={staged.busy} onClick={stageMarriages}>生成婚姻关系预览</button>
         </div>
@@ -448,7 +448,7 @@ export function FamilyRelationsPanel({
           </label>)}
         </div>
         <div className="button-row">
-          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("子女", (created) => setSelectedChildren((current) => new Set(current).add(created.id)))}>快速新建子女</button>}
+          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("子女", (created) => setSelectedChildren((current) => new Set(current).add(created.id)))}>新建人物并设为子女</button>}
           <button
             className="button primary-button"
             type="button"
