@@ -35,6 +35,8 @@
 .chat-answer.needs_disambiguation .answer-status { color: #674e09; background: #fff0bd; }
 .chat-answer.insufficient .answer-status { color: #7a2d16; background: #f8ddd3; }
 .answer-viewpoint { color: var(--text-secondary); font-weight: 700; }
+.answer-kinship-summary { display: grid; gap: 0.35rem; padding: 0.75rem; color: #1e3a5f; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; }
+.answer-kinship-summary p { margin: 0; }
 .candidate-section, .missing-facts { display: grid; gap: 0.55rem; padding-top: 0.35rem; border-top: 1px solid var(--border); }
 .candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 0.65rem; }
 .candidate-card { display: grid; gap: 0.4rem; min-width: 0; padding: 0.75rem; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; }
@@ -48,6 +50,10 @@
 .search-results ul, .settings-list { display: grid; gap: 0.6rem; padding: 0; list-style: none; }
 .search-results li button, .list-row { display: grid; width: 100%; gap: 0.2rem; padding: 0.75rem; color: var(--text-primary); text-align: left; background: #fff; border: 1px solid var(--border); border-radius: 8px; }
 .search-results span, .list-row span { color: var(--text-secondary); }
+.search-person-heading { display: flex; flex-wrap: wrap; gap: 0.45rem 0.75rem; align-items: baseline; justify-content: space-between; color: var(--text-primary) !important; }
+.search-person-heading small { color: var(--text-secondary); font-size: 0.8rem; font-weight: 700; }
+.search-person-family { font-size: 0.92rem; }
+.search-person-aliases { font-size: 0.82rem; }
 .search-bar, .segmented-nav { display: flex; flex-wrap: wrap; gap: 0.55rem; }
 .search-bar .field-control { flex: 1 1 220px; }
 .wiki-layout { display: grid; grid-template-columns: minmax(210px, 0.7fr) minmax(0, 1.3fr); gap: 1rem; align-items: start; }

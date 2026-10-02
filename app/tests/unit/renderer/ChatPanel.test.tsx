@@ -35,13 +35,42 @@ describe("controlled chat UI", () => {
       evidence: [{ id: "source-1", title: "张氏家谱原件" }], candidates: [], missingFacts: [],
       matchedPersonIds: ["father", "child"], sourceIds: ["source-1"],
       relationship: {
-        primaryTerm: "女儿", reverseTerm: "父亲", description: "父女关系", ruleVersion: "v1", alternatives: [], uncertainty: [],
+        primaryTerm: "女儿", formalTerm: "女儿", regionalTerm: null, displayTerm: "女儿", pathDescription: "女儿",
+        formalRuleId: "direct-daughter", locale: "zh-CN-henan-gongyi", regionalRuleVersion: "zh-CN-henan-gongyi-v1",
+        reverseTerm: "父亲", description: "父女关系", ruleVersion: "v1", alternatives: [], uncertainty: [],
         signature: { steps: ["child"], generationDelta: 1, lineageSide: "self", bloodAffinity: "blood", viewpointGender: "male", targetGender: "female", relativeAgeOrder: "unknown", pathPersonIds: ["father", "child"], pathRelationIds: ["edge-1"] }
       }, toolTrace: [{ name: "calculate_relationship", arguments: { viewpointId: "father", targetId: "child" } }]
     }} />);
     expect(screen.getByText("回答视角：张国强")).toBeVisible();
+    expect(screen.getByText("你对该人物的称呼：女儿")).toBeVisible();
+    expect(screen.queryByText(/正式称谓：/u)).not.toBeInTheDocument();
     expect(screen.getByText("张氏家谱原件")).toBeVisible();
     expect(screen.getByText("张国强 → 张敏")).toBeVisible();
+  });
+
+  it("renders the regional, formal and path relationship summary", () => {
+    render(<ChatPanel answer={{
+      status: "answered",
+      conclusion: "按巩义的常用叫法，李小梅是你的“姨奶奶”。",
+      answer: "按巩义的常用叫法，李小梅是你的“姨奶奶”。",
+      viewpoint: { id: "viewpoint", displayName: "严谨" },
+      relationshipPath: [{ personId: "viewpoint", displayName: "严谨" }, { personId: "target", displayName: "李小梅" }],
+      evidence: [], candidates: [], missingFacts: [], matchedPersonIds: ["viewpoint", "target"], sourceIds: [],
+      relationship: {
+        primaryTerm: "姨祖母", formalTerm: "姨祖母", regionalTerm: "姨奶奶", displayTerm: "姨奶奶",
+        pathDescription: "祖母的姐姐", formalRuleId: "paternal-grandmothers-older-sister",
+        locale: "zh-CN-henan-gongyi", regionalRuleVersion: "zh-CN-henan-gongyi-v1",
+        reverseTerm: "甥孙女", description: "关系路径", ruleVersion: "mandarin-v1", alternatives: [], uncertainty: [],
+        signature: { steps: ["father", "mother", "olderSister"], generationDelta: -2, lineageSide: "paternal", bloodAffinity: "blood", viewpointGender: "female", targetGender: "female", relativeAgeOrder: "older", pathPersonIds: ["viewpoint", "target"], pathRelationIds: ["edge"] }
+      },
+      toolTrace: [{ name: "calculate_relationship", arguments: { viewpointId: "viewpoint", targetId: "target" } }]
+    }} />);
+
+    const summary = screen.getByLabelText("称谓说明");
+    expect(summary).toHaveTextContent("你对该人物的称呼：姨奶奶");
+    expect(summary).toHaveTextContent("正式称谓：姨祖母");
+    expect(summary).toHaveTextContent("关系说明：祖母的姐姐");
+    expect(summary).toHaveTextContent("地区规则：河南郑州巩义");
   });
 
   it("shows disambiguation candidates without presenting a guessed answer", () => {

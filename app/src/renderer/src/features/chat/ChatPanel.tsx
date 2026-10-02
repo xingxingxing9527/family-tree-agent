@@ -88,6 +88,12 @@ export function ChatPanel({ answer = null, onQuickAction = () => undefined, onSe
           <div className="answer-heading"><h3>结论</h3>{structured && <span className="answer-status">{structured.status === "needs_disambiguation" ? "需要确认人物" : structured.status === "insufficient" ? "资料不足" : "已核对"}</span>}</div>
           <p>{conclusion}</p>
           {structured?.viewpoint && <p className="answer-viewpoint">回答视角：{structured.viewpoint.displayName}</p>}
+          {structured?.relationship?.displayTerm && <section className="answer-kinship-summary" aria-label="称谓说明">
+            <p>你对该人物的称呼：{structured.relationship.displayTerm}</p>
+            {structured.relationship.regionalTerm && structured.relationship.formalTerm && <p>正式称谓：{structured.relationship.formalTerm}</p>}
+            {structured.relationship.pathDescription && <p>关系说明：{structured.relationship.pathDescription}</p>}
+            {structured.relationship.regionalTerm && <p>地区规则：{structured.relationship.locale === "zh-CN-henan-gongyi" ? "河南郑州巩义" : structured.relationship.locale}</p>}
+          </section>}
           {(structured?.candidates ?? []).length ? <section className="candidate-section"><h3>需要确认人物</h3><div className="candidate-grid">{structured!.candidates.map((candidate) => {
             const parent = candidate.parentHints[0];
             const detail = [genderLabel(candidate.gender), candidate.birth ? `${candidate.birth.year} 年` : null, parent ? `${parent.role === "father" ? "父亲" : "母亲"}：${parent.displayName}` : null].filter(Boolean).join(" · ");

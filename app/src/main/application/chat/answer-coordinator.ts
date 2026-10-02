@@ -19,6 +19,28 @@ const MAX_CALLS_PER_RESPONSE = 4;
 const MAX_TOTAL_CALLS = 8;
 const MAX_CONTEXT_CHARS = 64_000;
 const childrenCountQuestion = /(?:几个|多少(?:个)?|有无)(?:孩子|子女)|(?:孩子|子女)(?:有几个|有多少)/u;
+const directRelationshipQuestion = /^(?:(?:我|咱|当前视角人物)[^，,；;。]*?(?:和|与)[^，,；;。]*?(?:是什么关系|什么关系)|(?:我|咱|当前视角人物)[^，,；;。]*?(?:怎么|如何|该怎么|该如何)[^，,；;。]*?(?:称呼|叫)[^，,；;。？?！!]*|[^，,；;。]*?是我的什么(?:人|关系)?)[？?。！!]*$/u;
+
+export function formatDirectRelationshipConclusion(
+  targetName: string,
+  relationship: RelationshipResultDto
+): string {
+  const displayTerm = relationship.displayTerm ?? relationship.formalTerm ?? relationship.primaryTerm;
+  if (!displayTerm) return "现有关系资料不足，暂时无法给出可靠称谓。";
+  const pronoun = relationship.signature.targetGender === "female"
+    ? "她"
+    : relationship.signature.targetGender === "male" ? "他" : "该人物";
+  if (relationship.regionalTerm && relationship.formalTerm) {
+    const path = relationship.pathDescription
+      ? `，${pronoun}是你${relationship.pathDescription}`
+      : "";
+    return `按巩义的常用叫法，${targetName}是你的“${displayTerm}”。正式称谓是“${relationship.formalTerm}”${path}。`;
+  }
+  const path = relationship.pathDescription && relationship.pathDescription !== displayTerm
+    ? `${pronoun}是你${relationship.pathDescription}。`
+    : "";
+  return `${targetName}是你的“${displayTerm}”。${path}`;
+}
 
 interface AskInput { question: string; viewpointId: string; selectedPersonId: string | null; }
 
@@ -109,9 +131,10 @@ export class AnswerCoordinator {
       if (modelTurn.toolCalls.length === 0) {
         if (modelTurn.answer === null) throw new ModelProtocolError("The model returned neither an answer nor a tool call");
         if (toolResults.length === 0) throw new ModelProtocolError("A terminal answer requires deterministic tool evidence");
-        const conclusion = modelTurn.answer.trim();
-        if (!conclusion) throw new ModelProtocolError("The model returned an empty terminal answer");
+        const modelConclusion = modelTurn.answer.trim();
+        if (!modelConclusion) throw new ModelProtocolError("The model returned an empty terminal answer");
         for (const sourceId of relationship ? this.registry.sourceIdsForFacts(relationship.signature.pathRelationIds) : []) sources.add(sourceId);
+        const relationshipPath = relationship ? this.relationshipPath(relationship) : [];
         if (relationship && (relationship.primaryTerm === null || relationship.uncertainty.length > 0)) {
           return this.answer({
             status: "insufficient",
@@ -122,10 +145,14 @@ export class AnswerCoordinator {
             evidence: this.registry.resolveSources([...sources]),
             relationship,
             toolTrace,
-            relationshipPath: this.relationshipPath(relationship),
+            relationshipPath,
             missingFacts: [{ code: "relationship_conflict", message: relationship.uncertainty.join("；") || "关系称谓无法确定", personId: input.selectedPersonId }]
           });
         }
+        const targetName = relationshipPath.at(-1)?.displayName ?? input.selectedPersonId ?? "该人物";
+        const conclusion = relationship && directRelationshipQuestion.test(input.question.trim())
+          ? formatDirectRelationshipConclusion(targetName, relationship)
+          : modelConclusion;
         return this.answer({
           status: "answered",
           conclusion,
@@ -135,7 +162,7 @@ export class AnswerCoordinator {
           evidence: this.registry.resolveSources([...sources]),
           relationship,
           toolTrace,
-          relationshipPath: relationship ? this.relationshipPath(relationship) : []
+          relationshipPath
         });
       }
       if (modelTurn.answer !== null) throw new ModelProtocolError("The model returned an answer before completing tool calls");
