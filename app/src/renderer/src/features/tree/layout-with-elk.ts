@@ -1,6 +1,7 @@
 import ELK from "elkjs/lib/elk.bundled.js";
 import type { Edge, Node } from "@xyflow/react";
 import type {
+  KinshipDisplayLabelDto,
   TreeProjectionEdgeDto,
   TreeProjectionNodeDto,
   TreeProjectionTopologyDto
@@ -8,7 +9,7 @@ import type {
 
 export interface TreeFlowNodeData extends Record<string, unknown> {
   node: TreeProjectionNodeDto;
-  relationshipLabel: string | null;
+  relationshipLabel: KinshipDisplayLabelDto | null;
 }
 
 export interface TreeFlowEdgeData extends Record<string, unknown> {
@@ -27,7 +28,7 @@ export interface LaidOutTree {
 const elk = new ELK();
 
 const NODE_SIZE = {
-  person: { width: 196, height: 112 },
+  person: { width: 196, height: 132 },
   union: { width: 136, height: 96 }
 } as const;
 
@@ -45,10 +46,22 @@ interface PositionedBlock {
   members: Array<{ node: PositionedNode; offset: number }>;
 }
 
+interface PositionedBlockGroup {
+  anchorX: number;
+  key: string;
+  blocks: PositionedBlock[];
+}
+
 function separateHorizontalOverlaps(topology: TreeProjectionTopologyDto, positions: Map<string, { x: number; y: number }>): void {
   const nodesById = new Map(topology.nodes.map((node) => [node.id, node]));
   const marriageNeighbours = new Map<string, Set<string>>();
+  const childFamilies = new Map<string, Set<string>>();
   for (const edge of topology.edges) {
+    if (edge.kind === "unionChild") {
+      const families = childFamilies.get(edge.target) ?? new Set<string>();
+      families.add(edge.source);
+      childFamilies.set(edge.target, families);
+    }
     const union = nodesById.get(edge.target);
     if (edge.kind !== "parentUnion" || union?.kind !== "union" || union.display.kind === "singleParent") continue;
     if (!marriageNeighbours.has(edge.source)) marriageNeighbours.set(edge.source, new Set());
@@ -104,9 +117,28 @@ function separateHorizontalOverlaps(topology: TreeProjectionTopologyDto, positio
       });
       blocks.push({ originalX: Math.min(...component.map((member) => member.x)), width, members });
     }
-    blocks.sort((left, right) => left.originalX - right.originalX || left.members[0]!.node.id.localeCompare(right.members[0]!.node.id));
-    let cursor = Number.NEGATIVE_INFINITY;
+    const familyGroups = new Map<string, PositionedBlockGroup>();
+    const looseGroups: PositionedBlockGroup[] = [];
     for (const block of blocks) {
+      const familyIds = new Set(block.members.flatMap(({ node }) => [...(childFamilies.get(node.id) ?? [])]));
+      if (familyIds.size !== 1) {
+        looseGroups.push({ anchorX: block.originalX, key: `loose:${block.members[0]!.node.id}`, blocks: [block] });
+        continue;
+      }
+      const familyId = [...familyIds][0]!;
+      const group = familyGroups.get(familyId) ?? {
+        anchorX: positions.get(familyId)?.x ?? block.originalX,
+        key: `family:${familyId}`,
+        blocks: []
+      };
+      group.blocks.push(block);
+      familyGroups.set(familyId, group);
+    }
+    const orderedBlocks = [...familyGroups.values(), ...looseGroups]
+      .sort((left, right) => left.anchorX - right.anchorX || left.key.localeCompare(right.key))
+      .flatMap((group) => group.blocks.sort((left, right) => left.originalX - right.originalX || left.members[0]!.node.id.localeCompare(right.members[0]!.node.id)));
+    let cursor = Number.NEGATIVE_INFINITY;
+    for (const block of orderedBlocks) {
       const blockX = Math.max(block.originalX, cursor + minimumGap);
       for (const member of block.members) member.node.x = blockX + member.offset;
       cursor = blockX + block.width;
@@ -143,7 +175,7 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
     const parentPositions = parentIds.map((id) => positions.get(id)).filter((position): position is { x: number; y: number } => Boolean(position));
     const unionPosition = positions.get(union.id);
     if (!unionPosition || parentPositions.length === 0) continue;
-    unionPosition.y = parentPositions.reduce((sum, position) => sum + position.y + 56, 0) / parentPositions.length - 48;
+    unionPosition.y = parentPositions.reduce((sum, position) => sum + position.y + 66, 0) / parentPositions.length - 48;
     unionPosition.x = parentPositions.reduce((sum, position) => sum + position.x + 98, 0) / parentPositions.length - 68;
     if (parentPositions.length === 2) {
       const orderedParents = parentPositions.sort((left, right) => left.x - right.x);

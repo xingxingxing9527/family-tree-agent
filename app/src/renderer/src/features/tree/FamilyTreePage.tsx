@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { FamilyAgentApi, PersonListItem, QueryApi, TreeProjectionDto, TreeViewDto, WorkspaceLineageReadModel } from "../../../../shared/contracts";
 import { useViewpoint } from "../../app/ViewpointContext";
+import { formatApproximateAge } from "../people/format-approximate-age";
 import { FamilyTreeCanvas, type TreeSelection } from "./FamilyTreeCanvas";
 import { TreeContextDrawer } from "./TreeContextDrawer";
 
@@ -103,6 +104,11 @@ export function FamilyTreePage({
   const requestId = useRef(0);
   const lineageSubject = useRef<string | null>(null);
   const validIds = useMemo(() => new Set(people.map((person) => person.id)), [people]);
+  const ageLabels = useMemo(() => people.reduce<Record<string, string>>((labels, person) => {
+    const label = formatApproximateAge(person.birth, person.death);
+    if (label) labels[person.id] = label;
+    return labels;
+  }, {}), [people]);
   const subject = useMemo(() => people.find((person) => person.id === subjectId) ?? null, [people, subjectId]);
   const lineageChoices = useMemo<LineageChoice[]>(() => lineages.flatMap((lineage) => {
     const membership = lineage.memberships.find((entry) => entry.personId === subjectId);
@@ -207,10 +213,11 @@ export function FamilyTreePage({
     {!loading && !missingSubject && !unresolvedLineage && !error && projection && <p className="tree-scope-description">{describeScope(projection, people, lineages)}</p>}
     {!loading && !missingSubject && !unresolvedLineage && !error && projection?.topology.nodes.length === 0 && <div className="tree-status">当前范围还没有可显示的人物关系。</div>}
     {!loading && !missingSubject && !unresolvedLineage && !error && projection && projection.topology.nodes.length > 0 && <div className={`family-tree-workspace${selection && interactiveApi ? " has-drawer" : ""}`}>
-      <FamilyTreeCanvas projection={projection} selection={selection} onSelectionChange={setSelection} />
+      <FamilyTreeCanvas projection={projection} ageLabels={ageLabels} selection={selection} onSelectionChange={setSelection} />
       {selection && interactiveApi && <TreeContextDrawer
         selection={selection}
         api={interactiveApi}
+        relationshipLabel={selection.kind === "person" ? projection.labels[selection.personId] ?? null : null}
         onClose={() => setSelection(null)}
         onDataChanged={dataChanged}
         onUseAsViewpoint={setViewpointId}

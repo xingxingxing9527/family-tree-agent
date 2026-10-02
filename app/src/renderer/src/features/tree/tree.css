@@ -87,7 +87,7 @@
 .tree-person-node {
   box-sizing: border-box;
   width: 196px;
-  min-height: 112px;
+  min-height: 132px;
   display: grid;
   gap: 4px;
   padding: 14px;
@@ -198,6 +198,26 @@
 .tree-kinship-label {
   color: #1d4ed8;
   font-weight: 700;
+}
+
+.tree-kinship-formal {
+  color: #475569;
+  font-size: 12px;
+}
+
+.tree-kinship-summary {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 12px;
+  color: #1e3a5f;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+}
+
+.tree-kinship-summary p {
+  margin: 0;
 }
 
 .tree-life-years,

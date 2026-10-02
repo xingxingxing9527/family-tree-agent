@@ -11,6 +11,7 @@ const nodeTypes = { person: PersonNode, familyUnion: FamilyUnionNode } satisfies
 
 export interface FamilyTreeCanvasProps {
   projection: TreeProjectionDto;
+  ageLabels?: Readonly<Record<string, string>>;
   layout?: typeof layoutWithElk;
   selection?: TreeSelection | null;
   onSelectionChange?(selection: TreeSelection | null): void;
@@ -60,7 +61,7 @@ function edgeIsSelected(edge: TreeFlowEdge, selection: TreeSelection | null): bo
   return false;
 }
 
-export function FamilyTreeCanvas({ projection, layout = layoutWithElk, selection = null, onSelectionChange }: FamilyTreeCanvasProps): JSX.Element {
+export function FamilyTreeCanvas({ projection, ageLabels = {}, layout = layoutWithElk, selection = null, onSelectionChange }: FamilyTreeCanvasProps): JSX.Element {
   const [laidOut, setLaidOut] = useState<LaidOutTree | null>(null);
   const [layoutError, setLayoutError] = useState(false);
 
@@ -83,11 +84,14 @@ export function FamilyTreeCanvas({ projection, layout = layoutWithElk, selection
       selected: nodeIsSelected(node, selection),
       data: {
         ...node.data,
-        ...(projected.kind === "person" ? { relationshipLabel: projection.labels[projected.personId] ?? null } : {}),
+        ...(projected.kind === "person" ? {
+          relationshipLabel: projection.labels[projected.personId] ?? null,
+          ageLabel: ageLabels[projected.personId] ?? null
+        } : {}),
         onActivate: activate
       }
     };
-  }), [laidOut, onSelectionChange, projection.labels, selection]);
+  }), [ageLabels, laidOut, onSelectionChange, projection.labels, selection]);
   const edges = useMemo(() => (laidOut?.edges ?? []).map((edge) => ({
     ...edge,
     selected: edgeIsSelected(edge, selection)

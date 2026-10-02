@@ -3,10 +3,11 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FamilyAgentApi, PersonDetailReadModel, PersonListItem, TreeProjectionDto, TreeViewDto, WorkspaceLineageReadModel } from "../../../src/shared/contracts";
+import type { FamilyAgentApi, KinshipDisplayLabelDto, PersonDetailReadModel, PersonListItem, TreeProjectionDto, TreeViewDto, WorkspaceLineageReadModel } from "../../../src/shared/contracts";
 import { TreeProjectionService } from "../../../src/main/domain/projection/tree-projection-service";
 import { ViewpointProvider } from "../../../src/renderer/src/app/ViewpointContext";
 import { FamilyTreePage, normalizeTreeSelection } from "../../../src/renderer/src/features/tree/FamilyTreePage";
+import { TreeContextDrawer } from "../../../src/renderer/src/features/tree/TreeContextDrawer";
 
 vi.mock("@xyflow/react", async () => {
   const ReactModule = await import("react");
@@ -39,7 +40,10 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 const person = (id: string, displayName: string): PersonListItem => ({
   id,
@@ -143,6 +147,119 @@ describe("FamilyTreePage context drawer", () => {
     expect(normalizeTreeSelection({ kind: "person", personId: "a" }, projection)).toEqual({ kind: "person", personId: "a" });
     expect(normalizeTreeSelection({ kind: "person", personId: "removed" }, projection)).toBeNull();
     expect(normalizeTreeSelection({ kind: "marriage", unionId: "deleted", marriageId: "deleted", parentIds: ["a", "b"] }, projection)).toBeNull();
+  });
+
+  it("explains the selected person's regional term in the drawer and hides it without a label", async () => {
+    const selected = person("selected", "李小梅");
+    const detail: PersonDetailReadModel = { person: selected, aliases: [], parents: [], children: [], marriages: [] };
+    const api = {
+      people: {
+        get: vi.fn().mockResolvedValue({ ok: true, value: detail }),
+        list: vi.fn().mockResolvedValue({ ok: true, value: [selected] }),
+        save: vi.fn(),
+        update: vi.fn(),
+        getChildrenCountStatus: vi.fn().mockResolvedValue({ ok: true, value: { count: 0, completeness: "partial" } })
+      },
+      relations: { planParentCompletion: vi.fn() },
+      media: { listForPerson: vi.fn().mockResolvedValue({ ok: true, value: [] }) },
+      mutations: { stage: vi.fn(), confirm: vi.fn(), revise: vi.fn() }
+    } as unknown as FamilyAgentApi;
+    const relationshipLabel: KinshipDisplayLabelDto = {
+      formalTerm: "姨祖母",
+      regionalTerm: "姨奶奶",
+      displayTerm: "姨奶奶",
+      pathDescription: "祖母的姐姐",
+      formalRuleId: "paternal-grandmothers-older-sister",
+      locale: "zh-CN-henan-gongyi",
+      regionalRuleVersion: "zh-CN-henan-gongyi-v1"
+    };
+    const rendered = render(<TreeContextDrawer
+      selection={{ kind: "person", personId: selected.id }}
+      api={api}
+      relationshipLabel={relationshipLabel}
+      onClose={vi.fn()}
+      onDataChanged={vi.fn()}
+    />);
+
+    expect(screen.getByText("你对该人物的称呼：姨奶奶")).toBeVisible();
+    expect(screen.getByText("正式称谓：姨祖母")).toBeVisible();
+    expect(screen.getByText("关系说明：祖母的姐姐")).toBeVisible();
+    expect(screen.getByText("地区规则：河南郑州巩义")).toBeVisible();
+
+    rendered.rerender(<TreeContextDrawer
+      selection={{ kind: "person", personId: selected.id }}
+      api={api}
+      relationshipLabel={null}
+      onClose={vi.fn()}
+      onDataChanged={vi.fn()}
+    />);
+    expect(screen.queryByLabelText("关系称谓说明")).not.toBeInTheDocument();
+  });
+
+  it("keeps the relationship editor alive while quick-creating a spouse so the marriage preview can open", async () => {
+    const owner = person("owner", "甲");
+    const spouse = person("spouse", "乙");
+    const ownerDetail: PersonDetailReadModel = { person: owner, aliases: [], parents: [], children: [], marriages: [] };
+    const spouseDetail: PersonDetailReadModel = { person: spouse, aliases: [], parents: [], children: [], marriages: [] };
+    const stage = vi.fn(async ({ intents }: { intents: Array<{ type: string }> }) => {
+      const createsPerson = intents[0]?.type === "person.create";
+      return {
+        ok: true as const,
+        value: {
+          id: createsPerson ? "person-draft" : "marriage-draft",
+          workspaceId: "workspace",
+          version: 1,
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          expectedVersions: {},
+          canConfirm: true,
+          issues: [],
+          changes: [{
+            id: createsPerson ? "person-change" : "marriage-change",
+            disposition: "create" as const,
+            entityType: createsPerson ? "person" as const : "marriage" as const,
+            entityId: createsPerson ? spouse.id : "marriage-new",
+            summary: createsPerson ? "创建人物 乙" : "创建甲与乙的婚姻",
+            fieldChanges: [],
+            originKind: "explicit" as const,
+            selectedByDefault: true,
+            dependsOnChangeIds: []
+          }]
+        }
+      };
+    });
+    const confirm = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { draftId: "person-draft", operationGroupId: "operation-person", changedEntityIds: [spouse.id] }
+    });
+    const api = {
+      people: {
+        list: vi.fn().mockResolvedValue({ ok: true, value: [owner] }),
+        get: vi.fn(async ({ personId }: { personId: string }) => ({ ok: true as const, value: personId === spouse.id ? spouseDetail : ownerDetail })),
+        save: vi.fn(), update: vi.fn(),
+        getChildrenCountStatus: vi.fn().mockResolvedValue({ ok: true, value: { count: 0, completeness: "partial" } })
+      },
+      relations: { planParentCompletion: vi.fn() },
+      media: { listForPerson: vi.fn().mockResolvedValue({ ok: true, value: [] }) },
+      mutations: { stage, confirm, revise: vi.fn() }
+    } as unknown as FamilyAgentApi;
+
+    render(<TreeContextDrawer
+      selection={{ kind: "person", personId: owner.id }}
+      api={api}
+      onClose={vi.fn()}
+      onDataChanged={vi.fn()}
+    />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为配偶" }));
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: spouse.displayName } });
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
+
+    await waitFor(() => expect(stage).toHaveBeenCalledWith({ intents: [{
+      type: "marriage.add",
+      draft: expect.objectContaining({ spouseAId: owner.id, spouseBId: spouse.id, status: "active" })
+    }] }));
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
   });
 
   it("opens a real person detail, supports editing and quick relative creation, refreshes, and closes with Escape", async () => {
@@ -324,6 +441,32 @@ describe("FamilyTreePage scope controls", () => {
       />
     </ViewpointProvider>
   );
+
+  it("shows the approximate age calculated from each person's recorded year and month", async () => {
+    const now = new Date();
+    const datedPeople = people.map((entry) => entry.id === "subject"
+      ? {
+          ...entry,
+          birth: {
+            calendar: "solar" as const,
+            year: now.getFullYear() - 36,
+            month: now.getMonth() + 1,
+            day: null,
+            leapMonth: false,
+            precision: "month" as const
+          }
+        }
+      : entry);
+    const datedNames = Object.fromEntries(datedPeople.map(({ id, displayName }) => [id, displayName]));
+    const projectTree = vi.fn(async () => ({
+      ok: true as const,
+      value: projectionFor("full", datedPeople.map(({ id }) => id), datedNames)
+    }));
+
+    renderPage(projectTree, { people: datedPeople });
+
+    expect(await screen.findByRole("group", { name: "人物：闫明" })).toHaveTextContent("约 36 岁");
+  });
 
   it("renders the approved tab order and keeps scope subject independent from kinship viewpoint", async () => {
     const projectTree = vi.fn(async (input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; lineageId?: string }) => ({

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TreeProjection, TreeProjectionTopology } from "../../../src/main/domain/projection/tree-projection-service";
 import { layoutWithElk } from "../../../src/renderer/src/features/tree/layout-with-elk";
@@ -9,6 +9,7 @@ import { FamilyTreeCanvas } from "../../../src/renderer/src/features/tree/Family
 import { FamilyTreePage } from "../../../src/renderer/src/features/tree/FamilyTreePage";
 import { TreeProjectionService } from "../../../src/main/domain/projection/tree-projection-service";
 import { ViewpointProvider } from "../../../src/renderer/src/app/ViewpointContext";
+import type { KinshipDisplayLabelDto } from "../../../src/shared/contracts";
 
 vi.mock("@xyflow/react", async () => {
   const ReactModule = await import("react");
@@ -101,8 +102,8 @@ describe("family tree layout", () => {
     expect(laidOut.edges.filter((edge) => edge.id.startsWith("parent:")).every((edge) => edge.data?.visualRole === "marriage")).toBe(true);
     expect(laidOut.edges.find((edge) => edge.id === "child:one")?.data?.visualRole).toBe("descent");
     const centerY = (id: string, height: number) => position(id).y + height / 2;
-    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-a", 112));
-    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-b", 112));
+    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-a", 132));
+    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-b", 132));
   });
 
   it("keeps adjacent spouse families from overlapping after horizontal alignment", async () => {
@@ -134,7 +135,7 @@ describe("family tree layout", () => {
       x: node.position.x,
       y: node.position.y,
       width: node.type === "person" ? 196 : 136,
-      height: node.type === "person" ? 112 : 96
+      height: node.type === "person" ? 132 : 96
     }));
     const overlaps: string[] = [];
     for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
@@ -198,7 +199,7 @@ describe("family tree layout", () => {
       x: node.position.x,
       y: node.position.y,
       width: node.type === "person" ? 196 : 136,
-      height: node.type === "person" ? 112 : 96
+      height: node.type === "person" ? 132 : 96
     }]));
     const union = boxes.get("marriage:u3")!;
     const keke = boxes.get("person:p24")!;
@@ -218,10 +219,84 @@ describe("family tree layout", () => {
     )));
     expect(overlaps).toEqual([]);
   });
+
+  it("keeps sibling families' children in separate horizontal intervals", async () => {
+    const personNode = (index: number): TreeProjectionTopology["nodes"][number] => ({
+      id: `person:p${index}`,
+      kind: "person",
+      personId: `p${index}`,
+      display: { displayName: `人物${index}`, birthYear: null, deathYear: null, generation: null, generationMarker: null, lineageRole: null }
+    });
+    const unionNode = (index: number, kind: "marriage" | "coParents" = "marriage"): TreeProjectionTopology["nodes"][number] => ({
+      id: `union:u${index}`,
+      kind: "union",
+      unionId: `union:u${index}`,
+      display: { kind, marriageStatus: kind === "marriage" ? "active" : null, marriageStart: null, marriageEnd: null, warnings: [] }
+    });
+    const edge = (
+      kind: "parentUnion" | "unionChild",
+      source: string,
+      target: string,
+      index: number
+    ): TreeProjectionTopology["edges"][number] => ({
+      id: `${kind}:${index}`,
+      source,
+      target,
+      kind,
+      marriageStatus: target === "union:u10" || source === "union:u10" ? null : "active"
+    });
+    const childPairs = [
+      [1, 0], [1, 16], [1, 17], [2, 8], [3, 12], [3, 29], [4, 6], [4, 24], [5, 23],
+      [7, 3], [7, 25], [8, 18], [8, 19], [9, 5], [9, 9], [9, 10], [9, 20], [9, 21], [10, 1], [10, 11]
+    ] as const;
+    const parentPairs = [
+      [1, 8], [2, 7], [4, 1], [5, 7], [7, 2], [8, 4], [9, 2], [10, 8], [11, 1], [12, 0],
+      [13, 10], [14, 0], [15, 6], [19, 6], [20, 5], [21, 3], [22, 3], [26, 9], [27, 9], [28, 10], [30, 5], [31, 4]
+    ] as const;
+    let edgeIndex = 0;
+    const interleavedTopology: TreeProjectionTopology = {
+      key: "sibling-family-child-intervals",
+      nodes: [
+        ...Array.from({ length: 32 }, (_, index) => personNode(index)),
+        ...Array.from({ length: 11 }, (_, index) => unionNode(index, index === 10 ? "coParents" : "marriage"))
+      ],
+      edges: [
+        ...childPairs.map(([union, person]) => edge("unionChild", `union:u${union}`, `person:p${person}`, edgeIndex++)),
+        ...parentPairs.map(([person, union]) => edge("parentUnion", `person:p${person}`, `union:u${union}`, edgeIndex++))
+      ]
+    };
+
+    const laidOut = await layoutWithElk(interleavedTopology);
+    const centerX = (id: string): number => {
+      const node = laidOut.nodes.find((candidate) => candidate.id === id)!;
+      return node.position.x + 98;
+    };
+    const interval = (ids: string[]): [number, number] => {
+      const centers = ids.map(centerX);
+      return [Math.min(...centers), Math.max(...centers)];
+    };
+    const firstFamily = interval(["person:p0", "person:p16", "person:p17"]);
+    const secondFamily = interval(["person:p18", "person:p19"]);
+
+    expect(firstFamily[1] < secondFamily[0] || secondFamily[1] < firstFamily[0]).toBe(true);
+  });
 });
 
 describe("FamilyTreeCanvas", () => {
-  const projection = (viewpointId: string, label: string): TreeProjection => ({
+  const label = (
+    formalTerm: string,
+    regionalTerm: string | null = null,
+    pathDescription = formalTerm
+  ): KinshipDisplayLabelDto => ({
+    formalTerm,
+    regionalTerm,
+    displayTerm: regionalTerm ?? formalTerm,
+    pathDescription,
+    formalRuleId: "test-rule",
+    locale: "zh-CN-henan-gongyi",
+    regionalRuleVersion: "zh-CN-henan-gongyi-v1"
+  });
+  const projection = (viewpointId: string, relationship: KinshipDisplayLabelDto): TreeProjection => ({
     topology: {
       ...topology,
       nodes: topology.nodes.map((node) => node.kind === "person" && node.personId === "parent-a"
@@ -235,11 +310,11 @@ describe("FamilyTreeCanvas", () => {
         : node)
     },
     viewpointId,
-    labels: { "parent-a": label, "parent-b": "母亲", child: "本人" }
+    labels: { "parent-a": relationship, "parent-b": label("母亲"), child: label("本人") }
   });
 
   it("renders high-contrast person cards and an ended marriage without duplicating people", async () => {
-    render(<FamilyTreeCanvas projection={projection("child", "父亲")} />);
+    render(<FamilyTreeCanvas projection={projection("child", label("父亲"))} ageLabels={{ "parent-a": "约 66 岁" }} />);
 
     const parentCard = await screen.findByRole("group", { name: "人物：甲" });
     expect(screen.getAllByText("甲")).toHaveLength(1);
@@ -249,16 +324,29 @@ describe("FamilyTreeCanvas", () => {
     expect(parentCard).toHaveTextContent("本层子女");
     expect(screen.getByRole("group", { name: "人物：乙" })).toHaveTextContent("配偶");
     expect(screen.getByText("第 1 代（系统推导）")).toBeVisible();
+    expect(parentCard).toHaveTextContent("1960– · 约 66 岁");
     expect(screen.getByRole("group", { name: "家庭联合：已结束婚姻" })).toHaveClass("family-union-node", "ended");
     expect(screen.getByText("已结束婚姻")).toBeVisible();
     expect(screen.getByText("开始：公历 1980年1月")).toBeVisible();
     expect(screen.getByText("结束：农历 1990年闰2月3日")).toBeVisible();
   });
 
+  it("shows the regional term and a formal secondary line without exposing the path on cards", async () => {
+    render(<FamilyTreeCanvas projection={projection("child", label("姨祖母", "姨奶奶", "祖母的姐姐"))} />);
+
+    const regionalCard = await screen.findByRole("group", { name: "人物：甲" });
+    expect(regionalCard).toHaveTextContent("姨奶奶");
+    expect(regionalCard).toHaveTextContent("正式关系：姨祖母");
+    expect(regionalCard).not.toHaveTextContent("祖母的姐姐");
+    const formalOnlyCard = screen.getByRole("group", { name: "人物：乙" });
+    expect(within(formalOnlyCard).getAllByText("母亲")).toHaveLength(1);
+    expect(formalOnlyCard).not.toHaveTextContent("正式关系");
+  });
+
   it("updates viewpoint-only labels without running ELK again for the same topology", async () => {
     const stableTopology = topology;
-    const first: TreeProjection = { topology: stableTopology, viewpointId: "child", labels: { "parent-a": "父亲" } };
-    const second: TreeProjection = { topology: stableTopology, viewpointId: "parent-b", labels: { "parent-a": "配偶" } };
+    const first: TreeProjection = { topology: stableTopology, viewpointId: "child", labels: { "parent-a": label("父亲") } };
+    const second: TreeProjection = { topology: stableTopology, viewpointId: "parent-b", labels: { "parent-a": label("配偶") } };
     const layout = vi.fn(layoutWithElk);
     const { rerender } = render(<FamilyTreeCanvas projection={first} layout={layout} />);
 
@@ -272,7 +360,7 @@ describe("FamilyTreeCanvas", () => {
 
   it("reports explicit person, marriage and parent-child selections", async () => {
     const onSelectionChange = vi.fn();
-    render(<FamilyTreeCanvas projection={projection("child", "父亲")} onSelectionChange={onSelectionChange} />);
+    render(<FamilyTreeCanvas projection={projection("child", label("父亲"))} onSelectionChange={onSelectionChange} />);
 
     fireEvent.click(await screen.findByTestId("flow-node:person:parent-a"));
     expect(onSelectionChange).toHaveBeenLastCalledWith({ kind: "person", personId: "parent-a" });
@@ -309,7 +397,7 @@ describe("FamilyTreeCanvas", () => {
   it("activates a focused person node with the keyboard and reflects controlled selection", async () => {
     const onSelectionChange = vi.fn();
     const selected = { kind: "person" as const, personId: "parent-a" };
-    render(<FamilyTreeCanvas projection={projection("child", "父亲")} selection={selected} onSelectionChange={onSelectionChange} />);
+    render(<FamilyTreeCanvas projection={projection("child", label("父亲"))} selection={selected} onSelectionChange={onSelectionChange} />);
 
     const flowNode = await screen.findByTestId("flow-node:person:parent-a");
     expect(flowNode).toHaveAttribute("data-selected", "true");
@@ -386,7 +474,15 @@ describe("FamilyTreePage", () => {
         childIds: ["child"],
         warnings: []
       }]
-    }, (viewpointId, targetId) => viewpointId === targetId ? "本人" : "亲属");
+    }, (viewpointId, targetId) => ({
+      formalTerm: viewpointId === targetId ? "本人" : "亲属",
+      regionalTerm: null,
+      displayTerm: viewpointId === targetId ? "本人" : "亲属",
+      pathDescription: viewpointId === targetId ? "本人" : "亲属",
+      formalRuleId: "test-rule",
+      locale: "zh-CN-henan-gongyi",
+      regionalRuleVersion: "zh-CN-henan-gongyi-v1"
+    }));
     const people = [
       { id: "a", displayName: "甲", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 },
       { id: "child", displayName: "孩子", aliases: [], gender: "unknown" as const, birth: null, death: null, notes: null, rowVersion: 1 },

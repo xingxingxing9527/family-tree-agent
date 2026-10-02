@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import type { FamilyAgentApi, PersonDetailReadModel, PersonDraft, PersonListItem } from "../../../../shared/contracts";
+import type { FamilyAgentApi, KinshipDisplayLabelDto, PersonDetailReadModel, PersonDraft, PersonListItem } from "../../../../shared/contracts";
 import type { RelativeQuickCreateRequest } from "../relations/FamilyRelationsPanel";
 import { PersonDetail } from "../people/PersonDetail";
 import { PersonEditor } from "../people/PersonEditor";
@@ -9,6 +9,7 @@ import { TreeRelationshipEditor } from "./TreeRelationshipEditor";
 interface TreeContextDrawerProps {
   selection: TreeSelection;
   api: FamilyAgentApi;
+  relationshipLabel?: KinshipDisplayLabelDto | null;
   onClose(): void;
   onDataChanged(): void | Promise<void>;
   onUseAsViewpoint?(personId: string): void;
@@ -27,7 +28,7 @@ function draftFromDetail(detail: PersonDetailReadModel): PersonDraft {
   };
 }
 
-export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUseAsViewpoint, onAskAbout }: TreeContextDrawerProps): JSX.Element {
+export function TreeContextDrawer({ selection, api, relationshipLabel, onClose, onDataChanged, onUseAsViewpoint, onAskAbout }: TreeContextDrawerProps): JSX.Element {
   const [detail, setDetail] = useState<PersonDetailReadModel | null>(null);
   const [editing, setEditing] = useState(false);
   const [relativeCreation, setRelativeCreation] = useState<RelativeQuickCreateRequest | null>(null);
@@ -101,6 +102,12 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
       <div><p className="eyebrow">家谱快捷编辑</p><h2>{selection.kind === "person" ? "人物资料与关系" : "关系资料"}</h2></div>
       <button className="button secondary-button" type="button" aria-label="关闭人物与关系编辑" onClick={onClose}>关闭</button>
     </header>
+    {selection.kind === "person" && relationshipLabel?.displayTerm && <section className="tree-kinship-summary" aria-label="关系称谓说明">
+      <p>你对该人物的称呼：{relationshipLabel.displayTerm}</p>
+      {relationshipLabel.formalTerm && <p>正式称谓：{relationshipLabel.formalTerm}</p>}
+      {relationshipLabel.pathDescription && <p>关系说明：{relationshipLabel.pathDescription}</p>}
+      <p>地区规则：{relationshipLabel.locale === "zh-CN-henan-gongyi" ? "河南郑州巩义" : relationshipLabel.locale}</p>
+    </section>}
     {error && <div className="error-banner" role="alert">{error}</div>}
     {loading && <p role="status">正在读取人物详情…</p>}
     {selection.kind !== "person" && !relativeCreation && <TreeRelationshipEditor
@@ -123,7 +130,7 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
       onSaved={(saved) => void personSaved(saved)}
       onCancel={() => setEditing(false)}
     />}
-    {selection.kind === "person" && !editing && !relativeCreation && detail && <PersonDetail
+    {selection.kind === "person" && !editing && detail && <PersonDetail
       key={`${detail.person.id}:${detail.person.rowVersion}`}
       detail={detail}
       peopleApi={api.people}

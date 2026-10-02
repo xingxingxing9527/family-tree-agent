@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppResult, RelationshipResultDto } from "../../../src/shared/contracts";
+import type { AppResult, KinshipDisplayLabelDto, RelationshipResultDto } from "../../../src/shared/contracts";
 import { ViewpointProvider, useViewpoint } from "../../../src/renderer/src/app/ViewpointContext";
 import { ChatPanel, type ChatAnswer } from "../../../src/renderer/src/features/chat/ChatPanel";
 import { PersonNode } from "../../../src/renderer/src/features/tree/PersonNode";
@@ -20,6 +20,13 @@ const relationshipResult = (primaryTerm: string | null): AppResult<RelationshipR
   ok: true,
   value: {
     primaryTerm,
+    formalTerm: primaryTerm,
+    regionalTerm: null,
+    displayTerm: primaryTerm,
+    pathDescription: primaryTerm,
+    formalRuleId: primaryTerm ? "test-rule" : null,
+    locale: "zh-CN-henan-gongyi",
+    regionalRuleVersion: "zh-CN-henan-gongyi-v1",
     reverseTerm: null,
     description: "关系路径",
     ruleVersion: "test",
@@ -41,7 +48,7 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
 
 function LabelsHarness({ personIds }: { personIds: string[] }): React.JSX.Element {
   const viewpoint = useViewpoint();
-  return <>{personIds.map((personId) => <span data-testid={`label-${personId}`} key={personId}>{viewpoint.relationshipLabels[personId] ?? "none"}</span>)}</>;
+  return <>{personIds.map((personId) => <span data-testid={`label-${personId}`} key={personId}>{viewpoint.relationshipLabels[personId]?.displayTerm ?? "none"}</span>)}</>;
 }
 
 function ViewpointHarness(): React.JSX.Element {
@@ -49,7 +56,7 @@ function ViewpointHarness(): React.JSX.Element {
   return (
     <div>
       <span data-testid="viewpoint">{viewpoint.viewpointId ?? "none"}</span>
-      <span data-testid="target-label">{viewpoint.relationshipLabels.target ?? "none"}</span>
+      <span data-testid="target-label">{viewpoint.relationshipLabels.target?.displayTerm ?? "none"}</span>
       <button type="button" onClick={() => viewpoint.setViewpointId("child")}>切换视角</button>
     </div>
   );
@@ -76,6 +83,13 @@ describe("ViewpointProvider", () => {
       ok: true as const,
       value: {
         primaryTerm: `${viewpointId}->${targetId}`,
+        formalTerm: `${viewpointId}->${targetId}`,
+        regionalTerm: null,
+        displayTerm: `${viewpointId}->${targetId}`,
+        pathDescription: `${viewpointId}->${targetId}`,
+        formalRuleId: "test-rule",
+        locale: "zh-CN-henan-gongyi",
+        regionalRuleVersion: "zh-CN-henan-gongyi-v1",
         reverseTerm: `${targetId}->${viewpointId}`,
         description: "关系路径",
         ruleVersion: "test",
@@ -114,6 +128,13 @@ describe("ViewpointProvider", () => {
         ok: true,
         value: {
           primaryTerm: null,
+          formalTerm: null,
+          regionalTerm: null,
+          displayTerm: null,
+          pathDescription: null,
+          formalRuleId: null,
+          locale: "zh-CN-henan-gongyi",
+          regionalRuleVersion: "zh-CN-henan-gongyi-v1",
           reverseTerm: null,
           description: "未找到关系",
           ruleVersion: "test",
@@ -135,7 +156,15 @@ describe("ViewpointProvider", () => {
           personId: "target",
           display: { displayName: "目标", birthYear: null, deathYear: null, generation: null }
         },
-        relationshipLabel: "旧称谓"
+        relationshipLabel: {
+          formalTerm: "旧称谓",
+          regionalTerm: null,
+          displayTerm: "旧称谓",
+          pathDescription: "旧称谓",
+          formalRuleId: "old-rule",
+          locale: "zh-CN-henan-gongyi",
+          regionalRuleVersion: "zh-CN-henan-gongyi-v1"
+        } satisfies KinshipDisplayLabelDto
       }
     };
 

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
-import type { AppResult, RelationshipResultDto } from "../../../shared/contracts";
+import type { AppResult, KinshipDisplayLabelDto, RelationshipResultDto } from "../../../shared/contracts";
 
 export interface ViewpointQuery {
   calculateRelationship(input: { viewpointId: string; targetId: string }): Promise<AppResult<RelationshipResultDto>>;
@@ -7,7 +7,7 @@ export interface ViewpointQuery {
 
 export interface ViewpointState {
   viewpointId: string | null;
-  relationshipLabels: Readonly<Record<string, string | null>>;
+  relationshipLabels: Readonly<Record<string, KinshipDisplayLabelDto | null>>;
   setViewpointId(viewpointId: string | null): void;
 }
 
@@ -47,7 +47,7 @@ export function ViewpointProvider({
     return valid.values().next().value ?? null;
   }, [fallbackViewpointId, valid]);
   const [viewpointId, setViewpointState] = useState<string | null>(() => storage.getItem(storageKey(workspaceId)));
-  const [relationshipLabels, setRelationshipLabels] = useState<Readonly<Record<string, string | null>>>({});
+  const [relationshipLabels, setRelationshipLabels] = useState<Readonly<Record<string, KinshipDisplayLabelDto | null>>>({});
   const [labelsKey, setLabelsKey] = useState<string | null>(null);
   const requestToken = useRef(0);
   const visibleKey = [...new Set(visiblePersonIds)].sort().join("\u0000");
@@ -83,7 +83,25 @@ export function ViewpointProvider({
     void Promise.all(visible.map(async (targetId) => {
       try {
         const result = await query.calculateRelationship({ viewpointId, targetId });
-        return [targetId, result.ok ? result.value.primaryTerm : null] as const;
+        if (!result.ok || !result.value.displayTerm) return [targetId, null] as const;
+        const {
+          formalTerm,
+          regionalTerm,
+          displayTerm,
+          pathDescription,
+          formalRuleId,
+          locale,
+          regionalRuleVersion
+        } = result.value;
+        return [targetId, {
+          formalTerm,
+          regionalTerm,
+          displayTerm,
+          pathDescription,
+          formalRuleId,
+          locale,
+          regionalRuleVersion
+        }] as const;
       } catch {
         return [targetId, null] as const;
       }

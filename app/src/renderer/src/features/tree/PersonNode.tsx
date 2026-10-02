@@ -15,6 +15,8 @@ export function PersonNode({ data, selected }: NodeProps<PersonFlowNode>): JSX.E
   const years = display.birthYear === null && display.deathYear === null
     ? null
     : `${display.birthYear ?? "?"}–${display.deathYear ?? ""}`;
+  const ageLabel = typeof data.ageLabel === "string" ? data.ageLabel : null;
+  const lifeSummary = [years, ageLabel].filter(Boolean).join(" · ");
   const generation = display.generation?.displayed === null || display.generation === null
     ? null
     : display.generation.source === "computed"
@@ -42,8 +44,9 @@ export function PersonNode({ data, selected }: NodeProps<PersonFlowNode>): JSX.E
       <Handle id="marriage-right" type="source" position={Position.Right} isConnectable={false} />
       <strong className="tree-person-name" style={{ fontSize: "15px" }}>{display.displayName}</strong>
       {roleLabel && <span className="tree-lineage-role">{roleLabel}</span>}
-      {relationshipLabel && <span className="tree-kinship-label">{relationshipLabel}</span>}
-      {years && <span className="tree-life-years">{years}</span>}
+      {relationshipLabel?.displayTerm && <span className="tree-kinship-label">{relationshipLabel.displayTerm}</span>}
+      {relationshipLabel?.regionalTerm && relationshipLabel.formalTerm && <span className="tree-kinship-formal">正式关系：{relationshipLabel.formalTerm}</span>}
+      {lifeSummary && <span className="tree-life-years">{lifeSummary}</span>}
       {generation && <span className={display.generation?.conflict ? "tree-generation conflict" : "tree-generation"}>{generation}</span>}
       {display.generationMarker && <span className="tree-generation-marker">字辈：{display.generationMarker}</span>}
       <Handle id="descent-source" type="source" position={Position.Bottom} isConnectable={false} />
