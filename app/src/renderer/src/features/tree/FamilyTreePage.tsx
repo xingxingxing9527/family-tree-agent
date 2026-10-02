@@ -19,10 +19,45 @@ const views: Array<{ id: TreeViewDto; label: string }> = [
   { id: "descendants", label: "后代" }
 ];
 
+export function normalizeTreeSelection(selection: TreeSelection, projection: TreeProjectionDto): TreeSelection | null {
+  if (selection.kind === "person") {
+    return projection.topology.nodes.some((node) => node.kind === "person" && node.personId === selection.personId)
+      ? selection
+      : null;
+  }
+  if (selection.kind === "parentChild") {
+    const edge = projection.topology.edges.find((entry) => entry.kind === "unionChild"
+      && entry.unionId === selection.unionId
+      && entry.childId === selection.childId);
+    return edge?.childId
+      ? { kind: "parentChild", unionId: edge.unionId, parentIds: [...edge.parentIds], childId: edge.childId, marriageId: edge.marriageId }
+      : null;
+  }
+  const union = projection.topology.nodes.find((node) => node.kind === "union" && node.unionId === selection.unionId);
+  if (!union || union.kind !== "union") return null;
+  if (selection.kind === "marriage") {
+    return union.marriageId === selection.marriageId
+      ? { kind: "marriage", unionId: union.unionId, marriageId: selection.marriageId, parentIds: [...union.parentIds] }
+      : null;
+  }
+  return union.marriageId === null
+    ? { kind: "family", unionId: union.unionId, parentIds: [...union.parentIds], childIds: [...union.childIds] }
+    : null;
+}
+
+function sameSelection(left: TreeSelection | null, right: TreeSelection | null): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isFamilyAgentApi(api: Pick<QueryApi, "projectTree"> | FamilyAgentApi): api is FamilyAgentApi {
+  const candidate = api as Partial<FamilyAgentApi>;
+  return typeof candidate.people?.get === "function" && typeof candidate.query?.projectTree === "function";
+}
+
 export function FamilyTreePage({ api, people, collapseDepth, onDataChanged, onAskAbout }: FamilyTreePageProps): JSX.Element {
   const { viewpointId, setViewpointId } = useViewpoint();
-  const queryApi = "query" in api ? api.query : api;
-  const interactiveApi = "people" in api ? api : null;
+  const interactiveApi: FamilyAgentApi | null = isFamilyAgentApi(api) ? api : null;
+  const queryApi: Pick<QueryApi, "projectTree"> = interactiveApi?.query ?? api as Pick<QueryApi, "projectTree">;
   const [view, setView] = useState<TreeViewDto>("full");
   const [subjectId, setSubjectId] = useState<string>(viewpointId ?? people[0]?.id ?? "");
   const [projection, setProjection] = useState<TreeProjectionDto | null>(null);
@@ -40,6 +75,12 @@ export function FamilyTreePage({ api, people, collapseDepth, onDataChanged, onAs
   useEffect(() => {
     if (selection?.kind === "person" && !validIds.has(selection.personId)) setSelection(null);
   }, [selection, validIds]);
+
+  useEffect(() => {
+    if (!selection || !projection) return;
+    const normalized = normalizeTreeSelection(selection, projection);
+    if (!sameSelection(selection, normalized)) setSelection(normalized);
+  }, [projection, selection]);
 
   useEffect(() => {
     const activeRequest = ++requestId.current;

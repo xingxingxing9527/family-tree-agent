@@ -107,6 +107,26 @@
   margin: 0;
 }
 
+.tree-relationship-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.tree-relationship-editor > h3,
+.tree-relationship-editor > p {
+  margin: 0;
+}
+
+.tree-marriage-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.tree-marriage-fields > label {
+  display: grid;
+  gap: 6px;
+}
+
 .tree-person-node.blood { border-color: #1d4ed8; }
 .tree-person-node.married-in { border-color: #a16207; border-style: dashed; }
 .tree-person-node.associated { border-color: #64748b; }

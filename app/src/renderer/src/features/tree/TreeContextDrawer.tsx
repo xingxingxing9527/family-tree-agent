@@ -4,6 +4,7 @@ import type { RelativeQuickCreateRequest } from "../relations/FamilyRelationsPan
 import { PersonDetail } from "../people/PersonDetail";
 import { PersonEditor } from "../people/PersonEditor";
 import type { TreeSelection } from "./FamilyTreeCanvas";
+import { TreeRelationshipEditor } from "./TreeRelationshipEditor";
 
 interface TreeContextDrawerProps {
   selection: TreeSelection;
@@ -35,6 +36,7 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
   const requestId = useRef(0);
   const relativeCreationSection = useRef<HTMLElement | null>(null);
   const selectedPersonId = selection.kind === "person" ? selection.personId : null;
+  const relationOwnerPersonId = selection.kind === "parentChild" ? selection.childId : selectedPersonId;
 
   const loadDetail = useCallback(async (personId: string): Promise<void> => {
     const activeRequest = ++requestId.current;
@@ -89,7 +91,7 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
 
   const relativePersonSaved = (saved: PersonDetailReadModel): void => {
     const request = relativeCreation;
-    if (!request || request.ownerPersonId !== selectedPersonId) return;
+    if (!request || request.ownerPersonId !== relationOwnerPersonId) return;
     setRelativeCreation(null);
     void request.onCreated({ ...saved.person, aliases: saved.aliases });
   };
@@ -101,7 +103,12 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
     </header>
     {error && <div className="error-banner" role="alert">{error}</div>}
     {loading && <p role="status">正在读取人物详情…</p>}
-    {selection.kind !== "person" && <section className="empty-state"><h3>关系编辑</h3><p>请选择婚姻或亲子关系后进行修改。</p></section>}
+    {selection.kind !== "person" && !relativeCreation && <TreeRelationshipEditor
+      selection={selection}
+      api={api}
+      onChanged={changed}
+      onRequestQuickCreate={setRelativeCreation}
+    />}
     {relativeCreation && <section ref={relativeCreationSection} className="relative-person-creation" aria-labelledby="tree-relative-person-creation-title">
       <h2 id="tree-relative-person-creation-title">快速新建关系人物：{relativeCreation.purpose}</h2>
       <PersonEditor api={api.people} mutations={api.mutations} onSaved={relativePersonSaved} onMutationPersisted={onDataChanged} onCancel={() => setRelativeCreation(null)} />
@@ -131,4 +138,3 @@ export function TreeContextDrawer({ selection, api, onClose, onDataChanged, onUs
     />}
   </aside>;
 }
-
