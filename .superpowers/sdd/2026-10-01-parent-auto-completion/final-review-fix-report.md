@@ -255,3 +255,85 @@ Report:
 
 - The Web build still reports the pre-existing non-fatal >500 kB chunk-size warning; all build, E2E, and performance gates pass.
 - No remaining correctness or migration blocker was found.
+
+## Residual correction fix
+
+### Finding and implementation
+
+The residual review found that a crafted `parentChild.correct` whose replacement repeated the existing parent, child, and role could compile an actionable grouped removal plus an ungrouped `unchanged` replacement. Because confirmation validates only actionable group members, that malformed draft could reduce to a removal-only group.
+
+`StagedMutationService` now rejects this exact no-op at the application boundary, immediately after validating that a correction preserves the child and role and before it allocates a selection group or constructs the removal change. It raises `MutationValidationError("VALIDATION", "更正后的亲子关系与现有关系相同，无需更正")`. Consequently, no preview draft exists for a client to confirm with crafted selected IDs.
+
+The real staged-service regression seeds an active parent-child fact, submits the crafted correction, verifies the domain validation error, and verifies that the original row remains active at version 1 with no new `mutation.confirm` operation group. The existing production-path tests for one-sided deselection and a blocked replacement remain unchanged and passing.
+
+### RED evidence
+
+Command, run before the production guard:
+
+```text
+npm test -- tests/integration/application/staged-mutation-service.test.ts -t "rejects a same-parent correction"
+```
+
+Exit code: 1.
+
+```text
+Test Files  1 failed (1)
+Tests       1 failed | 30 skipped (31)
+AssertionError: expected function to throw an error, but it didn't
+```
+
+### GREEN and verification evidence
+
+Focused new regression:
+
+```text
+npm test -- tests/integration/application/staged-mutation-service.test.ts -t "rejects a same-parent correction"
+Test Files  1 passed (1)
+Tests       1 passed | 30 skipped (31)
+```
+
+All correction scenarios, including ordinary all-or-none selection and blocked replacement:
+
+```text
+npm test -- tests/integration/application/staged-mutation-service.test.ts -t correction
+Test Files  1 passed (1)
+Tests       4 passed | 27 skipped (31)
+```
+
+Complete staged mutation service suite:
+
+```text
+npm test -- tests/integration/application/staged-mutation-service.test.ts
+Test Files  1 passed (1)
+Tests       31 passed (31)
+```
+
+Required repository verification:
+
+```text
+npm run typecheck
+Exit code: 0
+tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json
+
+npm test
+Exit code: 0
+Test Files  90 passed (90)
+Tests       1113 passed (1113)
+Duration    16.01s
+```
+
+### Changed files and compatibility
+
+- `app/src/main/application/mutations/staged-mutation-service.ts`
+- `app/tests/integration/application/staged-mutation-service.test.ts`
+- `.superpowers/sdd/2026-10-01-parent-auto-completion/final-review-fix-report.md`
+
+No schema, persistence, migration, or public error-code change was required. The guard only rejects a correction that would make no domain change; legitimate replacement corrections retain the existing atomic selection-group behavior.
+
+### Self-review
+
+- The guard executes before removal construction, so the invalid correction cannot create an actionable removal or a confirmable draft.
+- Confirmation remains fail-closed for client-crafted IDs: no stored draft is created for this no-op, while existing server-side group validation still rejects either one-sided selection for legitimate corrections.
+- The regression checks persisted fact state and confirmation history rather than relying on a hand-built preview.
+- No protected tree file or unrelated production area was changed.
+- No new compatibility or migration concern was identified.

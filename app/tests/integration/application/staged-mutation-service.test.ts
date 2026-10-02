@@ -623,6 +623,38 @@ describe("StagedMutationService", () => {
     expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE id=? AND kind='mutation.confirm'").pluck().get(receipt.operationGroupId)).toBe(1);
   });
 
+  it("rejects a same-parent correction before staging any actionable removal", () => {
+    createPerson("old", "现有父亲", "male");
+    createPerson("child", "孩子");
+    new FactCommandService(database, workspaceId).execute({
+      type: "parentChild.add",
+      draft: { id: "old-edge", workspaceId, parentId: "old", childId: "child", parentRole: "father" },
+      source: source("old-edge")
+    });
+
+    expect(() => service.stage({ intents: [{
+      type: "parentChild.correct",
+      relationId: "old-edge",
+      expectedVersion: 1,
+      replacement: {
+        knownParentId: "old", childId: "child", parentRole: "father",
+        completionPolicy: "spouse-default", skipCompletion: true, sourceDescription: "更正父亲"
+      }
+    }] })).toThrowError(expect.objectContaining({
+      code: "VALIDATION",
+      message: "更正后的亲子关系与现有关系相同，无需更正"
+    } satisfies Partial<MutationValidationError>));
+
+    expect(database.prepare("SELECT parent_id, child_id, parent_role, row_version, deleted_at FROM parent_child WHERE id='old-edge'").get()).toEqual({
+      parent_id: "old",
+      child_id: "child",
+      parent_role: "father",
+      row_version: 1,
+      deleted_at: null
+    });
+    expect(database.prepare("SELECT COUNT(*) FROM operation_group WHERE kind='mutation.confirm'").pluck().get()).toBe(0);
+  });
+
   it("blocks the removal when a correction replacement is invalid", () => {
     createPerson("old", "错误父亲", "male");
     createPerson("replacement", "形成祖先环的父亲", "male");

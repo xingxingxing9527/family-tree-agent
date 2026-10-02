@@ -429,6 +429,9 @@ export class StagedMutationService {
         if (relation && (relation.childId !== intent.replacement.childId || relation.parentRole !== intent.replacement.parentRole)) {
           throw new MutationValidationError("VALIDATION", "A correction must replace the same child and parent role");
         }
+        if (relation?.parentId === intent.replacement.knownParentId) {
+          throw new MutationValidationError("VALIDATION", "更正后的亲子关系与现有关系相同，无需更正");
+        }
         const selectionGroupId = randomUUID();
         const removalId = randomUUID();
         const before = relation ? {
