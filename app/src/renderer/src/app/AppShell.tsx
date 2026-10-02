@@ -101,7 +101,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
         <nav className="secondary-nav" aria-label="次级导航">{secondaryAreas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>
       </aside>
       <main className="workspace-content" key={`${workspace.id}:${activeArea}:${activeArea === "settings" ? "persistent" : workspaceState.mutationEpoch}`}>
-        {activeArea === "tree" && <FamilyTreePage api={api.query} people={snapshot.people} />}
+        {activeArea === "tree" && <FamilyTreePage api={api} people={snapshot.people} onDataChanged={refreshSnapshot} onAskAbout={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/chat`); }} />}
         {activeArea === "people" && <PeoplePage workspace={workspace} api={api} initialSelectedPersonId={selectedPersonId} onDataChanged={refreshSnapshot} prepareMutation={prepareMutation} onSelectedPersonChange={setSelectedPersonId} onUseAsViewpoint={setViewpointId} onAskAbout={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/chat`); }} />}
         {activeArea === "entry" && <EntryCenterPage workspaceId={workspace.id} api={api} people={snapshot.people} onChanged={refreshSnapshot} />}
         {activeArea === "chat" && <ChatPage people={snapshot.people} selectedPersonId={selectedPersonId} onSelectedPersonChange={setSelectedPersonId} onSend={ask} onOpenPerson={(personId) => { setSelectedPersonId(personId); navigate(`/workspace/${workspace.id}/people`); }} />}

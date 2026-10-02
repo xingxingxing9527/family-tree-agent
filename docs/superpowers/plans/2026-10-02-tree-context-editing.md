@@ -105,21 +105,21 @@
 - Consumes: `FamilyAgentApi`, workspace summary, person list, mutation refresh callback, and Task 2 person selection.
 - Produces: a controlled drawer that loads `api.people.get`, renders `PersonDetail`/`PersonEditor`, supports relative quick-create, closes with button or `Escape`, and notifies the page after confirmed writes.
 
-- [ ] **Step 1: Write failing person-drawer tests**
+- [x] **Step 1: Write failing person-drawer tests**
 
   Assert loading and displaying the selected person's real detail, entering edit mode, opening relative quick-create, closing with `Escape`, and refreshing detail/tree after a confirmed change.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
   Run: `npm test -- tests/unit/renderer/FamilyTreePage.test.tsx`
 
   Expected: the page has no drawer or full API access.
 
-- [ ] **Step 3: Implement the reusable drawer and page integration**
+- [x] **Step 3: Implement the reusable drawer and page integration**
 
   Lift the relevant orchestration pattern from `PeoplePage`, pass the full API from `AppShell`, and keep the canvas mounted while the drawer opens. Reuse the existing mutation refresh callback and quick-create flow.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
   Run: `npm test -- tests/unit/renderer/FamilyTreePage.test.tsx`
 

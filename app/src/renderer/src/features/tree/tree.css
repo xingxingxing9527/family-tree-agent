@@ -63,6 +63,50 @@
   line-height: 1.35;
 }
 
+.family-tree-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.family-tree-workspace.has-drawer {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+}
+
+.tree-context-drawer {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 16px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 14%);
+}
+
+.tree-context-drawer-header {
+  position: sticky;
+  top: -16px;
+  z-index: 3;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -16px -16px 16px;
+  padding: 16px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+}
+
+.tree-context-drawer-header h2,
+.tree-context-drawer-header p {
+  margin: 0;
+}
+
 .tree-person-node.blood { border-color: #1d4ed8; }
 .tree-person-node.married-in { border-color: #a16207; border-style: dashed; }
 .tree-person-node.associated { border-color: #64748b; }
@@ -158,4 +202,15 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+@media (max-width: 1040px) {
+  .family-tree-workspace.has-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tree-context-drawer {
+    position: static;
+    max-height: min(70vh, 720px);
+  }
 }
