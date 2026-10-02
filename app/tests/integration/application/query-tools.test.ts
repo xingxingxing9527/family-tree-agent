@@ -221,6 +221,7 @@ describe("QueryToolRegistry", () => {
     expect(registry.tools.search_people({ query: "张敏", limit: 20 })).toEqual([
       {
         id: "child-a",
+        personCode: "P000002",
         displayName: "张敏",
         aliases: ["敏敏"],
         gender: "female",
@@ -229,6 +230,7 @@ describe("QueryToolRegistry", () => {
       },
       {
         id: "child-b",
+        personCode: "P000003",
         displayName: "张敏",
         aliases: [],
         gender: "male",
@@ -329,6 +331,16 @@ describe("QueryToolRegistry", () => {
     expect(downward.reverseTerm).toBe(upward.primaryTerm);
     expect(downward.signature.pathPersonIds).toEqual(["father", "child-a"]);
     expect(upward.signature.pathPersonIds).toEqual(["child-a", "father"]);
+    expect(downward).toMatchObject({
+      primaryTerm: "女儿",
+      formalTerm: "女儿",
+      regionalTerm: null,
+      displayTerm: "女儿",
+      pathDescription: "女儿",
+      formalRuleId: "direct-daughter",
+      locale: "zh-CN-henan-gongyi",
+      regionalRuleVersion: "zh-CN-henan-gongyi-v1"
+    });
   });
 
   it("withholds a relationship term when persisted direct roles conflict", () => {
@@ -347,6 +359,7 @@ describe("QueryToolRegistry", () => {
 
     expect(result.primaryTerm).toBeNull();
     expect(result.reverseTerm).toBeNull();
+    expect(result).toMatchObject({ formalTerm: null, regionalTerm: null, displayTerm: null });
     expect(result.uncertainty).toEqual([
       "数据冲突：incompatible-direct-roles:child-a:father"
     ]);
@@ -355,6 +368,59 @@ describe("QueryToolRegistry", () => {
       collapseDepth: 4,
       viewpointId: "father"
     }).labels["child-a"]).toBeNull();
+  });
+
+  it("keeps query and tree labels consistent for regional and formal-only terms", () => {
+    const facts = new FactCommandService(database, workspaceId);
+    for (const person of [
+      { id: "grandmother", displayName: "祖母", gender: "female" as const, birth: solar(1940) },
+      { id: "great-grandfather", displayName: "曾外祖父", gender: "male" as const, birth: solar(1910) },
+      { id: "grand-aunt", displayName: "祖母姐姐", gender: "female" as const, birth: solar(1935) }
+    ]) {
+      facts.execute({ type: "person.create", draft: { ...person, workspaceId }, source: source(person.id) });
+    }
+    for (const relation of [
+      { id: "grandmother-father", parentId: "grandmother", childId: "father", parentRole: "mother" as const },
+      { id: "great-grandfather-grandmother", parentId: "great-grandfather", childId: "grandmother", parentRole: "father" as const },
+      { id: "great-grandfather-grand-aunt", parentId: "great-grandfather", childId: "grand-aunt", parentRole: "father" as const }
+    ]) {
+      facts.execute({ type: "parentChild.add", draft: { ...relation, workspaceId }, source: source(relation.id) });
+    }
+
+    const tools = new QueryToolRegistry(database, workspaceId).tools;
+    const regional = tools.calculate_relationship({ viewpointId: "child-a", targetId: "grand-aunt" });
+    const formalOnly = tools.calculate_relationship({ viewpointId: "child-a", targetId: "father" });
+    const tree = projectWorkspaceTree(database, workspaceId, {
+      view: "full",
+      collapseDepth: 8,
+      viewpointId: "child-a"
+    });
+
+    expect(regional).toMatchObject({
+      primaryTerm: "姨祖母",
+      formalTerm: "姨祖母",
+      regionalTerm: "姨奶奶",
+      displayTerm: "姨奶奶",
+      pathDescription: "祖母的姐姐"
+    });
+    expect(tree.labels["grand-aunt"]).toEqual({
+      formalTerm: regional.formalTerm,
+      regionalTerm: regional.regionalTerm,
+      displayTerm: regional.displayTerm,
+      pathDescription: regional.pathDescription,
+      formalRuleId: regional.formalRuleId,
+      locale: regional.locale,
+      regionalRuleVersion: regional.regionalRuleVersion
+    });
+    expect(tree.labels.father).toEqual({
+      formalTerm: formalOnly.formalTerm,
+      regionalTerm: null,
+      displayTerm: formalOnly.formalTerm,
+      pathDescription: formalOnly.pathDescription,
+      formalRuleId: formalOnly.formalRuleId,
+      locale: formalOnly.locale,
+      regionalRuleVersion: formalOnly.regionalRuleVersion
+    });
   });
 
   it("summarizes blood generations without counting married-in members", () => {

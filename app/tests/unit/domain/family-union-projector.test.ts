@@ -370,14 +370,22 @@ describe("TreeProjectionService", () => {
   });
 
   it("updates viewpoint labels without recomputing topology", () => {
-    const service = new TreeProjectionService({ people, unions }, (viewpointId, targetId) => `${viewpointId}->${targetId}`);
+    const service = new TreeProjectionService({ people, unions }, (viewpointId, targetId) => ({
+      formalTerm: `${viewpointId}->${targetId}`,
+      regionalTerm: null,
+      displayTerm: `${viewpointId}->${targetId}`,
+      pathDescription: `${viewpointId}->${targetId}`,
+      formalRuleId: "test-rule",
+      locale: "test-locale",
+      regionalRuleVersion: "test-version"
+    }));
     const projection = service.full(Number.POSITIVE_INFINITY);
     const fromA = service.withViewpoint(projection, "a");
     const fromC = service.withViewpoint(projection, "c");
 
     expect(fromC.topology).toBe(fromA.topology);
-    expect(fromA.labels.c).toBe("a->c");
-    expect(fromC.labels.c).toBe("c->c");
+    expect(fromA.labels.c?.displayTerm).toBe("a->c");
+    expect(fromC.labels.c?.displayTerm).toBe("c->c");
   });
 
   it("keeps lineage siblings in descent while attaching a spouse through marriage", () => {

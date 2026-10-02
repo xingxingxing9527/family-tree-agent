@@ -73,7 +73,12 @@ describe("workspace snapshot and tree projection", () => {
       }),
       expect.objectContaining({ kind: "person", personId: "child" })
     ]));
-    expect(projected.value.labels.child).toBe("女儿");
+    expect(projected.value.labels.child).toMatchObject({
+      formalTerm: "女儿",
+      regionalTerm: null,
+      displayTerm: "女儿",
+      pathDescription: "女儿"
+    });
     expect(projected.value.topology.edges).toHaveLength(3);
     expect(projected.value.scope).toEqual({ view: "full", subjectId: null, lineageId: null, visiblePersonCount: 4 });
 

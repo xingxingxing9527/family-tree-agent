@@ -126,6 +126,10 @@ export interface PersonCandidate {
   parentHints: PersonParentHint[];
 }
 
+export interface PersonSearchCandidate extends PersonCandidate {
+  personCode: string;
+}
+
 export interface PersonQueryReadModel extends PersonReadModel {
   aliases: string[];
   sources: SourceReadModel[];
@@ -163,7 +167,17 @@ export interface RelationshipSignatureDto {
   pathRelationIds: string[];
 }
 
-export interface RelationshipAlternativeDto {
+export interface KinshipDisplayLabelDto {
+  formalTerm: string | null;
+  regionalTerm: string | null;
+  displayTerm: string | null;
+  pathDescription: string | null;
+  formalRuleId: string | null;
+  locale: string;
+  regionalRuleVersion: string;
+}
+
+export interface RelationshipAlternativeDto extends KinshipDisplayLabelDto {
   primaryTerm: string | null;
   reverseTerm: string | null;
   description: string;
@@ -311,7 +325,7 @@ export interface TreeProjectionTopologyDto { key: string; nodes: TreeProjectionN
 export interface TreeProjectionDto {
   topology: TreeProjectionTopologyDto;
   viewpointId: string | null;
-  labels: Readonly<Record<string, string | null>>;
+  labels: Readonly<Record<string, KinshipDisplayLabelDto | null>>;
   scope: {
     view: TreeViewDto;
     subjectId: string | null;
@@ -339,7 +353,7 @@ export interface WikiApi {
 export interface QueryApi {
   workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
   projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }): Promise<AppResult<TreeProjectionDto>>;
-  searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
+  searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonSearchCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
   calculateRelationship(input: { viewpointId: string; targetId: string }): Promise<AppResult<RelationshipResultDto>>;

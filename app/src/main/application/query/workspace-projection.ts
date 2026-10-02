@@ -220,8 +220,8 @@ export function projectWorkspaceTree(
       }
     }
   }
-  const primaryTerms = input.viewpointId
-    ? calculator.calculatePrimaryTerms(input.viewpointId, people.map((person) => person.id))
+  const primaryLabels = input.viewpointId
+    ? calculator.calculatePrimaryLabels(input.viewpointId, visiblePeople.map((person) => person.id))
     : null;
   const service = new TreeProjectionService({
     people: visiblePeople.map((person) => ({
@@ -234,9 +234,22 @@ export function projectWorkspaceTree(
       lineageRole: lineageRoleByPerson.get(person.id) ?? null
     })),
     unions
-  }, (viewpointId, targetPersonId) => primaryTerms && viewpointId === input.viewpointId
-    ? primaryTerms.get(targetPersonId) ?? null
-    : calculator.calculateRelationship(viewpointId, targetPersonId).primaryTerm);
+  }, (viewpointId, targetPersonId) => {
+    if (primaryLabels && viewpointId === input.viewpointId) {
+      return primaryLabels.get(targetPersonId) ?? null;
+    }
+    const result = calculator.calculateRelationship(viewpointId, targetPersonId);
+    if (!result.formalTerm) return null;
+    return {
+      formalTerm: result.formalTerm,
+      regionalTerm: result.regionalTerm,
+      displayTerm: result.displayTerm,
+      pathDescription: result.pathDescription,
+      formalRuleId: result.formalRuleId,
+      locale: result.locale,
+      regionalRuleVersion: result.regionalRuleVersion
+    };
+  });
   const topologyProjection = input.view === "full"
     ? service.full(input.collapseDepth ?? Number.POSITIVE_INFINITY)
     : service.scoped(scope.key);

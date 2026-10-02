@@ -1,4 +1,5 @@
 import type { GenerationDisplay } from "../lineage/generation-service.js";
+import type { KinshipDisplayLabel } from "../kinship/types.js";
 import type { FamilyUnion } from "./family-union-projector.js";
 
 export interface TreePersonDisplay {
@@ -54,7 +55,7 @@ export interface TreeProjectionTopology {
 export interface TreeProjection {
   topology: TreeProjectionTopology;
   viewpointId: string | null;
-  labels: Readonly<Record<string, string | null>>;
+  labels: Readonly<Record<string, KinshipDisplayLabel | null>>;
 }
 
 export interface TreeProjectionInput {
@@ -62,7 +63,7 @@ export interface TreeProjectionInput {
   unions: FamilyUnion[];
 }
 
-export type TreeLabelResolver = (viewpointId: string, targetPersonId: string) => string | null;
+export type TreeLabelResolver = (viewpointId: string, targetPersonId: string) => KinshipDisplayLabel | null;
 
 export class TreeProjectionService {
   private readonly people: Map<string, TreeProjectionPerson>;
