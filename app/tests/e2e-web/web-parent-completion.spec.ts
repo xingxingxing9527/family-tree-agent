@@ -319,11 +319,11 @@ async function personOptionLabel(request: APIRequestContext, personId: string): 
   return `${person.personCode}｜${person.displayName}`;
 }
 
-async function openTreeBranch(page: Page, workspaceId: string, centerName: string): Promise<void> {
+async function openTreeDescendants(page: Page, workspaceId: string, centerName: string): Promise<void> {
   await openArea(page, workspaceId, "tree");
-  await selectVisibleOption(page, "视图中心", centerName);
-  await page.getByRole("button", { name: "支系", exact: true }).click();
-  await expect(page.getByRole("button", { name: "支系", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await selectVisibleOption(page, "围绕谁查看", centerName);
+  await page.getByRole("button", { name: "子孙后代", exact: true }).click();
+  await expect(page.getByRole("button", { name: "子孙后代", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("group", { name: `人物：${centerName}`, exact: true })).toBeVisible();
 }
 
@@ -367,7 +367,7 @@ test("普通夫妻新增一个孩子时预览人工与自动两行", async ({ pa
   await createMarriage(request, father, mother);
   await openPerson(page, workspace.id, "验收普通父亲");
 
-  await page.getByRole("button", { name: "快速新建子女", exact: true }).click();
+  await page.getByRole("button", { name: "新建人物并设为子女", exact: true }).click();
   await page.getByLabel("姓名", { exact: true }).fill("验收普通孩子");
   await page.getByLabel("性别", { exact: true }).selectOption("female");
   await page.getByRole("button", { name: "保存人物", exact: true }).click();
@@ -574,21 +574,21 @@ test("批修复后家谱树不再把该家庭标为单亲", async ({ page, reque
   const marriage = await createMarriage(request, father, mother);
   await createExplicitParent(request, father, child, "father");
 
-  await openTreeBranch(page, workspace.id, "验收树父亲");
-  await expect(page.getByRole("group", { name: "家庭联合：单亲家庭" })).toHaveCount(1);
+  await openTreeDescendants(page, workspace.id, "验收树父亲");
+  await expect(page.getByRole("group", { name: "家庭联合：仅录入一位父母" })).toHaveCount(1);
   await openArea(page, workspace.id, "people");
   await page.getByRole("button", { name: "检查未完整父母关系", exact: true }).click();
   const panel = page.getByRole("region", { name: "检查未完整父母关系" });
   await panel.getByRole("button", { name: "生成修复预览", exact: true }).click();
   await confirmDialog(page);
 
-  await openTreeBranch(page, workspace.id, "验收树父亲");
-  await expect(page.getByRole("group", { name: "家庭联合：单亲家庭" })).toHaveCount(0);
+  await openTreeDescendants(page, workspace.id, "验收树父亲");
+  await expect(page.getByRole("group", { name: "家庭联合：仅录入一位父母" })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "家庭联合：婚姻", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "人物：验收树父亲", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "人物：验收树母亲", exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "人物：验收树孩子", exact: true })).toBeVisible();
-  const projection = await rpc<TreeProjection>(request, "query", "projectTree", { view: "branch", subjectId: father });
+  const projection = await rpc<TreeProjection>(request, "query", "projectTree", { view: "descendants", subjectId: father });
   const fatherNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === father);
   const motherNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === mother);
   const childNodes = projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === child);
