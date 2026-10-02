@@ -17,6 +17,7 @@ import { ParentCompletionService } from "../../src/main/application/relations/pa
 import {
   PERFORMANCE_GATES,
   REQUIRED_RELATIONSHIP_DISTRIBUTION,
+  SCOPED_TREE_PROJECTION_WORKLOAD,
   buildFixedRelationshipPairs,
   classifyProductionRelationship,
   parsePerformanceConstraints,
@@ -66,8 +67,13 @@ describe("1000-person beta performance fixture", () => {
       personDetailP95Ms: 500,
       relationshipP95Ms: 1000,
       treeProjectionP95Ms: 1000,
+      scopedTreeProjectionP95Ms: 1000,
       parentCompletionScanP95Ms: 1000,
       importPreviewMs: 10_000
+    });
+    expect(SCOPED_TREE_PROJECTION_WORKLOAD).toEqual({
+      views: ["core", "descendants"],
+      sampleCount: 20
     });
     const pairs = buildFixedRelationshipPairs(blueprint);
     expect(pairs).toHaveLength(200);

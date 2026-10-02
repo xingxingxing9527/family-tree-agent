@@ -35,8 +35,14 @@ export const PERFORMANCE_GATES = Object.freeze({
   personDetailP95Ms: 500,
   relationshipP95Ms: 1_000,
   treeProjectionP95Ms: 1_000,
+  scopedTreeProjectionP95Ms: 1_000,
   parentCompletionScanP95Ms: 1_000,
   importPreviewMs: 10_000
+});
+
+export const SCOPED_TREE_PROJECTION_WORKLOAD = Object.freeze({
+  views: ["core", "descendants"] as const,
+  sampleCount: 20
 });
 
 const PERFORMANCE_SOURCE_FILES = [
@@ -56,6 +62,7 @@ const PERFORMANCE_SOURCE_FILES = [
   "src/main/domain/kinship/relationship-calculator.ts",
   "src/main/domain/relations/parent-completion-planner.ts",
   "src/main/domain/relations/partial-date-interval.ts",
+  "src/main/domain/projection/tree-scope-resolver.ts",
   "src/renderer/src/features/tree/layout-with-elk.ts"
 ] as const;
 
@@ -288,6 +295,26 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
     });
     process.stdout.write("[performance] 20 tree projections measured\n");
 
+    const firstParentChild = blueprint.parentChild[0];
+    if (!firstParentChild) throw new Error("Scoped tree projection workload requires a parent-child fact");
+    const scopedTreeProjectionRequests = Array.from({ length: SCOPED_TREE_PROJECTION_WORKLOAD.sampleCount }, (_, index) => {
+      const view = SCOPED_TREE_PROJECTION_WORKLOAD.views[index % SCOPED_TREE_PROJECTION_WORKLOAD.views.length]!;
+      return {
+        view,
+        subjectId: view === "core" ? firstParentChild.childId : firstParentChild.parentId
+      };
+    });
+    for (const view of SCOPED_TREE_PROJECTION_WORKLOAD.views) {
+      projectWorkspaceTree(database, workspaceId, {
+        view,
+        subjectId: view === "core" ? firstParentChild.childId : firstParentChild.parentId
+      });
+    }
+    const scopedTreeProjectionSamples = measureSync(scopedTreeProjectionRequests, (request) => {
+      projectWorkspaceTree(database, workspaceId, request);
+    });
+    process.stdout.write("[performance] 20 core/descendants tree projections measured\n");
+
     const viewpointId = blueprint.people[0]!.id;
     projectWorkspaceTree(database, workspaceId, { view: "full", collapseDepth: 4, viewpointId });
     const viewpointSamples = measureSync(Array.from({ length: 5 }, (_, index) => index), () => {
@@ -404,6 +431,7 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
       personDetailP95: gate(personDetailSamples, PERFORMANCE_GATES.personDetailP95Ms),
       relationshipP95: gate(relationshipSamples, PERFORMANCE_GATES.relationshipP95Ms),
       treeProjectionP95: gate(treeProjectionSamples, PERFORMANCE_GATES.treeProjectionP95Ms),
+      scopedTreeProjectionP95: gate(scopedTreeProjectionSamples, PERFORMANCE_GATES.scopedTreeProjectionP95Ms),
       parentCompletionScanP95: gate(parentCompletionSamples, PERFORMANCE_GATES.parentCompletionScanP95Ms),
       importPreview: gate(importSamples, PERFORMANCE_GATES.importPreviewMs)
     };
@@ -436,6 +464,15 @@ export async function runPerformanceGates(): Promise<{ passed: boolean; reportPa
         personSearch: { executionPath: "QueryToolRegistry.search_people", sampleCount: searchQueries.length, limit: 20 },
         personDetail: { executionPath: "QueryToolRegistry.get_person", sampleCount: personIds.length },
         treeProjection: { executionPath: "projectWorkspaceTree", sampleCount: treeProjectionSamples.length, view: "full", collapseDepth: 4 },
+        scopedTreeProjection: {
+          executionPath: "projectWorkspaceTree",
+          sampleCount: scopedTreeProjectionSamples.length,
+          views: [...SCOPED_TREE_PROJECTION_WORKLOAD.views],
+          subjectIds: {
+            core: firstParentChild.childId,
+            descendants: firstParentChild.parentId
+          }
+        },
         parentCompletionScan: {
           executionPath: "ParentCompletionService.scan",
           warmupCount: 1,
