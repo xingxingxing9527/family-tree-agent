@@ -13,15 +13,21 @@ function unionLabel(kind: "marriage" | "coParents" | "singleParent" | "unassigne
   return "待分配家庭";
 }
 
-export function FamilyUnionNode({ data }: NodeProps<UnionFlowNode>): JSX.Element | null {
+export function FamilyUnionNode({ data, selected }: NodeProps<UnionFlowNode>): JSX.Element | null {
   if (data.node.kind !== "union") return null;
   const ended = data.node.display.marriageStatus === "divorced";
   const label = unionLabel(data.node.display.kind, ended);
   return (
     <article
-      className={`family-union-node${ended ? " ended" : ""}${data.node.display.kind === "unassigned" ? " warning" : ""}`}
+      className={`family-union-node${ended ? " ended" : ""}${data.node.display.kind === "unassigned" ? " warning" : ""}${selected ? " selected" : ""}`}
       role="group"
       aria-label={`家庭联合：${label}`}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        (data.onActivate as (() => void) | undefined)?.();
+      }}
       style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
     >
       <Handle id="descent-target" type="target" position={Position.Top} isConnectable={false} />

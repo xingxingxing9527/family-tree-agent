@@ -72,21 +72,21 @@
 - Consumes: Task 1 metadata.
 - Produces: `TreeSelection` and `onSelectionChange(selection: TreeSelection | null)`; visible selected node/edge state and accessible activation.
 
-- [ ] **Step 1: Write failing interaction tests**
+- [x] **Step 1: Write failing interaction tests**
 
   Assert that clicking a real person node yields its `personId`, clicking a marriage union or `parentUnion` edge yields its `marriageId`, clicking a `unionChild` edge yields its `childId` plus parent IDs, and clicking the pane clears selection.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
   Run: `npm test -- tests/unit/renderer/FamilyTreeCanvas.test.tsx`
 
   Expected: callbacks and selection styling do not yet exist.
 
-- [ ] **Step 3: Implement typed selection handlers and visual state**
+- [x] **Step 3: Implement typed selection handlers and visual state**
 
   Add React Flow `onNodeClick`, `onEdgeClick`, and `onPaneClick` handlers; set `selected` from the controlled selection; add focus-visible and selected styles without making nodes draggable or connectable.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
   Run: `npm test -- tests/unit/renderer/FamilyTreeCanvas.test.tsx`
 

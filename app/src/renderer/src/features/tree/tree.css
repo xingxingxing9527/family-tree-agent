@@ -67,6 +67,19 @@
 .tree-person-node.married-in { border-color: #a16207; border-style: dashed; }
 .tree-person-node.associated { border-color: #64748b; }
 
+.tree-person-node.selected,
+.tree-person-node:focus-visible,
+.family-union-node.selected,
+.family-union-node:focus-visible {
+  outline: 4px solid rgb(37 99 235 / 28%);
+  outline-offset: 3px;
+}
+
+.react-flow__edge.selected path {
+  stroke: #2563eb !important;
+  stroke-width: 4 !important;
+}
+
 .tree-lineage-role {
   width: fit-content;
   padding: 2px 7px;

@@ -5,7 +5,7 @@ import { useOptionalViewpoint } from "../../app/ViewpointContext";
 
 type PersonFlowNode = Node<TreeFlowNodeData, "person">;
 
-export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | null {
+export function PersonNode({ data, selected }: NodeProps<PersonFlowNode>): JSX.Element | null {
   const viewpoint = useOptionalViewpoint();
   if (data.node.kind !== "person") return null;
   const { display } = data.node;
@@ -26,9 +26,15 @@ export function PersonNode({ data }: NodeProps<PersonFlowNode>): JSX.Element | n
 
   return (
     <article
-      className={`tree-person-node${display.lineageRole ? ` ${display.lineageRole.replace("_", "-")}` : ""}`}
+      className={`tree-person-node${display.lineageRole ? ` ${display.lineageRole.replace("_", "-")}` : ""}${selected ? " selected" : ""}`}
       role="group"
       aria-label={`人物：${display.displayName}`}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        (data.onActivate as (() => void) | undefined)?.();
+      }}
       style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
     >
       <Handle id="descent-target" type="target" position={Position.Top} isConnectable={false} />

@@ -13,13 +13,28 @@ import { ViewpointProvider } from "../../../src/renderer/src/app/ViewpointContex
 vi.mock("@xyflow/react", async () => {
   const ReactModule = await import("react");
   return {
-    ReactFlow: ({ nodes, edges, nodeTypes }: {
-      nodes: Array<{ id: string; type: string; data: unknown }>;
-      edges: Array<{ id: string }>;
+    ReactFlow: ({ nodes, edges, nodeTypes, onNodeClick, onEdgeClick, onPaneClick }: {
+      nodes: Array<{ id: string; type: string; data: unknown; selected?: boolean }>;
+      edges: Array<{ id: string; data?: unknown; selected?: boolean }>;
       nodeTypes: Record<string, React.ComponentType<{ id: string; data: unknown }>>;
+      onNodeClick?(event: React.MouseEvent, node: unknown): void;
+      onEdgeClick?(event: React.MouseEvent, edge: unknown): void;
+      onPaneClick?(): void;
     }) => ReactModule.createElement("div", { "aria-label": "家谱图" },
-      ...nodes.map((node) => ReactModule.createElement(nodeTypes[node.type], { key: node.id, id: node.id, data: node.data })),
-      ...edges.map((edge) => ReactModule.createElement("span", { key: edge.id, "data-edge-id": edge.id }))
+      ...nodes.map((node) => ReactModule.createElement("div", {
+        key: node.id,
+        "data-testid": `flow-node:${node.id}`,
+        "data-selected": node.selected ? "true" : "false",
+        onClick: (event: React.MouseEvent) => onNodeClick?.(event, node)
+      }, ReactModule.createElement(nodeTypes[node.type], { id: node.id, data: node.data, selected: node.selected }))),
+      ...edges.map((edge) => ReactModule.createElement("button", {
+        key: edge.id,
+        type: "button",
+        "aria-label": `关系线：${edge.id}`,
+        "data-selected": edge.selected ? "true" : "false",
+        onClick: (event: React.MouseEvent) => onEdgeClick?.(event, edge)
+      })),
+      ReactModule.createElement("button", { type: "button", onClick: () => onPaneClick?.() }, "画布空白")
     ),
     Background: () => null,
     Controls: () => null,
@@ -49,6 +64,9 @@ const topology: TreeProjectionTopology = {
       id: "marriage:one",
       kind: "union",
       unionId: "marriage:one",
+      parentIds: ["parent-a", "parent-b"],
+      childIds: ["child"],
+      marriageId: "one",
       display: {
         kind: "marriage",
         marriageStatus: "divorced",
@@ -65,9 +83,9 @@ const topology: TreeProjectionTopology = {
     }
   ],
   edges: [
-    { id: "parent:a", source: "person:parent-a", target: "marriage:one", kind: "parentUnion", marriageStatus: "divorced" },
-    { id: "parent:b", source: "person:parent-b", target: "marriage:one", kind: "parentUnion", marriageStatus: "divorced" },
-    { id: "child:one", source: "marriage:one", target: "person:child", kind: "unionChild", marriageStatus: "divorced" }
+    { id: "parent:a", source: "person:parent-a", target: "marriage:one", kind: "parentUnion", unionId: "marriage:one", parentIds: ["parent-a", "parent-b"], childId: null, marriageId: "one", marriageStatus: "divorced" },
+    { id: "parent:b", source: "person:parent-b", target: "marriage:one", kind: "parentUnion", unionId: "marriage:one", parentIds: ["parent-a", "parent-b"], childId: null, marriageId: "one", marriageStatus: "divorced" },
+    { id: "child:one", source: "marriage:one", target: "person:child", kind: "unionChild", unionId: "marriage:one", parentIds: ["parent-a", "parent-b"], childId: "child", marriageId: "one", marriageStatus: "divorced" }
   ]
 };
 
@@ -250,6 +268,54 @@ describe("FamilyTreeCanvas", () => {
 
     expect(await screen.findByRole("group", { name: "人物：甲" })).toHaveTextContent("配偶");
     expect(layout).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports explicit person, marriage and parent-child selections", async () => {
+    const onSelectionChange = vi.fn();
+    render(<FamilyTreeCanvas projection={projection("child", "父亲")} onSelectionChange={onSelectionChange} />);
+
+    fireEvent.click(await screen.findByTestId("flow-node:person:parent-a"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith({ kind: "person", personId: "parent-a" });
+
+    fireEvent.click(screen.getByTestId("flow-node:marriage:one"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      kind: "marriage",
+      unionId: "marriage:one",
+      marriageId: "one",
+      parentIds: ["parent-a", "parent-b"]
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "关系线：parent:a" }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      kind: "marriage",
+      unionId: "marriage:one",
+      marriageId: "one",
+      parentIds: ["parent-a", "parent-b"]
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "关系线：child:one" }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      kind: "parentChild",
+      unionId: "marriage:one",
+      parentIds: ["parent-a", "parent-b"],
+      childId: "child",
+      marriageId: "one"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "画布空白" }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("activates a focused person node with the keyboard and reflects controlled selection", async () => {
+    const onSelectionChange = vi.fn();
+    const selected = { kind: "person" as const, personId: "parent-a" };
+    render(<FamilyTreeCanvas projection={projection("child", "父亲")} selection={selected} onSelectionChange={onSelectionChange} />);
+
+    const flowNode = await screen.findByTestId("flow-node:person:parent-a");
+    expect(flowNode).toHaveAttribute("data-selected", "true");
+    const card = screen.getByRole("group", { name: "人物：甲" });
+    fireEvent.keyDown(card, { key: "Enter" });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(selected);
   });
 
   it("shows an unresolved remarriage assignment instead of guessing", async () => {
