@@ -143,21 +143,21 @@
 - Consumes: marriage ID, expected row version, corrected spouse IDs/date/status fields, and source description.
 - Produces: `marriage.correct` and `marriage.remove` staged intents with conflict checks, preview summaries, audit changes, soft removal, and undo support.
 
-- [ ] **Step 1: Write failing domain, staged-preview, schema, and undo tests**
+- [x] **Step 1: Write failing domain, staged-preview, schema, and undo tests**
 
   Cover valid correction/removal plus identical spouses, missing people, active-marriage collision, stale version, child-fact preservation, and restoration through undo.
 
-- [ ] **Step 2: Run the focused integration tests and verify RED**
+- [x] **Step 2: Run the focused integration tests and verify RED**
 
   Run: `npm test -- tests/integration/application/fact-command-service.test.ts tests/integration/application/staged-mutation-service.test.ts tests/integration/audit/undo.test.ts tests/integration/ipc/ipc-contracts.test.ts`
 
   Expected: the new intents are not accepted or executed.
 
-- [ ] **Step 3: Implement minimal correction/removal support across the existing mutation pipeline**
+- [x] **Step 3: Implement minimal correction/removal support across the existing mutation pipeline**
 
   Add strict Zod contracts, command validation, repository persistence through the existing operation context, human-readable preview changes, expected-version tracking, and reversible audit snapshots. Removal changes only the marriage record; parent-child facts remain untouched.
 
-- [ ] **Step 4: Run the focused integration tests and verify GREEN**
+- [x] **Step 4: Run the focused integration tests and verify GREEN**
 
   Run the same command as Step 2.
 

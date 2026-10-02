@@ -52,6 +52,16 @@ export class RelationRepository {
       .run(...dateValues(end), now, this.workspaceId, id);
     const after = this.requireMarriage(id, false); ctx.audit.append({ entityType: "marriage", entityId: id, action: "update", before, after }); return after;
   }
+  correctMarriage(ctx: TransactionContext, id: string, input: Required<Pick<CreateMarriageInput, "spouseAId" | "spouseBId" | "status" | "start" | "end">>): MarriageRecord {
+    const before = this.requireMarriage(id, false);
+    const [spouseAId, spouseBId] = [input.spouseAId, input.spouseBId].sort();
+    const now = new Date().toISOString();
+    this.database.prepare(`UPDATE marriage SET spouse_a_id = ?, spouse_b_id = ?, marriage_status = ?, start_calendar = ?, start_year = ?, start_month = ?, start_day = ?, start_leap_month = ?, start_precision = ?, end_calendar = ?, end_year = ?, end_month = ?, end_day = ?, end_leap_month = ?, end_precision = ?, updated_at = ?, row_version = row_version + 1 WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL`)
+      .run(spouseAId, spouseBId, input.status, ...dateValues(input.start), ...dateValues(input.end), now, this.workspaceId, id);
+    const after = this.requireMarriage(id, false);
+    ctx.audit.append({ entityType: "marriage", entityId: id, action: "update", before, after });
+    return after;
+  }
   archiveMarriage(ctx: TransactionContext, id: string): MarriageRecord { const before = this.requireMarriage(id, false); const now = new Date().toISOString(); this.database.prepare("UPDATE marriage SET deleted_at = ?, updated_at = ?, row_version = row_version + 1 WHERE workspace_id = ? AND id = ? AND deleted_at IS NULL").run(now, now, this.workspaceId, id); const after = this.requireMarriage(id, true); ctx.audit.append({ entityType: "marriage", entityId: id, action: "archive", before, after }); return after; }
   private requireParentChild(id: string, includeArchived: boolean): ParentChildRecord { const row = this.getParentChild(id, { includeArchived }); if (!row) throw new Error(`Parent-child relation not found: ${id}`); return row; }
   private requireMarriage(id: string, includeArchived: boolean): MarriageRecord { const row = this.getMarriage(id, { includeArchived }); if (!row) throw new Error(`Marriage not found: ${id}`); return row; }

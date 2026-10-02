@@ -490,6 +490,55 @@ export class StagedMutationService {
           source: source("离婚登记", draftId, id)
         }, { id })];
       }
+      case "marriage.correct": {
+        const id = randomUUID();
+        const marriage = new RelationRepository(this.database, this.workspaceId).getMarriage(intent.marriageId);
+        const [spouseAId, spouseBId] = [intent.replacement.spouseAId, intent.replacement.spouseBId].sort();
+        const replacement = { spouseAId, spouseBId, status: intent.replacement.status, start: intent.replacement.start, end: intent.replacement.end };
+        const fieldChanges: MutationChange["fieldChanges"] = [];
+        if (marriage?.rowVersion === intent.expectedVersion) {
+          for (const field of ["spouseAId", "spouseBId", "status", "start", "end"] as const) {
+            if (!sameValue(marriage[field], replacement[field])) fieldChanges.push({ field, before: marriage[field], after: replacement[field] });
+          }
+        }
+        const disposition = marriage?.rowVersion === intent.expectedVersion && fieldChanges.length === 0 ? "unchanged" : "update";
+        return [make({
+          disposition,
+          entityType: "marriage",
+          entityId: intent.marriageId,
+          summary: disposition === "unchanged" ? "婚姻关系没有变化" : "更正婚姻关系",
+          fieldChanges
+        }, {
+          type: "marriage.correct",
+          marriageId: intent.marriageId,
+          expectedVersion: intent.expectedVersion,
+          replacement,
+          source: source(intent.replacement.sourceDescription, draftId, id)
+        }, { id })];
+      }
+      case "marriage.remove": {
+        const id = randomUUID();
+        const marriage = new RelationRepository(this.database, this.workspaceId).getMarriage(intent.marriageId);
+        const before = marriage ? {
+          spouseAId: marriage.spouseAId,
+          spouseBId: marriage.spouseBId,
+          status: marriage.status,
+          start: marriage.start,
+          end: marriage.end
+        } : null;
+        return [make({
+          disposition: "update",
+          entityType: "marriage",
+          entityId: intent.marriageId,
+          summary: "删除错误婚姻记录",
+          fieldChanges: [{ field: "relation", before, after: null }]
+        }, {
+          type: "fact.softDelete",
+          entityType: "marriage",
+          entityId: intent.marriageId,
+          expectedVersion: intent.expectedVersion
+        }, { id })];
+      }
       case "person.childrenCompleteness.set": {
         const id = randomUUID();
         const person = new PersonRepository(this.database, this.workspaceId).get(intent.personId);

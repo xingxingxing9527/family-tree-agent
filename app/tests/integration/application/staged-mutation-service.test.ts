@@ -808,6 +808,56 @@ describe("StagedMutationService", () => {
     ]);
   });
 
+  it("previews, confirms and removes a corrected marriage without deleting parent-child facts", () => {
+    seedFamily();
+    createPerson("replacement", "正确配偶", "female");
+    createParent("known-child", "known", "father");
+
+    const correction = service.stage({ intents: [{
+      type: "marriage.correct",
+      marriageId: "marriage",
+      expectedVersion: 1,
+      replacement: {
+        spouseAId: "known",
+        spouseBId: "replacement",
+        status: "active",
+        start: solar(2010),
+        end: null,
+        sourceDescription: "管理员更正配偶"
+      }
+    }] });
+    expect(correction.changes).toMatchObject([{
+      disposition: "update",
+      entityType: "marriage",
+      entityId: "marriage",
+      summary: "更正婚姻关系",
+      fieldChanges: expect.arrayContaining([{ field: "spouseBId", before: "spouse", after: "replacement" }])
+    }]);
+    service.confirm({
+      draftId: correction.id,
+      draftVersion: correction.version,
+      selectedChangeIds: correction.changes.map(({ id }) => id),
+      acknowledgedWarningCodes: []
+    });
+
+    const removal = service.stage({ intents: [{ type: "marriage.remove", marriageId: "marriage", expectedVersion: 2 }] });
+    expect(removal.changes).toMatchObject([{
+      disposition: "update",
+      entityType: "marriage",
+      entityId: "marriage",
+      summary: "删除错误婚姻记录"
+    }]);
+    service.confirm({
+      draftId: removal.id,
+      draftVersion: removal.version,
+      selectedChangeIds: removal.changes.map(({ id }) => id),
+      acknowledgedWarningCodes: []
+    });
+
+    expect(database.prepare("SELECT COUNT(*) FROM marriage WHERE id='marriage' AND deleted_at IS NULL").pluck().get()).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) FROM parent_child WHERE id='known-child' AND deleted_at IS NULL").pluck().get()).toBe(1);
+  });
+
   it("blocks a divorced marriage draft without an end and a second new active event for the same person", () => {
     createPerson("center", "中心人物");
     createPerson("spouse-a", "配偶甲");

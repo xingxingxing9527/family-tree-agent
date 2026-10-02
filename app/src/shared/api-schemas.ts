@@ -58,6 +58,17 @@ const marriageDraft = z.object({
     context.addIssue({ code: "custom", path: ["end"], message: "A divorced marriage requires an end date" });
   }
 });
+const marriageReplacement = z.object({
+  spouseAId: id,
+  spouseBId: id,
+  status: z.enum(["active", "divorced"]),
+  start: nullableDate,
+  end: nullableDate,
+  sourceDescription
+}).strict().superRefine((value, context) => {
+  if (value.spouseAId === value.spouseBId) context.addIssue({ code: "custom", path: ["spouseBId"], message: "People must be different" });
+  if (value.status === "divorced" && !value.end) context.addIssue({ code: "custom", path: ["end"], message: "A divorced marriage requires an end date" });
+});
 
 const lineageRole = z.enum(["blood", "married_in", "associated"]);
 const nullableText = (maximum: number) => z.string().trim().min(1).max(maximum).nullable();
@@ -98,6 +109,8 @@ const mutationIntent = z.discriminatedUnion("type", [
   }).strict().refine((value) => value.knownParentId !== value.childId, { message: "People must be different" }),
   z.object({ type: z.literal("marriage.add"), draft: marriageDraft }).strict(),
   z.object({ type: z.literal("marriage.divorce"), marriageId: id, endDate: nullableDate, expectedVersion }).strict(),
+  z.object({ type: z.literal("marriage.correct"), marriageId: id, expectedVersion, replacement: marriageReplacement }).strict(),
+  z.object({ type: z.literal("marriage.remove"), marriageId: id, expectedVersion }).strict(),
   z.object({ type: z.literal("person.childrenCompleteness.set"), personId: id, complete: z.boolean(), sourceDescription, expectedVersion }).strict(),
   z.object({ type: z.literal("lineage.create"), name: z.string().trim().min(1).max(200), founderPersonId: id, description: nullableText(10_000) }).strict(),
   z.object({ type: z.literal("lineage.update"), lineageId: id, expectedVersion, patch: lineagePatch }).strict(),

@@ -152,6 +152,36 @@ describe("conservative operation-group undo", () => {
     expect(marriage.operationGroupId).not.toBe(archived.operationGroupId);
   });
 
+  it("undoes marriage correction and erroneous-record removal without touching parent-child facts", () => {
+    for (const [id, name] of [["spouse-a", "甲"], ["spouse-b", "乙"], ["replacement", "丙"], ["child", "孩子"]] as const) {
+      facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`marriage-undo:${id}`) });
+    }
+    facts.execute({ type: "marriage.add", draft: { id: "marriage-undo", workspaceId, spouseAId: "spouse-a", spouseBId: "spouse-b" }, source: source("marriage-undo:create") });
+    facts.execute({ type: "parentChild.add", draft: { id: "marriage-undo-child", workspaceId, parentId: "spouse-a", childId: "child", parentRole: "father" }, source: source("marriage-undo:relation") });
+    const staged = new StagedMutationService(database, workspaceId);
+
+    const correction = staged.stage({ intents: [{
+      type: "marriage.correct",
+      marriageId: "marriage-undo",
+      expectedVersion: 1,
+      replacement: { spouseAId: "spouse-a", spouseBId: "replacement", status: "active", start: null, end: null, sourceDescription: "管理员更正" }
+    }] });
+    const corrected = staged.confirm({ draftId: correction.id, draftVersion: correction.version, selectedChangeIds: correction.changes.map(({ id }) => id), acknowledgedWarningCodes: [] });
+    expect(new RelationRepository(database, workspaceId).getMarriage("marriage-undo")).toMatchObject({ spouseAId: "replacement", spouseBId: "spouse-a", rowVersion: 2 });
+
+    undo.undoOperationGroup(corrected.operationGroupId);
+    expect(new RelationRepository(database, workspaceId).getMarriage("marriage-undo")).toMatchObject({ spouseAId: "spouse-a", spouseBId: "spouse-b", rowVersion: 1 });
+
+    const removal = staged.stage({ intents: [{ type: "marriage.remove", marriageId: "marriage-undo", expectedVersion: 1 }] });
+    const removed = staged.confirm({ draftId: removal.id, draftVersion: removal.version, selectedChangeIds: removal.changes.map(({ id }) => id), acknowledgedWarningCodes: [] });
+    expect(new RelationRepository(database, workspaceId).getMarriage("marriage-undo")).toBeNull();
+    expect(new RelationRepository(database, workspaceId).getParentChild("marriage-undo-child")).not.toBeNull();
+
+    undo.undoOperationGroup(removed.operationGroupId);
+    expect(new RelationRepository(database, workspaceId).getMarriage("marriage-undo")).toMatchObject({ deletedAt: null, rowVersion: 1 });
+    expect(new RelationRepository(database, workspaceId).getParentChild("marriage-undo-child")).not.toBeNull();
+  });
+
   it("enriches inferred parent audit history with readable marriage provenance and a safe legacy fallback", () => {
     for (const [id, name] of [["history-father", "王建国"], ["history-mother", "李秀兰"], ["history-child", "孩子"], ["legacy-child", "旧记录孩子"]] as const) {
       facts.execute({ type: "person.create", draft: { id, workspaceId, displayName: name, gender: "unknown" }, source: source(`history:${id}`) });

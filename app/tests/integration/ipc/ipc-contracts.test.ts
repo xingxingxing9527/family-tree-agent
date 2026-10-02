@@ -59,6 +59,26 @@ describe("workspace IPC contracts", () => {
     }).success).toBe(false);
   });
 
+  it("accepts strict marriage correction and removal intents", () => {
+    const correction = {
+      type: "marriage.correct",
+      marriageId: "marriage-1",
+      expectedVersion: 2,
+      replacement: {
+        spouseAId: "person-a",
+        spouseBId: "person-b",
+        status: "divorced",
+        start: null,
+        end: { calendar: "solar", year: 2020, month: 1, day: null, leapMonth: false, precision: "month" },
+        sourceDescription: "管理员更正"
+      }
+    };
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: [correction] }).success).toBe(true);
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: [{ type: "marriage.remove", marriageId: "marriage-1", expectedVersion: 2 }] }).success).toBe(true);
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: [{ ...correction, replacement: { ...correction.replacement, spouseBId: "person-a" } }] }).success).toBe(false);
+    expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: [{ type: "marriage.remove", marriageId: "marriage-1", expectedVersion: 2, reason: "client-forged" }] }).success).toBe(false);
+  });
+
   it("enforces the public 1000-intent and 2000-selected-change bounds", () => {
     const intent = { type: "lineage.create", name: "长房", founderPersonId: "founder", description: null };
     expect(RPC_INPUT_SCHEMAS.mutations.stage.safeParse({ intents: Array.from({ length: 1_000 }, () => intent) }).success).toBe(true);

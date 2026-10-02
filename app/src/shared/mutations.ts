@@ -44,6 +44,20 @@ export type MutationIntent =
   }
   | { type: "marriage.add"; draft: MarriageDraft }
   | { type: "marriage.divorce"; marriageId: string; endDate: PartialDate | null; expectedVersion: number }
+  | {
+    type: "marriage.correct";
+    marriageId: string;
+    expectedVersion: number;
+    replacement: {
+      spouseAId: string;
+      spouseBId: string;
+      status: "active" | "divorced";
+      start: PartialDate | null;
+      end: PartialDate | null;
+      sourceDescription: string;
+    };
+  }
+  | { type: "marriage.remove"; marriageId: string; expectedVersion: number }
   | { type: "person.childrenCompleteness.set"; personId: string; complete: boolean; sourceDescription: string; expectedVersion: number }
   | { type: "lineage.create"; name: string; founderPersonId: string; description: string | null }
   | { type: "lineage.update"; lineageId: string; expectedVersion: number; patch: { name?: string; founderPersonId?: string; description?: string | null } }

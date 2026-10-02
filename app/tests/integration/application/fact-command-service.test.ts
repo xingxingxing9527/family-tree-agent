@@ -137,6 +137,52 @@ describe("FactCommandService", () => {
     expect(queries.listMarriages()[0]?.end).toEqual(solar(2020));
   });
 
+  it("corrects a marriage in place while enforcing people, active-marriage and version constraints", () => {
+    createPerson("A", "A"); createPerson("B", "B"); createPerson("C", "C"); createPerson("D", "D"); createPerson("E", "E");
+    service.execute({ type: "marriage.add", draft: { id: "m1", workspaceId, spouseAId: "A", spouseBId: "B" }, source: source("m1") });
+    service.execute({ type: "marriage.add", draft: { id: "m2", workspaceId, spouseAId: "C", spouseBId: "D" }, source: source("m2") });
+
+    expectCode(() => service.execute({
+      type: "marriage.correct",
+      marriageId: "m1",
+      expectedVersion: 1,
+      replacement: { spouseAId: "A", spouseBId: "A", status: "active", start: null, end: null },
+      source: source("self-correction")
+    }), "SELF_RELATION");
+    expectCode(() => service.execute({
+      type: "marriage.correct",
+      marriageId: "m1",
+      expectedVersion: 1,
+      replacement: { spouseAId: "A", spouseBId: "missing", status: "active", start: null, end: null },
+      source: source("missing-correction")
+    }), "NOT_FOUND");
+    expectCode(() => service.execute({
+      type: "marriage.correct",
+      marriageId: "m1",
+      expectedVersion: 1,
+      replacement: { spouseAId: "A", spouseBId: "C", status: "active", start: null, end: null },
+      source: source("conflicting-correction")
+    }), "ACTIVE_MARRIAGE_EXISTS");
+
+    service.execute({
+      type: "marriage.correct",
+      marriageId: "m1",
+      expectedVersion: 1,
+      replacement: { spouseAId: "A", spouseBId: "E", status: "divorced", start: solar(2000), end: solar(2010) },
+      source: source("valid-correction")
+    });
+    expect(queries.listMarriages().find(({ id }) => id === "m1")).toMatchObject({
+      spouseAId: "A", spouseBId: "E", status: "divorced", start: solar(2000), end: solar(2010), rowVersion: 2
+    });
+    expectCode(() => service.execute({
+      type: "marriage.correct",
+      marriageId: "m1",
+      expectedVersion: 1,
+      replacement: { spouseAId: "A", spouseBId: "B", status: "active", start: null, end: null },
+      source: source("stale-correction")
+    }), "CONFLICT");
+  });
+
   it("rejects referenced people and drafts from a different workspace", () => {
     createPerson("local", "本地");
     const now = new Date().toISOString();

@@ -180,6 +180,26 @@ export class FactCommandService {
         }
         break;
       }
+      case "marriage.correct": {
+        this.validateOptionalDate(command.replacement.start, errors);
+        this.validateOptionalDate(command.replacement.end, errors);
+        if (command.replacement.status === "divorced" && !command.replacement.end) {
+          errors.push(issue("DIVORCED_MARRIAGE_END_REQUIRED", "A divorced marriage requires an end date"));
+        }
+        const marriage = this.loadMarriage(command.marriageId, errors);
+        if (!marriage) break;
+        ids.marriage = marriage.id;
+        this.requireVersion(marriage.rowVersion, command.expectedVersion, "marriage", marriage.id, errors);
+        const spouseA = this.loadPerson(command.replacement.spouseAId, "spouseAId", ids, errors);
+        const spouseB = this.loadPerson(command.replacement.spouseBId, "spouseBId", ids, errors);
+        if (!spouseA || !spouseB) break;
+        this.mergeValidation(validateMarriageFact(spouseA, spouseB), errors, warnings);
+        const activeMarriages = this.relations.listMarriages().filter((candidate) => candidate.id !== marriage.id && candidate.status === "active");
+        if (command.replacement.status === "active" && activeMarriages.some((candidate) => this.marriageContains(candidate, spouseA.id) || this.marriageContains(candidate, spouseB.id))) {
+          errors.push(issue("ACTIVE_MARRIAGE_EXISTS", "Each spouse must end their active marriage before starting another"));
+        }
+        break;
+      }
       case "person.childrenCompleteness.set": {
         const person = this.loadPerson(command.personId, "person", ids, errors);
         if (person) this.requireVersion(person.rowVersion, command.expectedVersion, "person", person.id, errors);
@@ -246,6 +266,18 @@ export class FactCommandService {
       case "marriage.divorce": {
         const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
         const marriage = ctx.relations.divorceMarriage(ctx, ids.marriage!, command.endDate);
+        if (createdSource) ctx.factSources.link("marriage", marriage.id, createdSource.id, ctx.operationGroupId);
+        return marriage.id;
+      }
+      case "marriage.correct": {
+        const createdSource = recordSource ? ctx.sources.create(ctx, command.source) : null;
+        const marriage = ctx.relations.correctMarriage(ctx, ids.marriage!, {
+          spouseAId: ids.spouseAId!,
+          spouseBId: ids.spouseBId!,
+          status: command.replacement.status,
+          start: command.replacement.start,
+          end: command.replacement.end
+        });
         if (createdSource) ctx.factSources.link("marriage", marriage.id, createdSource.id, ctx.operationGroupId);
         return marriage.id;
       }
