@@ -374,8 +374,8 @@ test("普通夫妻新增一个孩子时预览人工与自动两行", async ({ pa
   await confirmDialog(page);
   await expect(page.getByRole("checkbox", { name: "选择子女 验收普通孩子", exact: true })).toBeChecked();
 
-  await selectChildrenAndPreview(page, ["验收普通孩子"], "father");
   const dialog = page.getByRole("dialog", { name: "确认写入" });
+  await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel(/选择 验收普通父亲 → 验收普通孩子：父亲/u)).toBeChecked();
   await expect(dialog.getByLabel(/选择 验收普通母亲 → 验收普通孩子：母亲/u)).toBeChecked();
   await expect(dialog.getByText("人工录入", { exact: true })).toBeVisible();

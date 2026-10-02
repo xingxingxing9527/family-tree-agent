@@ -100,7 +100,7 @@ test("creates a five-person family with divorce, remarriage, tree evidence, ques
   await page.getByRole("button", { name: "关系查询" }).click();
   await page.getByRole("button", { name: "发送" }).click();
   await page.getByRole("button", { name: "同意并发送" }).click();
-  await expect(page.getByLabel("家谱问答").getByText("女儿；关系路径已列出。", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("家谱问答").getByText("闭环王小雨是你的“女儿”。", { exact: true })).toBeVisible();
   await expect(page.getByText("闭环王建国 → 闭环王小雨")).toBeVisible();
   await expect(page.getByText("闭环亲子资料").first()).toBeVisible();
 

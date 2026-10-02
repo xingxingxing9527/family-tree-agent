@@ -1,16 +1,30 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import type { PersonDetailReadModel, TreeProjectionDto, WorkspaceSnapshotDto } from "../../src/shared/contracts";
+import type { PartialDate, PersonDetailReadModel, TreeProjectionDto, WorkspaceSnapshotDto } from "../../src/shared/contracts";
 import { ensureFamily, openArea, rpc, stageAndConfirm } from "./helpers";
 
-async function createPerson(request: APIRequestContext, displayName: string, gender: "male" | "female"): Promise<string> {
+async function createPerson(
+  request: APIRequestContext,
+  displayName: string,
+  gender: "male" | "female",
+  birth: PartialDate | null = null
+): Promise<string> {
   const receipt = await stageAndConfirm(request, [{
     type: "person.create",
-    draft: { displayName, aliases: [], gender, birth: null, death: null, notes: null, sourceDescription: "家谱快捷编辑 Web 验收" }
+    draft: { displayName, aliases: [], gender, birth, death: null, notes: null, sourceDescription: "家谱快捷编辑 Web 验收" }
   }]);
   const id = receipt.changedEntityIds[0];
   if (!id) throw new Error(`Missing person id for ${displayName}`);
   return id;
 }
+
+const solar = (year: number): PartialDate => ({
+  calendar: "solar",
+  year,
+  month: 1,
+  day: null,
+  leapMonth: false,
+  precision: "month"
+});
 
 async function clickFlowNode(page: Page, nodeId: string): Promise<void> {
   await page.locator(`.react-flow__node[data-id="${nodeId}"]`).click();
@@ -213,4 +227,65 @@ test("switches among the four approved family-tree scopes without changing the k
   await expect(page.getByText(`尚未为 ${noPrimaryName} 设置主要本家支系`, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "前往设置本家支系", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/workspace/${workspace.id}/settings$`, "u"));
+});
+
+test("shows Gongyi kinship terms consistently across cards, drawer and viewpoint changes", async ({ page, request }) => {
+  const workspace = await ensureFamily(request);
+  const suffix = Date.now().toString(36);
+  const names = {
+    viewpoint: `巩义视角-${suffix}`,
+    father: `巩义父亲-${suffix}`,
+    grandmother: `巩义祖母-${suffix}`,
+    greatGrandfather: `巩义曾外祖父-${suffix}`,
+    aunt: `巩义姨奶奶-${suffix}`,
+    uncle: `巩义舅爷-${suffix}`,
+    cousin: `巩义表姑-${suffix}`,
+    auntDaughter: `巩义表姨-${suffix}`,
+    cousinHusband: `巩义表姑父-${suffix}`
+  };
+  const viewpointId = await createPerson(request, names.viewpoint, "female", solar(2010));
+  const fatherId = await createPerson(request, names.father, "male", solar(1980));
+  const grandmotherId = await createPerson(request, names.grandmother, "female", solar(1955));
+  const greatGrandfatherId = await createPerson(request, names.greatGrandfather, "male", solar(1930));
+  const auntId = await createPerson(request, names.aunt, "female", solar(1950));
+  const uncleId = await createPerson(request, names.uncle, "male", solar(1960));
+  const cousinId = await createPerson(request, names.cousin, "female", solar(1982));
+  const auntDaughterId = await createPerson(request, names.auntDaughter, "female", solar(1983));
+  const cousinHusbandId = await createPerson(request, names.cousinHusband, "male", solar(1980));
+  await stageAndConfirm(request, [
+    { type: "parentChild.add", draft: { parentId: fatherId, childId: viewpointId, parentRole: "father", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: grandmotherId, childId: fatherId, parentRole: "mother", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: greatGrandfatherId, childId: grandmotherId, parentRole: "father", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: greatGrandfatherId, childId: auntId, parentRole: "father", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: greatGrandfatherId, childId: uncleId, parentRole: "father", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: uncleId, childId: cousinId, parentRole: "father", sourceDescription: "巩义称谓验收" } },
+    { type: "parentChild.add", draft: { parentId: auntId, childId: auntDaughterId, parentRole: "mother", sourceDescription: "巩义称谓验收" } },
+    { type: "marriage.add", draft: { spouseAId: auntDaughterId, spouseBId: cousinHusbandId, status: "active", start: null, end: null, sourceDescription: "巩义称谓验收" } }
+  ]);
+
+  await openArea(page, workspace.id, "tree");
+  await page.getByLabel("当前视角", { exact: true }).selectOption(viewpointId);
+  const auntCard = page.getByRole("group", { name: `人物：${names.aunt}`, exact: true });
+  const uncleCard = page.getByRole("group", { name: `人物：${names.uncle}`, exact: true });
+  const cousinCard = page.getByRole("group", { name: `人物：${names.cousin}`, exact: true });
+  const husbandCard = page.getByRole("group", { name: `人物：${names.cousinHusband}`, exact: true });
+  await expect(auntCard).toContainText("姨奶奶");
+  await expect(uncleCard).toContainText("舅爷");
+  await expect(cousinCard).toContainText("表姑");
+  await expect(husbandCard).toContainText("表姑父");
+
+  await auntCard.click();
+  const drawer = page.getByRole("complementary", { name: "人物与关系编辑" });
+  await expect(drawer).toContainText("正式称谓：姨祖母");
+  await expect(drawer).toContainText("关系说明：祖母的姐姐");
+  await page.getByRole("button", { name: "关闭人物与关系编辑" }).click();
+
+  await page.route("**/api/rpc/query/projectTree", async (route) => {
+    const body = route.request().postDataJSON() as { input?: { viewpointId?: string } } | null;
+    if (body?.input?.viewpointId === fatherId) await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.continue();
+  });
+  await page.getByLabel("当前视角", { exact: true }).selectOption(fatherId);
+  await expect(page.getByText("姨奶奶", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: `人物：${names.aunt}`, exact: true })).toContainText("姨妈");
 });
