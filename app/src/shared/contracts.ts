@@ -283,6 +283,9 @@ export interface TreeUnionNodeDto {
   id: string;
   kind: "union";
   unionId: string;
+  parentIds: string[];
+  childIds: string[];
+  marriageId: string | null;
   display: {
     kind: "marriage" | "coParents" | "singleParent" | "unassigned";
     marriageStatus: "active" | "divorced" | null;
@@ -298,6 +301,10 @@ export interface TreeProjectionEdgeDto {
   source: string;
   target: string;
   kind: "parentUnion" | "unionChild";
+  unionId: string;
+  parentIds: string[];
+  childId: string | null;
+  marriageId: string | null;
   marriageStatus: "active" | "divorced" | null;
 }
 export interface TreeProjectionTopologyDto { key: string; nodes: TreeProjectionNodeDto[]; edges: TreeProjectionEdgeDto[]; }

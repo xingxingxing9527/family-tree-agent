@@ -25,6 +25,9 @@ export interface TreeUnionNode {
   id: string;
   kind: "union";
   unionId: string;
+  parentIds: string[];
+  childIds: string[];
+  marriageId: string | null;
   display: Pick<FamilyUnion, "kind" | "marriageStatus" | "marriageStart" | "marriageEnd" | "warnings">;
 }
 
@@ -35,6 +38,10 @@ export interface TreeProjectionEdge {
   source: string;
   target: string;
   kind: "parentUnion" | "unionChild";
+  unionId: string;
+  parentIds: string[];
+  childId: string | null;
+  marriageId: string | null;
   marriageStatus: FamilyUnion["marriageStatus"];
 }
 
@@ -169,6 +176,9 @@ export class TreeProjectionService {
       id: union.id,
       kind: "union",
       unionId: union.id,
+      parentIds: [...union.parentIds],
+      childIds: [...union.childIds],
+      marriageId: union.marriageId,
       display: {
         kind: union.kind,
         marriageStatus: union.marriageStatus,
@@ -183,6 +193,10 @@ export class TreeProjectionService {
         source: `person:${parentId}`,
         target: union.id,
         kind: "parentUnion" as const,
+        unionId: union.id,
+        parentIds: [...union.parentIds],
+        childId: null,
+        marriageId: union.marriageId,
         marriageStatus: union.marriageStatus
       })),
       ...union.childIds.filter((id) => personIds.has(id)).map((childId) => ({
@@ -190,6 +204,10 @@ export class TreeProjectionService {
         source: union.id,
         target: `person:${childId}`,
         kind: "unionChild" as const,
+        unionId: union.id,
+        parentIds: [...union.parentIds],
+        childId,
+        marriageId: union.marriageId,
         marriageStatus: union.marriageStatus
       }))
     ]).sort((left, right) => left.id.localeCompare(right.id));

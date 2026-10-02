@@ -322,6 +322,53 @@ describe("TreeProjectionService", () => {
     expect(projection.topology.edges.filter((edge) => edge.source === "person:a")).toHaveLength(2);
   });
 
+  it("exposes explicit participants for person, marriage and parent-child selection", () => {
+    const service = new TreeProjectionService({
+      people,
+      unions: [
+        ...unions,
+        {
+          id: "single:e",
+          kind: "singleParent",
+          parentIds: ["e"],
+          marriageId: null,
+          marriageStatus: null,
+          marriageStart: null,
+          marriageEnd: null,
+          childIds: ["isolated"],
+          warnings: []
+        }
+      ]
+    });
+
+    const topology = service.full("a", Number.POSITIVE_INFINITY).topology;
+    const marriage = topology.nodes.find((node) => node.id === "marriage:first");
+    const coParents = topology.nodes.find((node) => node.id === "parents:c:d");
+    const singleParent = topology.nodes.find((node) => node.id === "single:e");
+
+    expect(marriage).toMatchObject({ parentIds: ["a", "b"], childIds: ["c"], marriageId: "first" });
+    expect(coParents).toMatchObject({ parentIds: ["c", "d"], childIds: ["e"], marriageId: null });
+    expect(singleParent).toMatchObject({ parentIds: ["e"], childIds: ["isolated"], marriageId: null });
+    expect(topology.edges.find((edge) => edge.id === "parent:a:marriage:first")).toMatchObject({
+      unionId: "marriage:first",
+      parentIds: ["a", "b"],
+      childId: null,
+      marriageId: "first"
+    });
+    expect(topology.edges.find((edge) => edge.id === "child:marriage:first:c")).toMatchObject({
+      unionId: "marriage:first",
+      parentIds: ["a", "b"],
+      childId: "c",
+      marriageId: "first"
+    });
+    expect(topology.edges.find((edge) => edge.id === "child:single:e:isolated")).toMatchObject({
+      unionId: "single:e",
+      parentIds: ["e"],
+      childId: "isolated",
+      marriageId: null
+    });
+  });
+
   it("updates viewpoint labels without recomputing topology", () => {
     const service = new TreeProjectionService({ people, unions }, (viewpointId, targetId) => `${viewpointId}->${targetId}`);
     const fromA = service.full("a", Number.POSITIVE_INFINITY);
