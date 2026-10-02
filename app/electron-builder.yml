@@ -24,6 +24,8 @@ files:
 extraResources:
   - from: resources/kinship-rules/mandarin-v1.json
     to: kinship-rules/mandarin-v1.json
+  - from: resources/kinship-locales/zh-CN-henan-gongyi-v1.json
+    to: kinship-locales/zh-CN-henan-gongyi-v1.json
 asarUnpack:
   - node_modules/better-sqlite3/**
 win:

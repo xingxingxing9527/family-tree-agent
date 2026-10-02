@@ -1,0 +1,33 @@
+{
+  "people": [
+    { "id": "viewpoint", "gender": "female", "birth": { "calendar": "solar", "year": 2010, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "father", "gender": "male", "birth": { "calendar": "solar", "year": 1980, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "mother", "gender": "female", "birth": { "calendar": "solar", "year": 1982, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "grandmother", "gender": "female", "birth": { "calendar": "solar", "year": 1955, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "great-grandfather", "gender": "male", "birth": { "calendar": "solar", "year": 1930, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "older-sister", "gender": "female", "birth": { "calendar": "solar", "year": 1950, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "younger-sister", "gender": "female", "birth": { "calendar": "solar", "year": 1960, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "unknown-age-sister", "gender": "female", "birth": null },
+    { "id": "older-brother", "gender": "male", "birth": { "calendar": "solar", "year": 1951, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "younger-brother", "gender": "male", "birth": { "calendar": "solar", "year": 1962, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "brothers-daughter", "gender": "female", "birth": { "calendar": "solar", "year": 1982, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "sisters-daughter", "gender": "female", "birth": { "calendar": "solar", "year": 1983, "month": 1, "day": null, "leapMonth": false, "precision": "month" } },
+    { "id": "sisters-daughters-husband", "gender": "male", "birth": { "calendar": "solar", "year": 1980, "month": 1, "day": null, "leapMonth": false, "precision": "month" } }
+  ],
+  "parentChild": [
+    { "id": "father-viewpoint", "parentId": "father", "childId": "viewpoint", "parentRole": "father" },
+    { "id": "mother-viewpoint", "parentId": "mother", "childId": "viewpoint", "parentRole": "mother" },
+    { "id": "grandmother-father", "parentId": "grandmother", "childId": "father", "parentRole": "mother" },
+    { "id": "great-grandfather-grandmother", "parentId": "great-grandfather", "childId": "grandmother", "parentRole": "father" },
+    { "id": "great-grandfather-older-sister", "parentId": "great-grandfather", "childId": "older-sister", "parentRole": "father" },
+    { "id": "great-grandfather-younger-sister", "parentId": "great-grandfather", "childId": "younger-sister", "parentRole": "father" },
+    { "id": "great-grandfather-unknown-age-sister", "parentId": "great-grandfather", "childId": "unknown-age-sister", "parentRole": "father" },
+    { "id": "great-grandfather-older-brother", "parentId": "great-grandfather", "childId": "older-brother", "parentRole": "father" },
+    { "id": "great-grandfather-younger-brother", "parentId": "great-grandfather", "childId": "younger-brother", "parentRole": "father" },
+    { "id": "older-brother-daughter", "parentId": "older-brother", "childId": "brothers-daughter", "parentRole": "father" },
+    { "id": "older-sister-daughter", "parentId": "older-sister", "childId": "sisters-daughter", "parentRole": "mother" }
+  ],
+  "marriages": [
+    { "id": "cousin-marriage", "spouseAId": "sisters-daughter", "spouseBId": "sisters-daughters-husband", "status": "active" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "locale": "zh-CN-henan-gongyi",
+  "version": "zh-CN-henan-gongyi-v1",
+  "formalCatalogVersion": "mandarin-v1",
+  "terms": [
+    { "ruleId": "paternal-grandmothers-sister", "term": "姨奶奶" },
+    { "ruleId": "paternal-grandmothers-older-sister", "term": "姨奶奶" },
+    { "ruleId": "paternal-grandmothers-younger-sister", "term": "姨奶奶" },
+    { "ruleId": "paternal-grandmothers-brother", "term": "舅爷" },
+    { "ruleId": "paternal-grandmothers-older-brother", "term": "舅爷" },
+    { "ruleId": "paternal-grandmothers-younger-brother", "term": "舅爷" },
+    { "ruleId": "paternal-grandmothers-brothers-daughter", "term": "表姑" },
+    { "ruleId": "paternal-grandmothers-older-brothers-daughter", "term": "表姑" },
+    { "ruleId": "paternal-grandmothers-younger-brothers-daughter", "term": "表姑" },
+    { "ruleId": "paternal-grandmothers-sisters-daughters-husband", "term": "表姑父" },
+    { "ruleId": "paternal-grandmothers-older-sisters-daughters-husband", "term": "表姑父" },
+    { "ruleId": "paternal-grandmothers-younger-sisters-daughters-husband", "term": "表姑父" }
+  ]
+}

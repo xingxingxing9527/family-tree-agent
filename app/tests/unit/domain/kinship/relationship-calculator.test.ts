@@ -55,7 +55,7 @@ describe("calculateRelationship", () => {
     }
   });
 
-  it("loads the catalog from Electron's packaged resources path and packages only that catalog", () => {
+  it("loads the catalog from Electron's packaged resources path and packages only explicit kinship catalogs", () => {
     const originalResourcesPath = process.resourcesPath;
     const packagedResourcesPath = mkdtempSync(resolve(tmpdir(), "kinship-packaged-resources-"));
     const catalogPath = join(packagedResourcesPath, "kinship-rules", "mandarin-v1.json");
@@ -68,7 +68,9 @@ describe("calculateRelationship", () => {
 
       const builderConfig = readFileSync(resolve(process.cwd(), "electron-builder.yml"), "utf8");
       expect(builderConfig).toMatch(/extraResources:\s*\r?\n\s+- from: resources\/kinship-rules\/mandarin-v1\.json\r?\n\s+to: kinship-rules\/mandarin-v1\.json/);
+      expect(builderConfig).toMatch(/from: resources\/kinship-locales\/zh-CN-henan-gongyi-v1\.json\r?\n\s+to: kinship-locales\/zh-CN-henan-gongyi-v1\.json/);
       expect(builderConfig).not.toMatch(/from: resources\/kinship-rules\/\*\*/);
+      expect(builderConfig).not.toMatch(/from: resources\/kinship-locales\/\*\*/);
     } finally {
       Object.defineProperty(process, "resourcesPath", { configurable: true, value: originalResourcesPath });
       rmSync(packagedResourcesPath, { recursive: true, force: true });
@@ -173,6 +175,165 @@ describe("calculateRelationship", () => {
     expect(result.signature.steps).toEqual(["husband", "father"]);
     expect(result.signature.bloodAffinity).toBe("currentAffinity");
     expect(result.signature.pathRelationIds).toEqual(["marriage", "father-husband"]);
+  });
+
+  it("uses precise terms for a spouse's siblings when gender and age are known", () => {
+    const husbandSibling = calculateRelationship(graph(
+      [
+        person("wife", "female", solar(1993)),
+        person("husband", "male", solar(1992)),
+        person("husbands-mother", "female"),
+        person("younger-sister", "female", solar(2006))
+      ],
+      [
+        { id: "mother-husband", parentId: "husbands-mother", childId: "husband", parentRole: "mother" },
+        { id: "mother-sister", parentId: "husbands-mother", childId: "younger-sister", parentRole: "mother" }
+      ],
+      [{ id: "wife-husband", spouseAId: "wife", spouseBId: "husband", status: "active" }]
+    ), "wife", "younger-sister");
+    const wifeSibling = calculateRelationship(graph(
+      [
+        person("husband", "male", solar(1992)),
+        person("wife", "female", solar(1993)),
+        person("wifes-mother", "female"),
+        person("older-brother", "male", solar(1988))
+      ],
+      [
+        { id: "mother-wife", parentId: "wifes-mother", childId: "wife", parentRole: "mother" },
+        { id: "mother-brother", parentId: "wifes-mother", childId: "older-brother", parentRole: "mother" }
+      ],
+      [{ id: "husband-wife", spouseAId: "husband", spouseBId: "wife", status: "active" }]
+    ), "husband", "older-brother");
+
+    expect(husbandSibling).toMatchObject({
+      primaryTerm: "小姑子",
+      signature: { steps: ["husband", "youngerSister"] },
+      uncertainty: []
+    });
+    expect(wifeSibling).toMatchObject({
+      primaryTerm: "大舅子",
+      signature: { steps: ["wife", "olderBrother"] },
+      uncertainty: []
+    });
+  });
+
+  it("labels the selected viewpoint as 本人", () => {
+    const facts = graph([person("source", "female", solar(2010))]);
+    const calculator = new RelationshipCalculator(facts);
+
+    expect(calculateRelationship(facts, "source", "source")).toMatchObject({
+      primaryTerm: "本人",
+      reverseTerm: "本人",
+      uncertainty: []
+    });
+    expect(calculator.calculatePrimaryTerms("source", ["source"]).get("source")).toBe("本人");
+  });
+
+  it("resolves common three-generation paternal kinship terms", () => {
+    const facts = graph(
+      [
+        person("source", "female", solar(2010)),
+        person("father", "male", solar(1980)),
+        person("grandfather", "male", solar(1950)),
+        person("great-grandfather", "male", solar(1920)),
+        person("great-grandmother", "female", solar(1922)),
+        person("great-uncle", "male", solar(1955)),
+        person("great-uncle-wife", "female", solar(1956)),
+        person("great-aunt", "female", solar(1948)),
+        person("great-aunt-husband", "male", solar(1947)),
+        person("fathers-cousin", "female", solar(1982))
+      ],
+      [
+        { id: "father-source", parentId: "father", childId: "source", parentRole: "father" },
+        { id: "grandfather-father", parentId: "grandfather", childId: "father", parentRole: "father" },
+        { id: "great-grandfather-grandfather", parentId: "great-grandfather", childId: "grandfather", parentRole: "father" },
+        { id: "great-grandmother-grandfather", parentId: "great-grandmother", childId: "grandfather", parentRole: "mother" },
+        { id: "great-grandfather-uncle", parentId: "great-grandfather", childId: "great-uncle", parentRole: "father" },
+        { id: "great-grandmother-uncle", parentId: "great-grandmother", childId: "great-uncle", parentRole: "mother" },
+        { id: "great-grandfather-aunt", parentId: "great-grandfather", childId: "great-aunt", parentRole: "father" },
+        { id: "great-grandmother-aunt", parentId: "great-grandmother", childId: "great-aunt", parentRole: "mother" },
+        { id: "great-aunt-cousin", parentId: "great-aunt", childId: "fathers-cousin", parentRole: "mother" }
+      ],
+      [
+        { id: "great-uncle-marriage", spouseAId: "great-uncle", spouseBId: "great-uncle-wife", status: "active" },
+        { id: "great-aunt-marriage", spouseAId: "great-aunt", spouseBId: "great-aunt-husband", status: "active" }
+      ]
+    );
+    const calculator = new RelationshipCalculator(facts);
+
+    expect(Object.fromEntries(calculator.calculatePrimaryTerms("source", [
+      "great-grandfather",
+      "great-grandmother",
+      "great-uncle",
+      "great-uncle-wife",
+      "great-aunt",
+      "great-aunt-husband",
+      "fathers-cousin"
+    ]))).toEqual({
+      "great-grandfather": "曾祖父",
+      "great-grandmother": "曾祖母",
+      "great-uncle": "叔祖父",
+      "great-uncle-wife": "伯叔祖母",
+      "great-aunt": "姑祖母",
+      "great-aunt-husband": "姑祖父",
+      "fathers-cousin": "表姑"
+    });
+  });
+
+  it("composes a readable label for an otherwise uncovered spouse-relative chain", () => {
+    const facts = graph(
+      [
+        person("source", "female", solar(1993)),
+        person("husband", "male", solar(1992)),
+        person("mother", "female", solar(1967)),
+        person("grandmother", "female"),
+        person("uncle", "male", solar(1970)),
+        person("cousin", "female", solar(1993))
+      ],
+      [
+        { id: "mother-husband", parentId: "mother", childId: "husband", parentRole: "mother" },
+        { id: "grandmother-mother", parentId: "grandmother", childId: "mother", parentRole: "mother" },
+        { id: "grandmother-uncle", parentId: "grandmother", childId: "uncle", parentRole: "mother" },
+        { id: "uncle-cousin", parentId: "uncle", childId: "cousin", parentRole: "father" }
+      ],
+      [{ id: "source-husband", spouseAId: "source", spouseBId: "husband", status: "active" }]
+    );
+
+    const result = calculateRelationship(facts, "source", "cousin");
+    const treeLabels = new RelationshipCalculator(facts).calculatePrimaryTerms("source", ["cousin"]);
+
+    expect(result).toMatchObject({
+      primaryTerm: "丈夫的表妹",
+      signature: { steps: ["husband", "mother", "brother", "daughter"] }
+    });
+    expect(result.uncertainty).toContain("未匹配精确称谓，已使用组合式称谓");
+    expect(result.description).toContain("未匹配精确称谓，已使用组合式称谓");
+    expect(treeLabels.get("cousin")).toBe("丈夫的表妹");
+  });
+
+  it("uses a precise blood-relative spouse term inside a composed spouse-side label", () => {
+    const result = calculateRelationship(graph(
+      [
+        person("source", "female"),
+        person("husband", "male"),
+        person("mother", "female"),
+        person("grandmother", "female"),
+        person("uncle", "male"),
+        person("uncle-wife", "female")
+      ],
+      [
+        { id: "mother-husband", parentId: "mother", childId: "husband", parentRole: "mother" },
+        { id: "grandmother-mother", parentId: "grandmother", childId: "mother", parentRole: "mother" },
+        { id: "grandmother-uncle", parentId: "grandmother", childId: "uncle", parentRole: "mother" }
+      ],
+      [
+        { id: "source-husband", spouseAId: "source", spouseBId: "husband", status: "active" },
+        { id: "uncle-marriage", spouseAId: "uncle", spouseBId: "uncle-wife", status: "active" }
+      ]
+    ), "source", "uncle-wife");
+
+    expect(result.primaryTerm).toBe("丈夫的舅妈");
+    expect(result.uncertainty).toContain("未匹配精确称谓，已使用组合式称谓");
   });
 
   it("describes a former spouse only at the divorced edge endpoints", () => {
@@ -406,22 +567,28 @@ describe("calculateRelationship", () => {
     expect(result.uncertainty).toContain("数据冲突：conflict-mother");
   });
 
-  it("returns an exact path description and coverage marker for an unmatched signature", () => {
+  it("composes a readable term for a connected blood-relative path without a precise rule", () => {
     const result = calculateRelationship(graph(
-      [person("source"), person("parent"), person("grandparent"), person("great-grandparent")],
+      [
+        person("source", "female"),
+        person("parent"),
+        person("grandparent"),
+        person("great-grandparent"),
+        person("great-great-grandparent")
+      ],
       [
         { id: "r1", parentId: "parent", childId: "source", parentRole: "father" },
         { id: "r2", parentId: "grandparent", childId: "parent", parentRole: "father" },
-        { id: "r3", parentId: "great-grandparent", childId: "grandparent", parentRole: "father" }
+        { id: "r3", parentId: "great-grandparent", childId: "grandparent", parentRole: "father" },
+        { id: "r4", parentId: "great-great-grandparent", childId: "great-grandparent", parentRole: "father" }
       ]
-    ), "source", "great-grandparent");
+    ), "source", "great-great-grandparent");
 
-    expect(result.primaryTerm).toBeNull();
-    expect(result.reverseTerm).toBeNull();
+    expect(result.primaryTerm).toBe("曾祖父的父亲");
     expect(result.description).toBe(
-      "关系路径：source -[father:r1]-> parent -[father:r2]-> grandparent -[father:r3]-> great-grandparent；称谓规则尚未覆盖"
+      "关系路径：source -[father:r1]-> parent -[father:r2]-> grandparent -[father:r3]-> great-grandparent -[father:r4]-> great-great-grandparent；未匹配精确称谓，已使用组合式称谓"
     );
-    expect(result.uncertainty).toContain("称谓规则尚未覆盖");
+    expect(result.uncertainty).toContain("未匹配精确称谓，已使用组合式称谓");
   });
 });
 

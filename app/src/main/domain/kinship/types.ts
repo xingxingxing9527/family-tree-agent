@@ -22,19 +22,25 @@ export interface KinshipSignature {
   pathRelationIds: string[];
 }
 
-export interface RelationshipAlternative {
+export interface KinshipDisplayLabel {
+  formalTerm: string | null;
+  regionalTerm: string | null;
+  displayTerm: string | null;
+  pathDescription: string | null;
+  formalRuleId: string | null;
+  locale: string;
+  regionalRuleVersion: string;
+}
+
+export interface RelationshipAlternative extends KinshipDisplayLabel {
   primaryTerm: string | null;
   reverseTerm: string | null;
   description: string;
   signature: KinshipSignature;
 }
 
-export interface RelationshipResult {
-  primaryTerm: string | null;
-  reverseTerm: string | null;
-  description: string;
+export interface RelationshipResult extends RelationshipAlternative {
   ruleVersion: string;
-  signature: KinshipSignature;
   alternatives: RelationshipAlternative[];
   uncertainty: string[];
 }
