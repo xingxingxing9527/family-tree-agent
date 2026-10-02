@@ -109,21 +109,23 @@ export class TreeScopeResolver {
         key = "full";
         break;
       case "core": {
-        personIds = new Set([subjectId]);
-        const parents = new Set(parentsOf(subjectId));
+        const centerId = this.resolvedValue(subjectId, "This tree view requires a subject");
+        personIds = new Set([centerId]);
+        const parents = new Set(parentsOf(centerId));
         for (const parentId of parents) {
           personIds.add(parentId);
           for (const grandparentId of parentsOf(parentId)) personIds.add(grandparentId);
           for (const siblingId of childrenOf(parentId)) personIds.add(siblingId);
         }
-        for (const childId of childrenOf(subjectId)) personIds.add(childId);
-        addPermittedSpouses(personIds, new Set([subjectId]));
-        key = `core:${subjectId}`;
+        for (const childId of childrenOf(centerId)) personIds.add(childId);
+        addPermittedSpouses(personIds, new Set([centerId]));
+        key = `core:${centerId}`;
         break;
       }
       case "descendants": {
+        const centerId = this.resolvedValue(subjectId, "This tree view requires a subject");
         personIds = new Set<string>();
-        const queue = [subjectId];
+        const queue = [centerId];
         while (queue.length > 0) {
           const personId = queue.shift()!;
           if (personIds.has(personId)) continue;
@@ -134,12 +136,14 @@ export class TreeScopeResolver {
         }
         const descendantChain = new Set(personIds);
         addPermittedSpouses(personIds, descendantChain);
-        key = `descendants:${subjectId}`;
+        key = `descendants:${centerId}`;
         break;
       }
       case "lineage": {
-        const selectedMemberships = input.memberships.filter((membership) => membership.lineageId === lineageId);
-        if (!selectedMemberships.some((membership) => membership.personId === subjectId)) {
+        const centerId = this.resolvedValue(subjectId, "This tree view requires a subject");
+        const selectedLineageId = this.resolvedValue(lineageId, "Family Lineage requires a lineage");
+        const selectedMemberships = input.memberships.filter((membership) => membership.lineageId === selectedLineageId);
+        if (!selectedMemberships.some((membership) => membership.personId === centerId)) {
           throw new TreeScopeResolutionError("VALIDATION", "The selected person is not assigned to this lineage");
         }
         personIds = new Set(
@@ -153,7 +157,7 @@ export class TreeScopeResolver {
             .map(({ personId }) => personId)
         );
         addPermittedSpouses(personIds, bloodMembers);
-        key = `lineage:${subjectId}:${lineageId}`;
+        key = `lineage:${centerId}:${selectedLineageId}`;
         break;
       }
     }
@@ -197,5 +201,10 @@ export class TreeScopeResolver {
       throw new TreeScopeResolutionError("NOT_FOUND", "The selected lineage does not exist");
     }
     return lineageId;
+  }
+
+  private resolvedValue(value: string | null, message: string): string {
+    if (value === null) throw new TreeScopeResolutionError("VALIDATION", message);
+    return value;
   }
 }
