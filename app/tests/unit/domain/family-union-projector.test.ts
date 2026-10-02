@@ -297,18 +297,18 @@ describe("TreeProjectionService", () => {
     }
   ];
 
-  const personIds = (projection: ReturnType<TreeProjectionService["ancestors"]>): string[] => projection.topology.nodes
+  const personIds = (projection: ReturnType<TreeProjectionService["full"]>): string[] => projection.topology.nodes
     .filter((node) => node.kind === "person")
     .map((node) => node.personId)
     .sort();
 
-  it("returns full, branch, ancestor and descendant scopes from the same family graph", () => {
+  it("builds unlabelled full and pre-resolved scoped topology", () => {
     const service = new TreeProjectionService({ people, unions });
 
-    expect(personIds(service.full("a", Number.POSITIVE_INFINITY))).toEqual(["a", "b", "c", "d", "e", "isolated"]);
-    expect(personIds(service.branch("c"))).toEqual(["c", "d", "e"]);
-    expect(personIds(service.ancestors("e"))).toEqual(["a", "b", "c", "d", "e"]);
-    expect(personIds(service.descendants("a"))).toEqual(["a", "b", "c", "d", "e"]);
+    expect(personIds(service.full(Number.POSITIVE_INFINITY))).toEqual(["a", "b", "c", "d", "e", "isolated"]);
+    expect(personIds(service.scoped("core:a"))).toEqual(["a", "b", "c", "d", "e", "isolated"]);
+    expect(service.full(Number.POSITIVE_INFINITY).viewpointId).toBeNull();
+    expect(service.scoped("core:a").topology.key).toBe("core:a");
   });
 
   it("creates one person node for a remarried person participating in multiple unions", () => {
@@ -316,7 +316,7 @@ describe("TreeProjectionService", () => {
       { ...unions[0], parentIds: ["a", "b"], childIds: ["c"] },
       { ...unions[0], id: "marriage:second", marriageId: "second", marriageStatus: "active" as const, parentIds: ["a", "d"], childIds: ["e"] }
     ];
-    const projection = new TreeProjectionService({ people, unions: remarriageUnions }).full("a", Number.POSITIVE_INFINITY);
+    const projection = new TreeProjectionService({ people, unions: remarriageUnions }).full(Number.POSITIVE_INFINITY);
 
     expect(projection.topology.nodes.filter((node) => node.kind === "person" && node.personId === "a")).toHaveLength(1);
     expect(projection.topology.edges.filter((edge) => edge.source === "person:a")).toHaveLength(2);
@@ -341,7 +341,7 @@ describe("TreeProjectionService", () => {
       ]
     });
 
-    const topology = service.full("a", Number.POSITIVE_INFINITY).topology;
+    const topology = service.full(Number.POSITIVE_INFINITY).topology;
     const marriage = topology.nodes.find((node) => node.id === "marriage:first");
     const coParents = topology.nodes.find((node) => node.id === "parents:c:d");
     const singleParent = topology.nodes.find((node) => node.id === "single:e");
@@ -371,8 +371,9 @@ describe("TreeProjectionService", () => {
 
   it("updates viewpoint labels without recomputing topology", () => {
     const service = new TreeProjectionService({ people, unions }, (viewpointId, targetId) => `${viewpointId}->${targetId}`);
-    const fromA = service.full("a", Number.POSITIVE_INFINITY);
-    const fromC = service.full("c", Number.POSITIVE_INFINITY);
+    const projection = service.full(Number.POSITIVE_INFINITY);
+    const fromA = service.withViewpoint(projection, "a");
+    const fromC = service.withViewpoint(projection, "c");
 
     expect(fromC.topology).toBe(fromA.topology);
     expect(fromA.labels.c).toBe("a->c");
@@ -394,7 +395,7 @@ describe("TreeProjectionService", () => {
       ]
     });
 
-    const topology = service.full("jianguo", Number.POSITIVE_INFINITY).topology;
+    const topology = service.full(Number.POSITIVE_INFINITY).topology;
     const ancestorChildren = topology.edges.filter((edge) => edge.source === "marriage:ancestors").map((edge) => edge.target).sort();
     expect(ancestorChildren).toEqual(["person:jianguo", "person:qiang"]);
     expect(topology.edges.filter((edge) => edge.target === "marriage:jianguo").map((edge) => edge.source).sort()).toEqual(["person:jianguo", "person:xiulan"]);

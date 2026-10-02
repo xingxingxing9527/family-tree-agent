@@ -22,6 +22,7 @@ import { QueryNotFoundError, QueryToolRegistry } from "../application/query/quer
 import type { WorkspaceMutationGate } from "../workspaces/workspace-mutation-gate.js";
 import { projectWorkspaceTree, readWorkspaceSnapshot } from "../application/query/workspace-projection.js";
 import { WorkspacePeopleLimitError, WORKSPACE_PEOPLE_LIMIT_MESSAGE } from "../database/workspace-people-limit.js";
+import { TreeScopeResolutionError } from "../domain/projection/tree-scope-resolver.js";
 
 export const QUERY_CHANNELS = {
   workspaceSnapshot: "query:workspace-snapshot",
@@ -36,7 +37,7 @@ export const QUERY_CHANNELS = {
 
 export interface QueryGateway {
   workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
-  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>>;
+  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }): Promise<AppResult<TreeProjectionDto>>;
   searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
@@ -57,7 +58,7 @@ export class WorkspaceQueryGateway implements QueryGateway {
     return this.readDatabase((database, workspaceId) => readWorkspaceSnapshot(database, workspaceId));
   }
 
-  async projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>> {
+  async projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }): Promise<AppResult<TreeProjectionDto>> {
     return this.readDatabase((database, workspaceId) => projectWorkspaceTree(database, workspaceId, input));
   }
 
@@ -99,6 +100,9 @@ export class WorkspaceQueryGateway implements QueryGateway {
       return { ok: true, value: operation(database, context.workspaceId) };
     } catch (error) {
       if (error instanceof QueryNotFoundError) return failure("NOT_FOUND", "Requested record was not found");
+      if (error instanceof TreeScopeResolutionError) return error.code === "NOT_FOUND"
+        ? failure("NOT_FOUND", "Requested tree scope was not found")
+        : failure("VALIDATION", "Invalid tree scope selection");
       if (error instanceof WorkspacePeopleLimitError) return failure("VALIDATION", WORKSPACE_PEOPLE_LIMIT_MESSAGE, { code: error.code });
       if (error instanceof ZodError) return failure("VALIDATION", "Invalid request");
       return failure("INTERNAL", "Unable to complete query request");

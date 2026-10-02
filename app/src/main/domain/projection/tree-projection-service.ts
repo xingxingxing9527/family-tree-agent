@@ -64,13 +64,10 @@ export interface TreeProjectionInput {
 
 export type TreeLabelResolver = (viewpointId: string, targetPersonId: string) => string | null;
 
-const sorted = (ids: Iterable<string>): string[] => [...new Set(ids)].sort((left, right) => left.localeCompare(right));
-
 export class TreeProjectionService {
   private readonly people: Map<string, TreeProjectionPerson>;
   private readonly topologyCache = new Map<string, TreeProjectionTopology>();
   private readonly childrenByParent = new Map<string, Set<string>>();
-  private readonly parentsByChild = new Map<string, Set<string>>();
 
   constructor(private readonly input: TreeProjectionInput, private readonly labelResolver: TreeLabelResolver = () => null) {
     this.people = new Map(input.people.map((person) => [person.id, person]));
@@ -80,33 +77,22 @@ export class TreeProjectionService {
         union.childIds.forEach((childId) => children.add(childId));
         this.childrenByParent.set(parentId, children);
       }
-      for (const childId of union.childIds) {
-        const parents = this.parentsByChild.get(childId) ?? new Set<string>();
-        union.parentIds.forEach((parentId) => parents.add(parentId));
-        this.parentsByChild.set(childId, parents);
-      }
     }
   }
 
-  full(viewpointId: string, collapseDepth: number): TreeProjection {
+  full(collapseDepth: number): TreeProjection {
     const key = `full:${collapseDepth}`;
     const topology = this.cached(key, () => this.buildFullTopology(key, collapseDepth));
-    return this.label(topology, viewpointId);
+    return this.unlabelled(topology);
   }
 
-  branch(rootPersonId: string): TreeProjection {
-    const key = `branch:${rootPersonId}`;
-    return this.unlabelled(this.cached(key, () => this.buildScopedTopology(key, this.walk(rootPersonId, this.childrenByParent))));
-  }
-
-  ancestors(personId: string): TreeProjection {
-    const key = `ancestors:${personId}`;
-    return this.unlabelled(this.cached(key, () => this.buildScopedTopology(key, this.walk(personId, this.parentsByChild), true)));
-  }
-
-  descendants(personId: string): TreeProjection {
-    const key = `descendants:${personId}`;
-    return this.unlabelled(this.cached(key, () => this.buildScopedTopology(key, this.walk(personId, this.childrenByParent))));
+  scoped(key: string): TreeProjection {
+    const topology = this.cached(key, () => this.buildTopology(
+      key,
+      new Set(this.people.keys()),
+      new Set(this.input.unions.map((union) => union.id))
+    ));
+    return this.unlabelled(topology);
   }
 
   withViewpoint(projection: TreeProjection, viewpointId: string): TreeProjection {
@@ -129,23 +115,6 @@ export class TreeProjectionService {
       .filter((union) => union.parentIds.some((id) => included.has(id)) && (union.childIds.length === 0 || union.childIds.some((id) => included.has(id))))
       .map((union) => union.id));
     return this.buildTopology(key, included, unionIds);
-  }
-
-  private buildScopedTopology(key: string, traversed: Set<string>, includeAncestorUnions = false): TreeProjectionTopology {
-    const unionIds = new Set<string>();
-    const personIds = new Set(traversed);
-    for (const union of this.input.unions) {
-      const hasTraversedParent = union.parentIds.some((id) => traversed.has(id));
-      const hasTraversedChild = union.childIds.some((id) => traversed.has(id));
-      const relevant = includeAncestorUnions
-        ? hasTraversedChild && union.parentIds.every((id) => traversed.has(id))
-        : hasTraversedParent && (union.childIds.length === 0 || hasTraversedChild);
-      if (!relevant) continue;
-      unionIds.add(union.id);
-      union.parentIds.forEach((id) => personIds.add(id));
-      union.childIds.filter((id) => traversed.has(id)).forEach((id) => personIds.add(id));
-    }
-    return this.buildTopology(key, personIds, unionIds);
   }
 
   private buildTopology(key: string, personIds: Set<string>, unionIds: Set<string>): TreeProjectionTopology {
@@ -212,18 +181,6 @@ export class TreeProjectionService {
       }))
     ]).sort((left, right) => left.id.localeCompare(right.id));
     return { key, nodes: [...people, ...unionNodes], edges };
-  }
-
-  private walk(startId: string, adjacency: Map<string, Set<string>>): Set<string> {
-    const visited = new Set<string>();
-    const queue = [startId];
-    while (queue.length > 0) {
-      const personId = queue.shift()!;
-      if (visited.has(personId) || !this.people.has(personId)) continue;
-      visited.add(personId);
-      for (const relatedId of adjacency.get(personId) ?? []) queue.push(relatedId);
-    }
-    return visited;
   }
 
   private cached(key: string, build: () => TreeProjectionTopology): TreeProjectionTopology {

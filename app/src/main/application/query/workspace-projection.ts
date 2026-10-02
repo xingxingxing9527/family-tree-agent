@@ -11,6 +11,7 @@ import { GenerationService, type GenerationDisplay } from "../../domain/lineage/
 import { FactQueries } from "../facts/fact-queries.js";
 import { FamilyUnionProjector } from "../../domain/projection/family-union-projector.js";
 import { TreeProjectionService } from "../../domain/projection/tree-projection-service.js";
+import { TreeScopeResolver } from "../../domain/projection/tree-scope-resolver.js";
 import { RelationshipCalculator } from "../../domain/kinship/relationship-calculator.js";
 import { loadPersistedKinshipFacts } from "./persisted-kinship-facts.js";
 
@@ -118,29 +119,13 @@ export function readWorkspaceSnapshot(database: WorkspaceDatabase, workspaceId: 
 export function projectWorkspaceTree(
   database: WorkspaceDatabase,
   workspaceId: string,
-  input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }
+  input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }
 ): TreeProjectionDto {
   assertWorkspacePeopleWithinLimit(database, workspaceId);
   const queries = new FactQueries(database, workspaceId);
   const people = queries.listPeople();
   const parentChild = queries.listParentChild();
   const marriages = queries.listMarriages();
-  const unions = new FamilyUnionProjector().project({
-    people: people.map((person) => ({ id: person.id, birth: person.birth })),
-    marriages: marriages.map((marriage) => ({
-      id: marriage.id,
-      spouseAId: marriage.spouseAId,
-      spouseBId: marriage.spouseBId,
-      status: marriage.status,
-      start: marriage.start,
-      end: marriage.end
-    })),
-    parentChildFacts: parentChild.map((fact) => ({
-      parentId: fact.parentId,
-      childId: fact.childId,
-      relationshipType: fact.relationshipType
-    }))
-  });
   const calculator = new RelationshipCalculator(loadPersistedKinshipFacts(queries, {
     people,
     parentChild,
@@ -157,6 +142,37 @@ export function projectWorkspaceTree(
     WHERE workspace_id = ? AND deleted_at IS NULL
     ORDER BY lineage_id, person_id, id
   `).all(workspaceId) as ProjectionMembershipRow[];
+  const scope = new TreeScopeResolver().resolve({
+    people: people.map(({ id }) => ({ id })),
+    parentChildFacts: parentChild.map(({ id, parentId, childId }) => ({ id, parentId, childId })),
+    marriages: marriages.map(({ id, spouseAId, spouseBId, status }) => ({ id, spouseAId, spouseBId, status })),
+    lineageIds: lineages.map(({ id }) => id),
+    memberships: memberships.map((membership) => ({
+      lineageId: membership.lineage_id,
+      personId: membership.person_id,
+      lineageRole: membership.lineage_role,
+      isPrimary: membership.is_primary === 1
+    }))
+  }, input);
+  const visiblePeople = people.filter(({ id }) => scope.personIds.has(id));
+  const visibleParentChild = parentChild.filter(({ id }) => scope.parentChildRelationIds.has(id));
+  const visibleMarriages = marriages.filter(({ id }) => scope.marriageIds.has(id));
+  const unions = new FamilyUnionProjector().project({
+    people: visiblePeople.map((person) => ({ id: person.id, birth: person.birth })),
+    marriages: visibleMarriages.map((marriage) => ({
+      id: marriage.id,
+      spouseAId: marriage.spouseAId,
+      spouseBId: marriage.spouseBId,
+      status: marriage.status,
+      start: marriage.start,
+      end: marriage.end
+    })),
+    parentChildFacts: visibleParentChild.map((fact) => ({
+      parentId: fact.parentId,
+      childId: fact.childId,
+      relationshipType: fact.relationshipType
+    }))
+  });
   const membershipsByLineage = new Map<string, ProjectionMembershipRow[]>();
   for (const membership of memberships) {
     const grouped = membershipsByLineage.get(membership.lineage_id) ?? [];
@@ -172,9 +188,18 @@ export function projectWorkspaceTree(
   const generationByPerson = new Map<string, GenerationDisplay>();
   const generationMarkerByPerson = new Map<string, string | null>();
   const lineageRoleByPerson = new Map<string, ProjectionMembershipRow["lineage_role"]>();
-  for (const membership of memberships) if (membership.is_primary === 1) lineageRoleByPerson.set(membership.person_id, membership.lineage_role);
-  for (const lineage of lineages) if (!lineageRoleByPerson.has(lineage.founder_person_id)) lineageRoleByPerson.set(lineage.founder_person_id, "blood");
-  for (const lineage of lineages) {
+  const displayLineages = input.view === "lineage"
+    ? lineages.filter(({ id }) => id === scope.metadata.lineageId)
+    : lineages;
+  if (input.view !== "lineage") {
+    for (const membership of memberships) {
+      if (membership.is_primary === 1) lineageRoleByPerson.set(membership.person_id, membership.lineage_role);
+    }
+    for (const lineage of lineages) {
+      if (!lineageRoleByPerson.has(lineage.founder_person_id)) lineageRoleByPerson.set(lineage.founder_person_id, "blood");
+    }
+  }
+  for (const lineage of displayLineages) {
     const lineageMemberships = membershipsByLineage.get(lineage.id) ?? [];
     const displays = generations.calculate({
       founderPersonId: lineage.founder_person_id,
@@ -186,7 +211,8 @@ export function projectWorkspaceTree(
       parentChildFacts
     });
     for (const membership of lineageMemberships) {
-      if (membership.is_primary !== 1) continue;
+      if (input.view !== "lineage" && membership.is_primary !== 1) continue;
+      lineageRoleByPerson.set(membership.person_id, membership.lineage_role);
       const display = displays[membership.person_id];
       if (display) {
         generationByPerson.set(membership.person_id, display);
@@ -198,7 +224,7 @@ export function projectWorkspaceTree(
     ? calculator.calculatePrimaryTerms(input.viewpointId, people.map((person) => person.id))
     : null;
   const service = new TreeProjectionService({
-    people: people.map((person) => ({
+    people: visiblePeople.map((person) => ({
       id: person.id,
       displayName: person.displayName,
       birthYear: person.birth?.year ?? null,
@@ -211,10 +237,17 @@ export function projectWorkspaceTree(
   }, (viewpointId, targetPersonId) => primaryTerms && viewpointId === input.viewpointId
     ? primaryTerms.get(targetPersonId) ?? null
     : calculator.calculateRelationship(viewpointId, targetPersonId).primaryTerm);
-  const subjectId = input.subjectId ?? "";
-  const topologyProjection = input.view === "branch" ? service.branch(subjectId)
-    : input.view === "ancestors" ? service.ancestors(subjectId)
-      : input.view === "descendants" ? service.descendants(subjectId)
-        : service.full("", input.collapseDepth ?? 4);
-  return input.viewpointId ? service.withViewpoint(topologyProjection, input.viewpointId) : topologyProjection;
+  const topologyProjection = input.view === "full"
+    ? service.full(input.collapseDepth ?? Number.POSITIVE_INFINITY)
+    : service.scoped(scope.key);
+  const projection = input.viewpointId
+    ? service.withViewpoint(topologyProjection, input.viewpointId)
+    : topologyProjection;
+  return {
+    ...projection,
+    scope: {
+      ...scope.metadata,
+      visiblePersonCount: projection.topology.nodes.filter((node) => node.kind === "person").length
+    }
+  };
 }

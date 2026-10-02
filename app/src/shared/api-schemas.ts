@@ -135,12 +135,15 @@ const wikiDraft = z.object({
 }).strict();
 
 const projectTree = z.object({
-  view: z.enum(["full", "branch", "ancestors", "descendants"]),
+  view: z.enum(["full", "lineage", "core", "descendants"]),
   subjectId: id.optional(),
   viewpointId: id.optional(),
-  collapseDepth: z.number().int().min(0).max(20).optional()
+  collapseDepth: z.number().int().min(0).max(20).optional(),
+  lineageId: id.optional()
 }).strict().superRefine((value, context) => {
   if (value.view !== "full" && !value.subjectId) context.addIssue({ code: "custom", path: ["subjectId"], message: "A subject is required" });
+  if (value.view === "lineage" && !value.lineageId) context.addIssue({ code: "custom", path: ["lineageId"], message: "A lineage is required" });
+  if (value.view !== "lineage" && value.lineageId) context.addIssue({ code: "custom", path: ["lineageId"], message: "This view does not accept a lineage" });
 });
 const searchQuery = z.string().trim().min(1).max(200);
 

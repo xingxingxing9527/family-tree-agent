@@ -12,6 +12,7 @@ import { openDatabase, type WorkspaceDatabase } from "../../../src/main/database
 import { openQueryDatabase } from "../../../src/main/database/open-query-database";
 import { createUnitOfWork } from "../../../src/main/database/unit-of-work";
 import { QUERY_CHANNELS, registerQueryIpc, WorkspaceQueryGateway, type QueryGateway } from "../../../src/main/ipc/query-ipc";
+import { RPC_INPUT_SCHEMAS } from "../../../src/shared/api-schemas";
 
 const workspaceId = "workspace-query-tools";
 const solar = (year: number) => ({
@@ -24,6 +25,19 @@ const solar = (year: number) => ({
 });
 
 describe("query IPC boundary", () => {
+  it("accepts only the four approved tree view request shapes", () => {
+    const parse = (input: unknown) => RPC_INPUT_SCHEMAS.query.projectTree.safeParse(input);
+
+    expect(parse({ view: "full" }).success).toBe(true);
+    expect(parse({ view: "lineage", subjectId: "person", lineageId: "lineage" }).success).toBe(true);
+    expect(parse({ view: "lineage", subjectId: "person" }).success).toBe(false);
+    expect(parse({ view: "core", subjectId: "person" }).success).toBe(true);
+    expect(parse({ view: "core", subjectId: "person", lineageId: "lineage" }).success).toBe(false);
+    expect(parse({ view: "descendants", subjectId: "person" }).success).toBe(true);
+    expect(parse({ view: "branch", subjectId: "person" }).success).toBe(false);
+    expect(parse({ view: "ancestors", subjectId: "person" }).success).toBe(false);
+  });
+
   it("validates and sender-checks the bounded workspace snapshot and tree projection channels", async () => {
     const workspaceSnapshot = vi.fn().mockResolvedValue({ ok: true, value: { workspaceId, people: [], sources: [], lineages: [] } });
     const projectTree = vi.fn().mockResolvedValue({ ok: true, value: { topology: { key: "full:4", nodes: [], edges: [] }, viewpointId: null, labels: {} } });
@@ -52,9 +66,9 @@ describe("query IPC boundary", () => {
     expect(projectTree).not.toHaveBeenCalled();
 
     await expect(handlers.get(QUERY_CHANNELS.workspaceSnapshot)!({ sender: { id: 7 } }, {})).resolves.toMatchObject({ ok: true });
-    await expect(handlers.get(QUERY_CHANNELS.projectTree)!({ sender: { id: 7 } }, { view: "ancestors", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 }))
+    await expect(handlers.get(QUERY_CHANNELS.projectTree)!({ sender: { id: 7 } }, { view: "core", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 }))
       .resolves.toMatchObject({ ok: true });
-    expect(projectTree).toHaveBeenCalledWith({ view: "ancestors", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 });
+    expect(projectTree).toHaveBeenCalledWith({ view: "core", subjectId: "person-1", viewpointId: "person-2", collapseDepth: 8 });
   });
 
   it("rejects escape-hatch fields and sanitizes unexpected gateway details", async () => {

@@ -312,8 +312,14 @@ export interface TreeProjectionDto {
   topology: TreeProjectionTopologyDto;
   viewpointId: string | null;
   labels: Readonly<Record<string, string | null>>;
+  scope: {
+    view: TreeViewDto;
+    subjectId: string | null;
+    lineageId: string | null;
+    visiblePersonCount: number;
+  };
 }
-export type TreeViewDto = "full" | "branch" | "ancestors" | "descendants";
+export type TreeViewDto = "full" | "lineage" | "core" | "descendants";
 
 export interface MediaApi {
   select(): Promise<AppResult<{ fileToken: string; fileName: string }>>;
@@ -332,7 +338,7 @@ export interface WikiApi {
 
 export interface QueryApi {
   workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
-  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number }): Promise<AppResult<TreeProjectionDto>>;
+  projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }): Promise<AppResult<TreeProjectionDto>>;
   searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
