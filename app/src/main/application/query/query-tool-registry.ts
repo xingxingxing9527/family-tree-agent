@@ -3,6 +3,7 @@ import type {
   LineageSummary,
   PersonCandidate,
   PersonQueryReadModel,
+  PersonSearchCandidate,
   RelativeKind,
   RelativeReadModel,
   RelationshipResultDto,
@@ -38,7 +39,7 @@ export const QUERY_TOOL_SCHEMAS = {
 export type QueryToolName = keyof typeof QUERY_TOOL_SCHEMAS;
 
 export interface QueryToolMap {
-  search_people(input: { query: string; limit: number }): PersonCandidate[];
+  search_people(input: { query: string; limit: number }): PersonSearchCandidate[];
   get_person(input: { personId: string }): PersonQueryReadModel;
   list_relatives(input: { personId: string; kinds: RelativeKind[] }): RelativeReadModel[];
   calculate_relationship(input: { viewpointId: string; targetId: string }): RelationshipResultDto;

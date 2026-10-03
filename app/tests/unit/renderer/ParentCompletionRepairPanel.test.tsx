@@ -222,6 +222,39 @@ async function openRepairPanel(): Promise<void> {
 }
 
 describe("ParentCompletionRepairPanel", () => {
+  it("places, scrolls to, and focuses the repair panel before the long people layout when opened", async () => {
+    const scrollDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    try {
+      const empty: ParentCompletionScanDto = {
+        counts: { total: 0, safe: 0, ambiguous: 0, noCandidate: 0, conflict: 0 },
+        items: []
+      };
+      renderPage(pageApi([empty]));
+      await openRepairPanel();
+
+      const panel = screen.getByRole("region", { name: "检查未完整父母关系" });
+      const peopleList = screen.getByRole("complementary", { name: "人物列表" });
+
+      await waitFor(() => {
+        expect(panel).toHaveFocus();
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+      });
+      expect(panel.compareDocumentPosition(peopleList) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    } finally {
+      if (scrollDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", scrollDescriptor);
+      } else {
+        delete (HTMLElement.prototype as HTMLElement & { scrollIntoView?: () => void }).scrollIntoView;
+      }
+    }
+  });
+
   it("scans only when opened, preserves service row order, and shows counts, known parents, candidates, and reasons", async () => {
     const api = pageApi();
     renderPage(api);

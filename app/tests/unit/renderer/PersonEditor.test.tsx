@@ -65,6 +65,36 @@ const existingDraft: PersonDraft = {
 };
 
 describe("PersonEditor", () => {
+  it("labels birth as optional and saves a new person without a birth date", async () => {
+    const api = createPeopleApi();
+    render(<PersonEditor api={api} />);
+
+    expect(screen.getByText("出生日期（选填）")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "张敏" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ birth: null })
+    })));
+  });
+
+  it("clears a partly entered birth date explicitly", async () => {
+    const api = createPeopleApi();
+    render(<PersonEditor api={api} />);
+
+    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "张敏" } });
+    fireEvent.change(screen.getByLabelText("出生日期历法"), { target: { value: "solar" } });
+    fireEvent.change(screen.getByLabelText("出生年份"), { target: { value: "1990" } });
+    fireEvent.change(screen.getByLabelText("出生月份"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "清空出生日期" }));
+
+    expect(screen.getByLabelText("出生日期历法")).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ birth: null })
+    })));
+  });
+
   it("requires year and month after a calendar is chosen while leaving day optional", () => {
     render(<PersonEditor api={createPeopleApi()} />);
 
@@ -148,7 +178,7 @@ describe("PersonEditor", () => {
     render(<PersonEditor api={createPeopleApi()} />);
 
     expect(screen.getByRole("heading", { name: "新增人物" })).toHaveClass("text-primary");
-    expect(screen.getByText("日期一旦填写，历法、年份和月份均为必填项。", { exact: false })).toHaveClass("text-secondary");
+    expect(screen.getByText("出生日期为选填", { exact: false })).toHaveClass("text-secondary");
     expect(screen.getByLabelText("姓名")).toHaveClass("field-control");
   });
 

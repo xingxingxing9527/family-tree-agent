@@ -248,10 +248,13 @@ function createPageApi() {
     },
     relations: {
       addParentChild: vi.fn(), addMarriage: vi.fn(), divorce: vi.fn(), planRelativePath: vi.fn(),
-      planParentCompletion: vi.fn(), scanParentCompletions: vi.fn()
+      planParentCompletion: vi.fn().mockImplementation(async (input) => ({ ok: true, value: noCandidatePlan(input) })), scanParentCompletions: vi.fn()
     },
     mutations: {
-      stage: vi.fn().mockResolvedValue({ ok: true, value: mutationPreview }),
+      stage: vi.fn().mockImplementation(async ({ intents }: { intents: MutationIntent[] }) => ({
+        ok: true,
+        value: intents[0]?.type === "person.create" ? mutationPreview : preview()
+      })),
       confirm: vi.fn().mockResolvedValue({ ok: true, value: { draftId: mutationPreview.id, operationGroupId: "group-1", changedEntityIds: [createdChild.id] } }),
       revise: vi.fn()
     },
@@ -265,6 +268,33 @@ function createPageApi() {
 }
 
 describe("FamilyRelationsPanel", () => {
+  it("shows an approximate age on both the person card and selected detail", async () => {
+    const now = new Date();
+    const datedPerson: PersonListItem = {
+      ...current,
+      birth: {
+        calendar: "solar",
+        year: now.getFullYear() - 36,
+        month: now.getMonth() + 1,
+        day: null,
+        leapMonth: false,
+        precision: "month"
+      }
+    };
+    const { api } = createPageApi();
+    vi.mocked(api.people.list).mockResolvedValue({ ok: true, value: [datedPerson] });
+    vi.mocked(api.people.get).mockResolvedValue({ ok: true, value: detail({ person: datedPerson }) });
+
+    render(<PeoplePage
+      workspace={{ id: "workspace-1", name: "测试谱", directory: "opaque", originPersonId: datedPerson.id, lastOpenedAt: null, schemaVersion: 7 }}
+      api={api}
+      initialSelectedPersonId={datedPerson.id}
+    />);
+
+    expect(await screen.findByRole("button", { name: "查看中心人物" })).toHaveTextContent("约 36 岁");
+    expect(await screen.findAllByText("约 36 岁")).toHaveLength(2);
+  });
+
   it("fixes the current person, excludes them from candidates, and does not offer a second occupied parent slot", async () => {
     renderPanel(detail({ parents: [related("edge-father", father, "father")] }));
 
@@ -276,13 +306,16 @@ describe("FamilyRelationsPanel", () => {
     expect(screen.getByText("人工录入")).toBeVisible();
   });
 
-  it("stages two selected children as two parent-family intents in one request after an explicit role choice", async () => {
+  it("defaults a male person to father and stages selected children without an extra role choice", async () => {
     const { mutations, relationsApi } = renderPanel();
+    expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "当前人物作为母亲" })).not.toBeChecked();
+    expect(screen.getByText("性别提示：男。已根据人物性别自动选择，可手动修改。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "新建人物并设为子女" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "生成子女关系预览" })).toBeDisabled();
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "选择子女 儿子二" }));
-    fireEvent.click(screen.getByRole("radio", { name: "当前人物作为父亲" }));
     fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
 
     await waitFor(() => expect(mutations.stage).toHaveBeenCalledTimes(1));
@@ -307,6 +340,54 @@ describe("FamilyRelationsPanel", () => {
       }
     ] satisfies MutationIntent[]);
     expect(screen.getAllByText(/另一位父母尚未确认/u)).toHaveLength(2);
+  });
+
+  it("defaults a female person to mother", async () => {
+    const { mutations, relationsApi } = renderPanel(detail({ person: secondCurrent }));
+
+    expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "当前人物作为母亲" })).toBeChecked();
+    expect(screen.getByText("性别提示：女。已根据人物性别自动选择，可手动修改。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "新建人物并设为子女" })).toBeEnabled();
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
+
+    await waitFor(() => expect(mutations.stage).toHaveBeenCalledTimes(1));
+    expect(relationsApi.planParentCompletion).toHaveBeenCalledWith({
+      knownParentId: secondCurrent.id,
+      childId: daughter.id,
+      parentRole: "mother"
+    });
+    expect(vi.mocked(mutations.stage).mock.calls[0]?.[0].intents).toEqual([
+      expect.objectContaining({ type: "parentFamily.add", parentRole: "mother" })
+    ]);
+  });
+
+  it("requires a manual parent role when the current person's gender is unknown", () => {
+    const unknownPerson = person("unknown", "性别未知人物");
+    renderPanel(detail({ person: unknownPerson }));
+
+    expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "当前人物作为母亲" })).not.toBeChecked();
+    expect(screen.getByText("性别未知，请人工选择当前人物作为父亲或母亲。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "新建人物并设为子女" })).toBeDisabled();
+  });
+
+  it("allows the administrator to override the inferred parent role", async () => {
+    const { mutations, relationsApi } = renderPanel();
+    expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: "当前人物作为母亲" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择子女 女儿一" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成子女关系预览" }));
+
+    await waitFor(() => expect(mutations.stage).toHaveBeenCalledTimes(1));
+    expect(relationsApi.planParentCompletion).toHaveBeenCalledWith({
+      knownParentId: current.id,
+      childId: daughter.id,
+      parentRole: "mother"
+    });
   });
 
   it("stages a unique completion plan without asking the administrator to resolve it", async () => {
@@ -358,6 +439,7 @@ describe("FamilyRelationsPanel", () => {
     expect(screen.queryByRole("heading", { name: "更正父亲关系" })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "选择子女 女儿一" })).not.toBeChecked();
     expect(screen.getByRole("radio", { name: "当前人物作为父亲" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "当前人物作为母亲" })).toBeChecked();
   });
 
   it("does not stage an old person's plan when its deferred result arrives after an owner change", async () => {
@@ -436,7 +518,8 @@ describe("FamilyRelationsPanel", () => {
       onChanged={vi.fn()}
       onRequestQuickCreate={onRequestQuickCreate}
     />);
-    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
     const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): void };
     void lateCreated.promise.then(request.onCreated);
 
@@ -613,17 +696,91 @@ describe("FamilyRelationsPanel", () => {
     expect(mutations.stage).not.toHaveBeenCalled();
   });
 
-  it("returns a quick-created person to the pending child selection", async () => {
+  it("opens the relationship preview automatically when a quick-created child returns", async () => {
     const onRequestQuickCreate = vi.fn();
-    renderPanel(detail(), undefined, onRequestQuickCreate);
+    const { mutations, relationsApi } = renderPanel(detail(), undefined, onRequestQuickCreate);
+    fireEvent.click(await screen.findByRole("radio", { name: "当前人物作为父亲" }));
+    await screen.findByRole("checkbox", { name: "选择子女 女儿一" });
     fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
 
     expect(onRequestQuickCreate).toHaveBeenCalledTimes(1);
-    const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): void };
+    const request = onRequestQuickCreate.mock.calls[0]?.[0] as { purpose: string; onCreated(person: PersonListItem): Promise<void> };
     expect(request.purpose).toBe("子女");
-    act(() => request.onCreated(person("new-child", "新建子女")));
+    await act(async () => {
+      await request.onCreated(person("new-child", "新建子女"));
+    });
 
     expect(await screen.findByRole("checkbox", { name: "选择子女 新建子女" })).toBeChecked();
+    await waitFor(() => expect(relationsApi.planParentCompletion).toHaveBeenCalledWith({
+      knownParentId: current.id,
+      childId: "new-child",
+      parentRole: "father"
+    }));
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [{
+      type: "parentFamily.add",
+      knownParentId: current.id,
+      childId: "new-child",
+      parentRole: "father",
+      completionPolicy: "spouse-default",
+      sourceDescription: "人物中心关系录入"
+    }] });
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+  });
+
+  it("opens the relationship preview automatically when a quick-created parent returns", async () => {
+    const onRequestQuickCreate = vi.fn();
+    const { mutations, relationsApi } = renderPanel(detail(), undefined, onRequestQuickCreate);
+    await within(screen.getByLabelText("选择父亲")).findByRole("option", { name: /女儿一/u });
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为父亲" }));
+
+    const request = onRequestQuickCreate.mock.calls[0]?.[0] as { onCreated(person: PersonListItem): Promise<void> };
+    await act(async () => {
+      await request.onCreated(person("new-father", "新建父亲", "male"));
+    });
+
+    await waitFor(() => expect(relationsApi.planParentCompletion).toHaveBeenCalledWith({
+      knownParentId: "new-father",
+      childId: current.id,
+      parentRole: "father"
+    }));
+    expect(mutations.stage).toHaveBeenCalledWith({ intents: [{
+      type: "parentFamily.add",
+      knownParentId: "new-father",
+      childId: current.id,
+      parentRole: "father",
+      completionPolicy: "spouse-default",
+      sourceDescription: "人物中心关系录入"
+    }] });
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
+  });
+
+  it("opens an active-marriage preview automatically when a quick-created spouse returns", async () => {
+    const onRequestQuickCreate = vi.fn();
+    const { mutations } = renderPanel(detail(), undefined, onRequestQuickCreate);
+    await within(screen.getByLabelText("第1段婚姻配偶")).findByRole("option", { name: /女儿一/u });
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为配偶" }));
+
+    const request = onRequestQuickCreate.mock.calls[0]?.[0] as { onCreated(person: PersonListItem): Promise<void> };
+    await act(async () => {
+      await request.onCreated(person("new-spouse", "新建配偶", "female"));
+    });
+
+    await waitFor(() => expect(mutations.stage).toHaveBeenCalledWith({ intents: [{
+      type: "marriage.add",
+      draft: {
+        spouseAId: current.id,
+        spouseBId: "new-spouse",
+        status: "active",
+        start: null,
+        end: null,
+        sourceDescription: "人物中心关系录入"
+      }
+    }] }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("第1段婚姻配偶")).toHaveValue("new-spouse");
+      expect(screen.getByLabelText("第1段婚姻状态")).toHaveValue("active");
+    });
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
   });
 
   it("brings the mother quick-create form into view and focuses its name field", async () => {
@@ -659,14 +816,27 @@ describe("FamilyRelationsPanel", () => {
       initialSelectedPersonId={current.id}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
     expect(screen.getByRole("heading", { name: "快速新建关系人物：子女" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "新建子女" } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
 
     expect(await screen.findByRole("checkbox", { name: "选择子女 新建子女" })).toBeChecked();
+    await waitFor(() => expect(api.relations.planParentCompletion).toHaveBeenCalledWith({
+      knownParentId: current.id,
+      childId: "new-child",
+      parentRole: "father"
+    }));
+    expect(await screen.findByRole("dialog", { name: "确认写入" })).toBeVisible();
     expect(api.mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({ type: "person.create" })] });
+    expect(api.mutations.stage).toHaveBeenCalledWith({ intents: [expect.objectContaining({
+      type: "parentFamily.add",
+      knownParentId: current.id,
+      childId: "new-child",
+      parentRole: "father"
+    })] });
     expect(api.people.save).not.toHaveBeenCalled();
   });
 
@@ -697,7 +867,8 @@ describe("FamilyRelationsPanel", () => {
       onDataChanged={onDataChanged}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));
@@ -748,7 +919,8 @@ describe("FamilyRelationsPanel", () => {
       onDataChanged={onDataChanged}
     />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "新建人物并设为子女" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "当前人物作为父亲" }));
+    fireEvent.click(screen.getByRole("button", { name: "新建人物并设为子女" }));
     fireEvent.change(screen.getByLabelText("姓名"), { target: { value: createdChild.displayName } });
     fireEvent.click(screen.getByRole("button", { name: "保存人物" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认写入" }));

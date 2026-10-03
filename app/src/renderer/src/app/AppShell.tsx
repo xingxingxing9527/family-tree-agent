@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type JSX } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import type { ConversationAnswer } from "../../../shared/chat";
-import type { PersonCandidate, WorkspaceSnapshotDto, WorkspaceSummary } from "../../../shared/contracts";
+import type { PersonSearchCandidate, WorkspaceSnapshotDto, WorkspaceSummary } from "../../../shared/contracts";
 import { ChatPage } from "../features/chat/ChatPage";
 import { EntryCenterPage } from "../features/import/EntryCenterPage";
 import { PeoplePage } from "../features/people/PeoplePage";
@@ -23,6 +23,20 @@ const secondaryAreas: Array<{ id: Area; label: string }> = [
 const areas = [...primaryAreas, ...secondaryAreas];
 const conversationSessionId = (): string => globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now().toString(36)}`;
 
+function searchIdentityHint(person: PersonSearchCandidate): string {
+  const father = person.parentHints.find(({ role }) => role === "father");
+  const mother = person.parentHints.find(({ role }) => role === "mother");
+  const parents = [father ? `父：${father.displayName}` : null, mother ? `母：${mother.displayName}` : null]
+    .filter((value): value is string => Boolean(value));
+  if (parents.length > 0) return parents.join(" · ");
+  const fallback = [
+    "父母信息未录入",
+    person.birth ? `${person.birth.year} 年生` : null,
+    person.gender === "male" ? "男" : person.gender === "female" ? "女" : null
+  ].filter((value): value is string => Boolean(value));
+  return fallback.join(" · ");
+}
+
 function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: WorkspaceSummary; snapshot: WorkspaceSnapshotDto; refreshSnapshot(): void }): JSX.Element {
   const api = useApi();
   const { viewpointId, setViewpointId } = useViewpoint();
@@ -32,7 +46,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<PersonCandidate[] | null>(null);
+  const [searchResults, setSearchResults] = useState<PersonSearchCandidate[] | null>(null);
   const searchId = useRef(0);
   const segment = location.pathname.split("/").filter(Boolean).at(-1) as Area | undefined;
   const activeArea = areas.some((entry) => entry.id === segment) ? segment : null;
@@ -94,7 +108,7 @@ function WorkspaceBody({ workspace, snapshot, refreshSnapshot }: { workspace: Wo
       <form className="global-search" role="search" onSubmit={(event) => void runSearch(event)}><label className="sr-only" htmlFor="people-global-search">搜索人物</label><input id="people-global-search" aria-label="搜索当前谱册人物" placeholder="搜索人物、别名…" value={search} onChange={(event) => setSearch(event.target.value)} /><button type="submit" disabled={searching || !search.trim()}>{searching ? "搜索中" : "搜索"}</button></form>
       <label className="viewpoint-control">当前视角<select aria-label="共享当前视角" value={viewpointId ?? ""} onChange={(event) => setViewpointId(event.target.value || null)}><option value="">未选择</option>{snapshot.people.map((person) => <option value={person.id} key={person.id}>{person.displayName}</option>)}</select></label>
     </header>
-    {searchResults && <section className="search-results" aria-label="人物搜索结果"><div className="section-heading-row"><strong>人物搜索结果</strong><button type="button" onClick={() => setSearchResults(null)}>关闭</button></div>{searchResults.length === 0 ? <p>没有匹配人物。</p> : <ul>{searchResults.map((person) => <li key={person.id}><button type="button" onClick={() => { setSelectedPersonId(person.id); setSearchResults(null); navigate(`/workspace/${workspace.id}/people`); }}>{person.displayName}<span>{person.aliases.join("、")}</span></button></li>)}</ul>}</section>}
+    {searchResults && <section className="search-results" aria-label="人物搜索结果"><div className="section-heading-row"><strong>人物搜索结果</strong><button type="button" onClick={() => setSearchResults(null)}>关闭</button></div>{searchResults.length === 0 ? <p>没有匹配人物。</p> : <ul>{searchResults.map((person) => <li key={person.id}><button type="button" aria-label={`查看${person.displayName}（${person.personCode}）`} onClick={() => { setSelectedPersonId(person.id); setSearchResults(null); navigate(`/workspace/${workspace.id}/people`); }}><span className="search-person-heading"><strong>{person.displayName}</strong><small>{person.personCode}</small></span><span className="search-person-family">{searchIdentityHint(person)}</span>{person.aliases.length > 0 && <span className="search-person-aliases">别名：{person.aliases.join("、")}</span>}</button></li>)}</ul>}</section>}
     <div className="shell-grid">
       <aside className="shell-nav">
         <nav className="primary-nav" aria-label="一级导航">{primaryAreas.map((entry) => <Link className={entry.id === activeArea ? "active" : ""} aria-current={entry.id === activeArea ? "page" : undefined} key={entry.id} to={`/workspace/${workspace.id}/${entry.id}`}>{entry.label}</Link>)}</nav>

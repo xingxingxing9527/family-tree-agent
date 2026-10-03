@@ -1,5 +1,5 @@
 import type { FactQueries } from "../facts/fact-queries.js";
-import type { PersonCandidate } from "../../../shared/contracts.js";
+import type { PersonCandidate, PersonSearchCandidate } from "../../../shared/contracts.js";
 
 const candidateFor = (queries: FactQueries, personId: string): PersonCandidate | null => {
   const person = queries.getPerson(personId);
@@ -24,7 +24,7 @@ const candidateFor = (queries: FactQueries, personId: string): PersonCandidate |
 export function searchPeople(
   queries: FactQueries,
   input: { query: string; limit: number }
-): PersonCandidate[] {
+): PersonSearchCandidate[] {
   const query = input.query.trim().toLocaleLowerCase();
   if (!query) return [];
   const limit = Math.max(1, Math.min(100, Math.trunc(input.limit)));
@@ -34,7 +34,7 @@ export function searchPeople(
     .slice(0, limit)
     .flatMap((person) => {
       const candidate = candidateFor(queries, person.id);
-      return candidate ? [candidate] : [];
+      return candidate ? [{ ...candidate, personCode: person.personCode }] : [];
     });
 }
 

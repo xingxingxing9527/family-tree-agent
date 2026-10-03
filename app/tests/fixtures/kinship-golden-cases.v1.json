@@ -7734,10 +7734,10 @@
       "viewpoint": "paternal-collateral-reverse-08-person-relative",
       "target": "paternal-collateral-reverse-08-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "哥哥的子女",
+        "reverseTerm": "叔父",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "paternal-collateral-reverse-08-person-relative",
@@ -11590,10 +11590,10 @@
       "viewpoint": "maternal-collateral-reverse-11-person-relative",
       "target": "maternal-collateral-reverse-11-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "姐姐的子女",
+        "reverseTerm": "舅舅",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "maternal-collateral-reverse-11-person-relative",
@@ -11680,10 +11680,10 @@
       "viewpoint": "maternal-collateral-reverse-12-person-relative",
       "target": "maternal-collateral-reverse-12-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "姐姐的子女",
+        "reverseTerm": "姨妈",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "maternal-collateral-reverse-12-person-relative",
@@ -13061,11 +13061,11 @@
       "viewpoint": "maternal-collateral-missing-12-person-relative",
       "target": "maternal-collateral-missing-12-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "姐妹的子女",
+        "reverseTerm": "舅舅",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序",
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "maternal-collateral-missing-12-person-relative",
@@ -13082,7 +13082,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 maternal-collateral-missing-12-person-mother 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
+        "conservativeResult": "显示中性组合称谓，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -13097,10 +13097,10 @@
             }
           },
           "expected": {
-            "primaryTerm": null,
-            "reverseTerm": null,
+            "primaryTerm": "妹妹的子女",
+            "reverseTerm": "舅舅",
             "uncertainty": [
-              "称谓规则尚未覆盖"
+              "未匹配精确称谓，已使用组合式称谓"
             ],
             "pathPersonIds": [
               "maternal-collateral-missing-12-person-relative",
@@ -20605,7 +20605,7 @@
       "target": "current-affinity-missing-07-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-07-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -20630,10 +20630,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的妻子",
+        "reverseTerm": "配偶父亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-07-person-parent",
@@ -20688,7 +20688,7 @@
       "target": "current-affinity-missing-08-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-08-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -20713,10 +20713,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的妻子",
+        "reverseTerm": "配偶母亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-08-person-parent",
@@ -20771,7 +20771,7 @@
       "target": "current-affinity-missing-09-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-09-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -20796,10 +20796,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的妻子",
+        "reverseTerm": "配偶父亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-09-person-parent",
@@ -20854,7 +20854,7 @@
       "target": "current-affinity-missing-10-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-10-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -20879,10 +20879,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的丈夫",
+        "reverseTerm": "配偶父亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-10-person-parent",
@@ -20937,7 +20937,7 @@
       "target": "current-affinity-missing-11-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-11-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -20962,10 +20962,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的丈夫",
+        "reverseTerm": "配偶母亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-11-person-parent",
@@ -21020,7 +21020,7 @@
       "target": "current-affinity-missing-12-person-spouse",
       "missingInformation": {
         "missingFact": "人物 current-affinity-missing-12-person-child 缺少决定姻亲路径的性别事实",
-        "conservativeResult": "已知路径存在，但称谓规则需该性别事实",
+        "conservativeResult": "显示中性组合称谓，不推断子女性别",
         "completion": {
           "fact": {
             "kind": "personGender",
@@ -21045,10 +21045,10 @@
         }
       },
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "子女的丈夫",
+        "reverseTerm": "配偶父亲",
         "uncertainty": [
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "current-affinity-missing-12-person-parent",
@@ -22231,11 +22231,11 @@
       "viewpoint": "unknown-age-order-forward-01-person-a",
       "target": "unknown-age-order-forward-01-person-descendant",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "兄弟的子女",
+        "reverseTerm": "伯叔父",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序",
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-01-person-a",
@@ -22488,11 +22488,11 @@
       "viewpoint": "unknown-age-order-forward-04-person-relative",
       "target": "unknown-age-order-forward-04-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "姐妹的子女",
+        "reverseTerm": "姨妈",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序",
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "unknown-age-order-forward-04-person-relative",
@@ -23538,11 +23538,11 @@
       "viewpoint": "unknown-age-order-missing-03-person-relative",
       "target": "unknown-age-order-missing-03-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "兄弟的子女",
+        "reverseTerm": "姑母",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序",
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-03-person-relative",
@@ -23559,7 +23559,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-03-person-relative 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
+        "conservativeResult": "显示中性组合称谓，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23574,10 +23574,10 @@
             }
           },
           "expected": {
-            "primaryTerm": null,
-            "reverseTerm": null,
+            "primaryTerm": "弟弟的子女",
+            "reverseTerm": "姑母",
             "uncertainty": [
-              "称谓规则尚未覆盖"
+              "未匹配精确称谓，已使用组合式称谓"
             ],
             "pathPersonIds": [
               "unknown-age-order-missing-03-person-relative",
@@ -23659,11 +23659,11 @@
       "viewpoint": "unknown-age-order-missing-04-person-relative",
       "target": "unknown-age-order-missing-04-person-child",
       "expected": {
-        "primaryTerm": null,
-        "reverseTerm": null,
+        "primaryTerm": "姐妹的子女",
+        "reverseTerm": "舅舅",
         "uncertainty": [
           "缺少可靠出生日期，未推断长幼顺序",
-          "称谓规则尚未覆盖"
+          "未匹配精确称谓，已使用组合式称谓"
         ],
         "pathPersonIds": [
           "unknown-age-order-missing-04-person-relative",
@@ -23680,7 +23680,7 @@
       },
       "missingInformation": {
         "missingFact": "人物 unknown-age-order-missing-04-person-relative 缺少可与另一核心人物比较的公历出生日期",
-        "conservativeResult": "称谓规则未覆盖，且长幼不确定",
+        "conservativeResult": "显示中性组合称谓，且长幼不确定",
         "completion": {
           "fact": {
             "kind": "personBirth",
@@ -23695,10 +23695,10 @@
             }
           },
           "expected": {
-            "primaryTerm": null,
-            "reverseTerm": null,
+            "primaryTerm": "妹妹的子女",
+            "reverseTerm": "舅舅",
             "uncertainty": [
-              "称谓规则尚未覆盖"
+              "未匹配精确称谓，已使用组合式称谓"
             ],
             "pathPersonIds": [
               "unknown-age-order-missing-04-person-relative",

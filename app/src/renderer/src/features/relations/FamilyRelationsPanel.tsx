@@ -22,7 +22,7 @@ type RelativePurpose = "父亲" | "母亲" | "配偶" | "子女" | "更正人物
 export interface RelativeQuickCreateRequest {
   ownerPersonId: string;
   purpose: RelativePurpose;
-  onCreated(person: PersonListItem): void;
+  onCreated(person: PersonListItem): void | Promise<void>;
 }
 
 interface FamilyRelationsPanelProps {
@@ -59,6 +59,11 @@ interface OwnerRequest {
 }
 
 const roleName = (role: ParentRole): "父亲" | "母亲" => role === "father" ? "父亲" : "母亲";
+const defaultParentRole = (gender: PersonListItem["gender"]): ParentRole | "" => {
+  if (gender === "male") return "father";
+  if (gender === "female") return "mother";
+  return "";
+};
 const emptyMarriageEvent = (key: number): MarriageEventDraft => ({ key, spouseId: "", status: "", start: null, end: null });
 const sourceDescription = "人物中心关系录入";
 const skipChoice = "__skip__";
@@ -86,7 +91,9 @@ export function FamilyRelationsPanel({
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [parentSelections, setParentSelections] = useState<Record<ParentRole, string>>({ father: "", mother: "" });
   const [selectedChildren, setSelectedChildren] = useState<Set<string>>(new Set());
-  const [childParentRole, setChildParentRole] = useState<ParentRole | "">("");
+  const [childParentRole, setChildParentRole] = useState<ParentRole | "">(
+    () => defaultParentRole(detail.person.gender)
+  );
   const [marriageEvents, setMarriageEvents] = useState<MarriageEventDraft[]>([emptyMarriageEvent(1)]);
   const [correction, setCorrection] = useState<{ relation: RelatedPersonReadModel; replacementId: string; parentRole: ParentRole | "" } | null>(null);
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
@@ -105,11 +112,11 @@ export function FamilyRelationsPanel({
     setResolutions({});
     setParentSelections({ father: "", mother: "" });
     setSelectedChildren(new Set());
-    setChildParentRole("");
+    setChildParentRole(defaultParentRole(detail.person.gender));
     setMarriageEvents([emptyMarriageEvent(nextMarriageKey.current++)]);
     setCorrection(null);
     await onChanged();
-  }, [onChanged]);
+  }, [detail.person.gender, onChanged]);
   const staged = useStagedMutation(mutations, mutationCommitted);
 
   useLayoutEffect(() => {
@@ -130,7 +137,7 @@ export function FamilyRelationsPanel({
     setLoadingPeople(true);
     setParentSelections({ father: "", mother: "" });
     setSelectedChildren(new Set());
-    setChildParentRole("");
+    setChildParentRole(defaultParentRole(detail.person.gender));
     setMarriageEvents([emptyMarriageEvent(1)]);
     setCorrection(null);
     setPendingPlan(null);
@@ -139,7 +146,7 @@ export function FamilyRelationsPanel({
     setError(null);
     setPlanning(false);
     staged.reset();
-  }, [detail.person.id, staged.reset]);
+  }, [detail.person.gender, detail.person.id, staged.reset]);
 
   const captureOwner = (): OwnerRequest => ({ ownerPersonId: detail.person.id, generation: ownerGeneration.current });
   const ownerIsCurrent = (request: OwnerRequest): boolean => mounted.current
@@ -281,22 +288,22 @@ export function FamilyRelationsPanel({
     setError(null);
   };
 
-  const stageMarriages = (): void => {
+  const stageMarriageEvents = async (events: MarriageEventDraft[]): Promise<void> => {
     if (!mutations) return;
     setError(null);
-    if (marriageEvents.some(({ spouseId, status }) => !spouseId || !status)) {
+    if (events.some(({ spouseId, status }) => !spouseId || !status)) {
       setError("请为每段婚姻事件选择配偶和状态");
       return;
     }
-    if (marriageEvents.some(({ status, end }) => status === "divorced" && !end)) {
+    if (events.some(({ status, end }) => status === "divorced" && !end)) {
       setError("已离婚的婚姻事件必须填写结束日期");
       return;
     }
-    if (marriageEvents.filter(({ status }) => status === "active").length > 1) {
+    if (events.filter(({ status }) => status === "active").length > 1) {
       setError("同一人物的新婚姻事件最多只能有一段当前婚姻");
       return;
     }
-    const intents: MutationIntent[] = marriageEvents.map(({ spouseId, status, start, end }) => ({
+    const intents: MutationIntent[] = events.map(({ spouseId, status, start, end }) => ({
       type: "marriage.add",
       draft: {
         spouseAId: detail.person.id,
@@ -307,19 +314,21 @@ export function FamilyRelationsPanel({
         sourceDescription
       }
     }));
-    void staged.stage(intents);
+    await staged.stage(intents);
   };
 
-  const quickCreate = (purpose: RelativePurpose, onCreated: (person: PersonListItem) => void): void => {
+  const stageMarriages = (): void => { void stageMarriageEvents(marriageEvents); };
+
+  const quickCreate = (purpose: RelativePurpose, onCreated: (person: PersonListItem) => void | Promise<void>): void => {
     const owner = captureOwner();
     if (!ownerIsCurrent(owner)) return;
     onRequestQuickCreate?.({
       ownerPersonId: owner.ownerPersonId,
       purpose,
-      onCreated: (created) => {
+      onCreated: async (created) => {
         if (!ownerIsCurrent(owner)) return;
         mergePerson(created);
-        onCreated(created);
+        await onCreated(created);
       }
     });
   };
@@ -387,7 +396,10 @@ export function FamilyRelationsPanel({
               </select>
             </label>
             <div className="button-row">
-              {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate(label, (created) => setParentSelections((current) => ({ ...current, [role]: created.id })))}>新建人物并设为{label}</button>}
+              {onRequestQuickCreate && <button className="button secondary-button" type="button" disabled={planning || staged.busy} onClick={() => quickCreate(label, async (created) => {
+                setParentSelections((current) => ({ ...current, [role]: created.id }));
+                await planAndStage([familyIntent(created.id, detail.person.id, role)]);
+              })}>新建人物并设为{label}</button>}
               <button className="button primary-button" type="button" disabled={!parentSelections[role] || planning || staged.busy} onClick={() => void planAndStage([familyIntent(parentSelections[role], detail.person.id, role)])}>添加{label}并预览</button>
             </div>
           </>}
@@ -417,7 +429,15 @@ export function FamilyRelationsPanel({
           })}
         </div>
         <div className="button-row">
-          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("配偶", (created) => updateMarriage(marriageEvents[marriageEvents.length - 1]!.key, { spouseId: created.id }))}>新建人物并设为配偶</button>}
+          {onRequestQuickCreate && <button className="button secondary-button" type="button" disabled={staged.busy} onClick={() => quickCreate("配偶", async (created) => {
+            const target = marriageEvents[marriageEvents.length - 1]!;
+            const status = target.status || "active";
+            const nextEvents = marriageEvents.map((event) => event.key === target.key
+              ? { ...event, spouseId: created.id, status, ...(status === "active" ? { end: null } : {}) }
+              : event);
+            setMarriageEvents(nextEvents);
+            await stageMarriageEvents(nextEvents);
+          })}>新建人物并设为配偶</button>}
           <button className="button secondary-button" type="button" onClick={() => setMarriageEvents((current) => [...current, emptyMarriageEvent(nextMarriageKey.current++)])}>新增婚姻事件</button>
           <button className="button primary-button" type="button" disabled={staged.busy} onClick={stageMarriages}>生成婚姻关系预览</button>
         </div>
@@ -430,7 +450,9 @@ export function FamilyRelationsPanel({
           <legend>新增子女时的明确父母角色</legend>
           <label><input type="radio" name="current-parent-role" aria-label="当前人物作为父亲" checked={childParentRole === "father"} onChange={() => setChildParentRole("father")} />当前人物作为父亲</label>
           <label><input type="radio" name="current-parent-role" aria-label="当前人物作为母亲" checked={childParentRole === "mother"} onChange={() => setChildParentRole("mother")} />当前人物作为母亲</label>
-          <small className="text-secondary">性别提示：{currentGender}。角色必须由管理员明确选择，系统不会据此默认或改写。</small>
+          <small className="text-secondary">{detail.person.gender === "unknown"
+            ? "性别未知，请人工选择当前人物作为父亲或母亲。"
+            : `性别提示：${currentGender}。已根据人物性别自动选择，可手动修改。`}</small>
         </fieldset>
         <div className="child-candidate-list" role="group" aria-label="子女候选多选">
           {childCandidates.map((entry) => <label key={entry.id}>
@@ -448,7 +470,10 @@ export function FamilyRelationsPanel({
           </label>)}
         </div>
         <div className="button-row">
-          {onRequestQuickCreate && <button className="button secondary-button" type="button" onClick={() => quickCreate("子女", (created) => setSelectedChildren((current) => new Set(current).add(created.id)))}>新建人物并设为子女</button>}
+          {onRequestQuickCreate && <button className="button secondary-button" type="button" disabled={!childParentRole || planning || staged.busy} onClick={() => quickCreate("子女", async (created) => {
+            setSelectedChildren((current) => new Set(current).add(created.id));
+            await planAndStage([familyIntent(detail.person.id, created.id, childParentRole as ParentRole)]);
+          })}>新建人物并设为子女</button>}
           <button
             className="button primary-button"
             type="button"

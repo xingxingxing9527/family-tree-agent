@@ -206,6 +206,45 @@ describe("complete application shell", () => {
     expect(vi.mocked(api.chat.authorize).mock.calls[0]?.[0]).toMatchObject({ payload: { viewpointId: person.id, selectedPersonId: person.id } });
   });
 
+  it("shows person codes and parent names in every global-search result", async () => {
+    const { api } = desktopApi([workspaceA]);
+    vi.mocked(api.query.searchPeople).mockResolvedValue({ ok: true, value: [
+      {
+        id: "same-name-a",
+        personCode: "P000101",
+        displayName: "张敏",
+        aliases: [],
+        gender: "female",
+        birth: null,
+        parentHints: [
+          { id: "father-a", displayName: "张建国", role: "father" },
+          { id: "mother-a", displayName: "李秀兰", role: "mother" }
+        ]
+      },
+      {
+        id: "same-name-b",
+        personCode: "P000102",
+        displayName: "张敏",
+        aliases: [],
+        gender: "male",
+        birth: { calendar: "solar", year: 1990, month: null, day: null, leapMonth: false, precision: "year" },
+        parentHints: []
+      }
+    ] });
+    window.location.hash = `#/workspace/${workspaceA.id}/tree`;
+    renderApp(api);
+
+    const search = await screen.findByLabelText("搜索当前谱册人物");
+    fireEvent.change(search, { target: { value: "张敏" } });
+    fireEvent.submit(search.closest("form")!);
+
+    const results = await screen.findByRole("region", { name: "人物搜索结果" });
+    expect(within(results).getByText("P000101")).toBeVisible();
+    expect(within(results).getByText("父：张建国 · 母：李秀兰")).toBeVisible();
+    expect(within(results).getByText("P000102")).toBeVisible();
+    expect(within(results).getByText("父母信息未录入 · 1990 年生 · 男")).toBeVisible();
+  });
+
   it("opens and navigates to a different restore target before showing its refreshed shell", async () => {
     const { api, open } = desktopApi([workspaceA, workspaceB]);
     vi.mocked(api.dataManagement.selectRestoreFile).mockResolvedValue({ ok: true, value: {

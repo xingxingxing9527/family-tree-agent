@@ -5,7 +5,7 @@ import { RPC_INPUT_SCHEMAS } from "../../shared/api-schemas.js";
 import type {
   AppResult,
   LineageSummary,
-  PersonCandidate,
+  PersonSearchCandidate,
   PersonQueryReadModel,
   RelativeKind,
   RelativeReadModel,
@@ -38,7 +38,7 @@ export const QUERY_CHANNELS = {
 export interface QueryGateway {
   workspaceSnapshot(): Promise<AppResult<WorkspaceSnapshotDto>>;
   projectTree(input: { view: TreeViewDto; subjectId?: string; viewpointId?: string; collapseDepth?: number; lineageId?: string }): Promise<AppResult<TreeProjectionDto>>;
-  searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>>;
+  searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonSearchCandidate[]>>;
   getPerson(input: { personId: string }): Promise<AppResult<PersonQueryReadModel>>;
   listRelatives(input: { personId: string; kinds: RelativeKind[] }): Promise<AppResult<RelativeReadModel[]>>;
   calculateRelationship(input: { viewpointId: string; targetId: string }): Promise<AppResult<RelationshipResultDto>>;
@@ -62,7 +62,7 @@ export class WorkspaceQueryGateway implements QueryGateway {
     return this.readDatabase((database, workspaceId) => projectWorkspaceTree(database, workspaceId, input));
   }
 
-  async searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonCandidate[]>> {
+  async searchPeople(input: { query: string; limit: number }): Promise<AppResult<PersonSearchCandidate[]>> {
     return this.read((tools) => tools.search_people(input));
   }
 

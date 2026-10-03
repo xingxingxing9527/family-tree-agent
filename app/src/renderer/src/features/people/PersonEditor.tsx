@@ -94,7 +94,7 @@ export function PersonEditor({ api, mutations, personId, expectedVersion, initia
   return (
     <section className="editor-card" aria-labelledby="person-editor-title">
       <h2 id="person-editor-title" className="text-primary">{personId ? "编辑人物" : "新增人物"}</h2>
-      <p className="text-secondary form-help">日期一旦填写，历法、年份和月份均为必填项。日期中的“日”可以留空。</p>
+      <p className="text-secondary form-help">出生日期为选填；如需填写，历法、年份和月份为必填，日可留空。</p>
       {error && <div className="error-banner" role="alert">{error}</div>}
       {staged.error && <div className="error-banner" role="alert">{staged.error}</div>}
       {warnings.length > 0 && (
@@ -124,7 +124,7 @@ export function PersonEditor({ api, mutations, personId, expectedVersion, initia
             <option value="female">女</option>
           </select>
         </label>
-        <PartialDateField label="出生日期" value={draft.birth} onChange={(birth) => setDraft((current) => ({ ...current, birth }))} />
+        <PartialDateField label="出生日期" optional value={draft.birth} onChange={(birth) => setDraft((current) => ({ ...current, birth }))} />
         <PartialDateField label="去世日期" value={draft.death} onChange={(death) => setDraft((current) => ({ ...current, death }))} />
         <label>
           <span>备注</span>

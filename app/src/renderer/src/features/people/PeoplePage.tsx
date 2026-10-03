@@ -6,6 +6,7 @@ import { ParentCompletionRepairPanel } from "../relations/ParentCompletionRepair
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
 import { PersonEditor } from "./PersonEditor";
+import { formatApproximateAge } from "./format-approximate-age";
 import { MergeHistory } from "./MergeHistory";
 import { MergePanel } from "./MergePanel";
 import "./people.css";
@@ -125,7 +126,7 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
     const generation = relativeCreationGeneration.current;
     setRelativeCreation(null);
     if (generation === relativeCreationGeneration.current && selectedPersonId.current === request.ownerPersonId) {
-      request.onCreated({ ...detail.person, aliases: detail.aliases });
+      void request.onCreated({ ...detail.person, aliases: detail.aliases });
       relativeCreationGeneration.current += 1;
     }
   };
@@ -149,13 +150,20 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
         </div>
       </header>
       {error && <div className="error-banner" role="alert">{error}</div>}
+      {repairingParents && <ParentCompletionRepairPanel
+        relations={api.relations}
+        mutations={api.mutations}
+        onClose={() => setRepairingParents(false)}
+        onCommitted={relationsChanged}
+      />}
       <div className="people-layout">
         <aside className="people-list" aria-label="人物列表">
           <h2>人物库</h2>
           {loading && <p role="status">正在加载人物…</p>}
           {!loading && people.length === 0 && <p className="text-secondary">还没有人物，请先新增一位。</p>}
-          {people.map((person) => (
-            <button
+          {people.map((person) => {
+            const approximateAge = formatApproximateAge(person.birth, person.death);
+            return <button
               className={`person-card ${selected?.person.id === person.id ? "selected" : ""}`}
               type="button"
               key={person.id}
@@ -164,8 +172,9 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
             >
               <strong>{person.displayName}</strong>
               <span className="text-secondary">{person.aliases.join("、") || "无别名"}</span>
+              {approximateAge && <span className="text-secondary">{approximateAge}</span>}
             </button>
-          ))}
+          })}
         </aside>
         <div className="people-content">
           {relativeCreation && <section ref={relativeCreationSection} className="relative-person-creation" aria-labelledby="relative-person-creation-title">
@@ -193,12 +202,6 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <MergeHistory api={api.merges} prepareMutation={prepareMutation} />
         </div>
       </div>
-      {repairingParents && <ParentCompletionRepairPanel
-        relations={api.relations}
-        mutations={api.mutations}
-        onClose={() => setRepairingParents(false)}
-        onCommitted={relationsChanged}
-      />}
     </section>
   );
 }

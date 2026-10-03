@@ -6,6 +6,7 @@ import { MarriageHistory } from "../relations/MarriageHistory";
 import { MutationReviewDialog } from "../mutations/MutationReviewDialog";
 import { useStagedMutation } from "../mutations/useStagedMutation";
 import { formatPartialDate } from "./format-partial-date";
+import { formatApproximateAge } from "./format-approximate-age";
 import { MediaGallery } from "./MediaGallery";
 
 interface PersonDetailProps {
@@ -23,6 +24,7 @@ interface PersonDetailProps {
 
 export function PersonDetail({ detail, peopleApi, relationsApi, mutations, mediaApi, onEdit, onChanged, onRequestQuickCreate, onUseAsViewpoint, onAskAbout }: PersonDetailProps): JSX.Element {
   const gender = detail.person.gender === "male" ? "男" : detail.person.gender === "female" ? "女" : "未知";
+  const approximateAge = formatApproximateAge(detail.person.birth, detail.person.death);
   const [childrenStatus, setChildrenStatus] = useState<ChildrenCountStatusDto | null>(null);
   useEffect(() => {
     if (typeof peopleApi.getChildrenCountStatus !== "function") return undefined;
@@ -61,6 +63,7 @@ export function PersonDetail({ detail, peopleApi, relationsApi, mutations, media
         <div><dt>性别</dt><dd>{gender}</dd></div>
         <div><dt>出生</dt><dd>{formatPartialDate(detail.person.birth)}</dd></div>
         <div><dt>去世</dt><dd>{formatPartialDate(detail.person.death)}</dd></div>
+        {approximateAge && <div><dt>年龄</dt><dd>{approximateAge}</dd></div>}
         <div className="detail-wide"><dt>备注</dt><dd>{detail.person.notes || "未记录"}</dd></div>
       </dl>
       <FamilyRelationsPanel

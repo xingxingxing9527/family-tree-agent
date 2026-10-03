@@ -4,6 +4,7 @@ import type { CalendarType, PartialDate } from "../../../../shared/domain";
 interface PartialDateFieldProps {
   label: string;
   value: PartialDate | null;
+  optional?: boolean;
   onChange(value: PartialDate | null): void;
 }
 
@@ -25,7 +26,7 @@ const toFields = (value: PartialDate | null): DateFields => value
     }
   : { calendar: "", year: "", month: "", day: "", leapMonth: false };
 
-export function PartialDateField({ label, value, onChange }: PartialDateFieldProps): JSX.Element {
+export function PartialDateField({ label, value, optional = false, onChange }: PartialDateFieldProps): JSX.Element {
   const [fields, setFields] = useState<DateFields>(() => toFields(value));
 
   useEffect(() => setFields(toFields(value)), [value]);
@@ -52,9 +53,14 @@ export function PartialDateField({ label, value, onChange }: PartialDateFieldPro
     });
   };
 
+  const clear = (): void => {
+    setFields(toFields(null));
+    onChange(null);
+  };
+
   return (
     <fieldset className="date-field">
-      <legend className="text-primary">{label}</legend>
+      <legend className="text-primary">{label}{optional ? "（选填）" : ""}</legend>
       <label>
         <span>{label}历法</span>
         <select
@@ -69,7 +75,8 @@ export function PartialDateField({ label, value, onChange }: PartialDateFieldPro
         </select>
       </label>
       {fields.calendar && (
-        <div className="date-grid">
+        <>
+          <div className="date-grid">
           <label>
             <span>{label.replace("日期", "")}年份</span>
             <input className="field-control" aria-label={`${label.replace("日期", "")}年份`} type="number" min="1" required value={fields.year} onChange={(event) => update({ year: event.target.value })} />
@@ -88,7 +95,9 @@ export function PartialDateField({ label, value, onChange }: PartialDateFieldPro
               <span>闰月</span>
             </label>
           )}
-        </div>
+          </div>
+          {optional && <button className="button secondary-button date-clear-button" type="button" onClick={clear}>清空{label}</button>}
+        </>
       )}
     </fieldset>
   );

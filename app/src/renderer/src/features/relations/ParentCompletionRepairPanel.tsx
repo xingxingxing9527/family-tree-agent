@@ -41,6 +41,7 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
   const [completedGeneration, setCompletedGeneration] = useState(0);
   const requestGeneration = useRef(0);
   const mounted = useRef(true);
+  const panel = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     const generation = ++requestGeneration.current;
@@ -72,6 +73,11 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
     await onCommitted?.();
   }, [load, onCommitted]);
   const staged = useStagedMutation(mutations, mutationCommitted);
+
+  useEffect(() => {
+    panel.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    panel.current?.focus();
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -118,7 +124,13 @@ export function ParentCompletionRepairPanel({ relations, mutations, onClose, onC
     setSelected(new Set(safeItems.map(({ childId }) => childId)));
   };
 
-  return <section className="parent-completion-repair" role="region" aria-labelledby="parent-completion-repair-title">
+  return <section
+    ref={panel}
+    className="parent-completion-repair"
+    role="region"
+    aria-labelledby="parent-completion-repair-title"
+    tabIndex={-1}
+  >
     <div className="section-heading-row">
       <div>
         <h2 id="parent-completion-repair-title">检查未完整父母关系</h2>
