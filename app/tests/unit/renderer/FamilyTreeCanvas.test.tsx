@@ -102,8 +102,20 @@ describe("family tree layout", () => {
     expect(laidOut.edges.filter((edge) => edge.id.startsWith("parent:")).every((edge) => edge.data?.visualRole === "marriage")).toBe(true);
     expect(laidOut.edges.find((edge) => edge.id === "child:one")?.data?.visualRole).toBe("descent");
     const centerY = (id: string, height: number) => position(id).y + height / 2;
-    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-a", 132));
-    expect(centerY("marriage:one", 96)).toBe(centerY("person:parent-b", 132));
+    expect(centerY("marriage:one", 72)).toBe(centerY("person:parent-a", 116));
+    expect(centerY("marriage:one", 72)).toBe(centerY("person:parent-b", 116));
+  });
+
+  it("uses compact rendered node geometry so layout spacing matches the cards", async () => {
+    const laidOut = await layoutWithElk(topology);
+    const person = laidOut.nodes.find((node) => node.id === "person:parent-a")!;
+    const union = laidOut.nodes.find((node) => node.id === "marriage:one")!;
+
+    expect(person.style).toMatchObject({ width: 180, height: 116 });
+    expect(union.style).toMatchObject({ width: 112, height: 72 });
+    const top = Math.min(...laidOut.nodes.map((node) => node.position.y));
+    const bottom = Math.max(...laidOut.nodes.map((node) => node.position.y + Number(node.style?.height ?? 0)));
+    expect(bottom - top).toBeLessThanOrEqual(400);
   });
 
   it("keeps adjacent spouse families from overlapping after horizontal alignment", async () => {
@@ -134,8 +146,8 @@ describe("family tree layout", () => {
       id: node.id,
       x: node.position.x,
       y: node.position.y,
-      width: node.type === "person" ? 196 : 136,
-      height: node.type === "person" ? 132 : 96
+      width: Number(node.style?.width),
+      height: Number(node.style?.height)
     }));
     const overlaps: string[] = [];
     for (let leftIndex = 0; leftIndex < boxes.length; leftIndex += 1) {
@@ -198,8 +210,8 @@ describe("family tree layout", () => {
     const boxes = new Map(laidOut.nodes.map((node) => [node.id, {
       x: node.position.x,
       y: node.position.y,
-      width: node.type === "person" ? 196 : 136,
-      height: node.type === "person" ? 132 : 96
+      width: Number(node.style?.width),
+      height: Number(node.style?.height)
     }]));
     const union = boxes.get("marriage:u3")!;
     const keke = boxes.get("person:p24")!;
@@ -269,7 +281,7 @@ describe("family tree layout", () => {
     const laidOut = await layoutWithElk(interleavedTopology);
     const centerX = (id: string): number => {
       const node = laidOut.nodes.find((candidate) => candidate.id === id)!;
-      return node.position.x + 98;
+      return node.position.x + Number(node.style?.width) / 2;
     };
     const interval = (ids: string[]): [number, number] => {
       const centers = ids.map(centerX);
@@ -323,12 +335,41 @@ describe("FamilyTreeCanvas", () => {
     expect(screen.getByText("父亲")).toBeVisible();
     expect(parentCard).toHaveTextContent("本层子女");
     expect(screen.getByRole("group", { name: "人物：乙" })).toHaveTextContent("配偶");
-    expect(screen.getByText("第 1 代（系统推导）")).toBeVisible();
+    expect(parentCard).toHaveTextContent("第 1 代（系统推导）");
     expect(parentCard).toHaveTextContent("1960– · 约 66 岁");
     expect(screen.getByRole("group", { name: "家庭联合：已结束婚姻" })).toHaveClass("family-union-node", "ended");
     expect(screen.getByText("已结束婚姻")).toBeVisible();
     expect(screen.getByText("开始：公历 1980年1月")).toBeVisible();
     expect(screen.getByText("结束：农历 1990年闰2月3日")).toBeVisible();
+  });
+
+  it("shows an accessible gender treatment on every person card", async () => {
+    const base = projection("child", label("父亲"));
+    const gendered: TreeProjection = {
+      ...base,
+      topology: {
+        ...base.topology,
+        nodes: base.topology.nodes.map((node) => node.kind !== "person" ? node : ({
+          ...node,
+          display: {
+            ...node.display,
+            gender: node.personId === "parent-a" ? "male" : node.personId === "parent-b" ? "female" : "unknown"
+          }
+        }))
+      } as TreeProjectionTopology
+    };
+
+    render(<FamilyTreeCanvas projection={gendered} />);
+
+    const male = await screen.findByRole("group", { name: "人物：甲" });
+    const female = screen.getByRole("group", { name: "人物：乙" });
+    const unknown = screen.getByRole("group", { name: "人物：孩子" });
+    expect(male).toHaveClass("gender-male");
+    expect(female).toHaveClass("gender-female");
+    expect(unknown).toHaveClass("gender-unknown");
+    expect(within(male).getByText("男")).toBeVisible();
+    expect(within(female).getByText("女")).toBeVisible();
+    expect(within(unknown).getByText("未知")).toBeVisible();
   });
 
   it("shows the regional term and a formal secondary line without exposing the path on cards", async () => {

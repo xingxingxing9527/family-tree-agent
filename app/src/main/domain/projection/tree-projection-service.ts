@@ -4,6 +4,7 @@ import type { FamilyUnion } from "./family-union-projector.js";
 
 export interface TreePersonDisplay {
   displayName: string;
+  gender?: "male" | "female" | "unknown";
   birthYear: number | null;
   deathYear: number | null;
   generation: GenerationDisplay | null;
@@ -133,6 +134,7 @@ export class TreeProjectionService {
         personId: person.id,
         display: {
           displayName: person.displayName,
+          gender: person.gender ?? "unknown",
           birthYear: person.birthYear,
           deathYear: person.deathYear,
           generation: person.generation,

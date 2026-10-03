@@ -86,19 +86,73 @@
 
 .tree-person-node {
   box-sizing: border-box;
-  width: 196px;
-  min-height: 132px;
+  width: 180px;
+  height: 116px;
   display: grid;
-  gap: 4px;
-  padding: 14px;
+  align-content: start;
+  gap: 3px;
+  padding: 9px 10px;
   border: 2px solid var(--control-border);
   border-radius: 10px;
   box-shadow: 0 4px 12px rgb(15 23 42 / 12%);
   text-align: left;
 }
 
+.tree-person-node.gender-male { --gender-accent: #2563eb; --gender-soft: #eff6ff; border-color: #2563eb; }
+.tree-person-node.gender-female { --gender-accent: #be185d; --gender-soft: #fdf2f8; border-color: #be185d; }
+.tree-person-node.gender-unknown { --gender-accent: #64748b; --gender-soft: #f1f5f9; border-color: #64748b; }
+
+.tree-person-heading {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.tree-person-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--gender-accent);
+  background: var(--gender-soft);
+  border-radius: 999px;
+}
+
+.tree-person-avatar svg {
+  width: 19px;
+  height: 19px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
 .tree-person-name {
+  min-width: 0;
+  overflow: hidden;
   line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-gender-badge {
+  padding: 1px 5px;
+  color: var(--gender-accent);
+  background: var(--gender-soft);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tree-person-tags {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  align-items: center;
+  overflow: hidden;
 }
 
 .family-tree-workspace {
@@ -165,9 +219,9 @@
   gap: 6px;
 }
 
-.tree-person-node.blood { border-color: #1d4ed8; }
-.tree-person-node.married-in { border-color: #a16207; border-style: dashed; }
-.tree-person-node.associated { border-color: #64748b; }
+.tree-person-node.blood { border-style: solid; }
+.tree-person-node.married-in { border-style: dashed; }
+.tree-person-node.associated { border-style: dotted; }
 
 .tree-person-node.selected,
 .tree-person-node:focus-visible,
@@ -183,6 +237,7 @@
 }
 
 .tree-lineage-role {
+  flex: 0 0 auto;
   width: fit-content;
   padding: 2px 7px;
   color: #ffffff;
@@ -196,13 +251,22 @@
 .tree-person-node.associated .tree-lineage-role { background: #64748b; }
 
 .tree-kinship-label {
+  min-width: 0;
+  overflow: hidden;
   color: #1d4ed8;
   font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-kinship-formal {
+  overflow: hidden;
   color: #475569;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-kinship-summary {
@@ -220,34 +284,37 @@
   margin: 0;
 }
 
-.tree-life-years,
-.tree-generation {
+.tree-person-metadata {
+  overflow: hidden;
   color: #475569;
-  font-size: 13px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tree-generation.conflict {
+.tree-person-metadata.conflict {
   color: #9a3412;
   font-weight: 700;
 }
 
 .family-union-node {
   box-sizing: border-box;
-  width: 136px;
-  min-height: 96px;
+  width: 112px;
+  height: 72px;
   display: grid;
   place-items: center;
-  padding: 7px;
+  padding: 5px;
   border: 2px solid #2563eb;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-align: center;
 }
 
 .family-union-date {
   color: #475569;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 1.3;
 }

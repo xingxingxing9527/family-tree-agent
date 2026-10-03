@@ -259,7 +259,7 @@ describe("ParentCompletionRepairPanel", () => {
     const api = pageApi();
     renderPage(api);
 
-    await screen.findByText("中心人物");
+    await screen.findByRole("button", { name: "姓氏待确认（1人）" });
     expect(api.relations.scanParentCompletions).not.toHaveBeenCalled();
     expect(api.mutations.stage).not.toHaveBeenCalled();
 

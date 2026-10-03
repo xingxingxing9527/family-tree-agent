@@ -285,6 +285,7 @@ export interface TreePersonNodeDto {
   personId: string;
   display: {
     displayName: string;
+    gender?: Gender;
     birthYear: number | null;
     deathYear: number | null;
     generation: TreeGenerationDisplayDto | null;

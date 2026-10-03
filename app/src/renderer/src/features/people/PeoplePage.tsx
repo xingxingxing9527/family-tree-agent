@@ -6,9 +6,9 @@ import { ParentCompletionRepairPanel } from "../relations/ParentCompletionRepair
 import { RelationshipEditor } from "../relations/RelationshipEditor";
 import { PersonDetail } from "./PersonDetail";
 import { PersonEditor } from "./PersonEditor";
-import { formatApproximateAge } from "./format-approximate-age";
 import { MergeHistory } from "./MergeHistory";
 import { MergePanel } from "./MergePanel";
+import { SurnameGroupedPeopleList } from "./SurnameGroupedPeopleList";
 import "./people.css";
 
 interface PeoplePageProps {
@@ -161,20 +161,17 @@ export function PeoplePage({ workspace, api, initialSelectedPersonId = null, onD
           <h2>人物库</h2>
           {loading && <p role="status">正在加载人物…</p>}
           {!loading && people.length === 0 && <p className="text-secondary">还没有人物，请先新增一位。</p>}
-          {people.map((person) => {
-            const approximateAge = formatApproximateAge(person.birth, person.death);
-            return <button
-              className={`person-card ${selected?.person.id === person.id ? "selected" : ""}`}
-              type="button"
-              key={person.id}
-              aria-label={`查看${person.displayName}`}
-              onClick={() => { setCreating(false); setEditing(false); cancelRelativeCreation(); setRepairingParents(false); void loadDetail(person.id); }}
-            >
-              <strong>{person.displayName}</strong>
-              <span className="text-secondary">{person.aliases.join("、") || "无别名"}</span>
-              {approximateAge && <span className="text-secondary">{approximateAge}</span>}
-            </button>
-          })}
+          <SurnameGroupedPeopleList
+            people={people}
+            selectedPersonId={selected?.person.id ?? initialSelectedPersonId}
+            onSelect={(personId) => {
+              setCreating(false);
+              setEditing(false);
+              cancelRelativeCreation();
+              setRepairingParents(false);
+              void loadDetail(personId);
+            }}
+          />
         </aside>
         <div className="people-content">
           {relativeCreation && <section ref={relativeCreationSection} className="relative-person-creation" aria-labelledby="relative-person-creation-title">

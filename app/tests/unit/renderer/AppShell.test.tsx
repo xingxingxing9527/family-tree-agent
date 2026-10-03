@@ -158,6 +158,7 @@ describe("complete application shell", () => {
     window.location.hash = `#/workspace/${workspaceA.id}/people`;
     renderApp(api);
 
+    fireEvent.click(await screen.findByRole("button", { name: "王姓（2人）" }));
     fireEvent.click(await screen.findByRole("button", { name: "查看王强" }));
     fireEvent.click(await screen.findByRole("button", { name: "设为当前视角" }));
     expect(screen.getByLabelText("共享当前视角")).toHaveValue("person-b");

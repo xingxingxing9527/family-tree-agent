@@ -28,9 +28,11 @@ export interface LaidOutTree {
 const elk = new ELK();
 
 const NODE_SIZE = {
-  person: { width: 196, height: 132 },
-  union: { width: 136, height: 96 }
+  person: { width: 180, height: 116 },
+  union: { width: 112, height: 72 }
 } as const;
+
+const HORIZONTAL_GAP = 16;
 
 interface PositionedNode {
   id: string;
@@ -85,7 +87,7 @@ function separateHorizontalOverlaps(topology: TreeProjectionTopologyDto, positio
     }
   }
 
-  const minimumGap = 20;
+  const minimumGap = HORIZONTAL_GAP;
   for (const row of rows) {
     row.nodes.sort((left, right) => left.x - right.x || left.id.localeCompare(right.id));
     const originalLeft = Math.min(...row.nodes.map((node) => node.x));
@@ -159,8 +161,8 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": "DOWN",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "72",
-      "elk.spacing.nodeNode": "36",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "40",
+      "elk.spacing.nodeNode": "24",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"
     },
@@ -175,25 +177,29 @@ export async function layoutWithElk(topology: TreeProjectionTopologyDto): Promis
     const parentPositions = parentIds.map((id) => positions.get(id)).filter((position): position is { x: number; y: number } => Boolean(position));
     const unionPosition = positions.get(union.id);
     if (!unionPosition || parentPositions.length === 0) continue;
-    unionPosition.y = parentPositions.reduce((sum, position) => sum + position.y + 66, 0) / parentPositions.length - 48;
-    unionPosition.x = parentPositions.reduce((sum, position) => sum + position.x + 98, 0) / parentPositions.length - 68;
+    unionPosition.y = parentPositions.reduce((sum, position) => sum + position.y + NODE_SIZE.person.height / 2, 0) / parentPositions.length - NODE_SIZE.union.height / 2;
+    unionPosition.x = parentPositions.reduce((sum, position) => sum + position.x + NODE_SIZE.person.width / 2, 0) / parentPositions.length - NODE_SIZE.union.width / 2;
     if (parentPositions.length === 2) {
       const orderedParents = parentPositions.sort((left, right) => left.x - right.x);
-      orderedParents[0]!.x = Math.min(orderedParents[0]!.x, unionPosition.x - 216);
-      orderedParents[1]!.x = Math.max(orderedParents[1]!.x, unionPosition.x + 156);
+      orderedParents[0]!.x = Math.min(orderedParents[0]!.x, unionPosition.x - NODE_SIZE.person.width - HORIZONTAL_GAP);
+      orderedParents[1]!.x = Math.max(orderedParents[1]!.x, unionPosition.x + NODE_SIZE.union.width + HORIZONTAL_GAP);
     }
   }
   separateHorizontalOverlaps(topology, positions);
 
   return {
-    nodes: topology.nodes.map((node) => ({
-      id: node.id,
-      type: node.kind === "person" ? "person" : "familyUnion",
-      position: positions.get(node.id) ?? { x: 0, y: 0 },
-      data: { node, relationshipLabel: null },
-      draggable: false,
-      selectable: true
-    })),
+    nodes: topology.nodes.map((node) => {
+      const size = node.kind === "person" ? NODE_SIZE.person : NODE_SIZE.union;
+      return {
+        id: node.id,
+        type: node.kind === "person" ? "person" as const : "familyUnion" as const,
+        position: positions.get(node.id) ?? { x: 0, y: 0 },
+        data: { node, relationshipLabel: null },
+        style: { width: size.width, height: size.height },
+        draggable: false,
+        selectable: true
+      };
+    }),
     edges: topology.edges.map((edge) => {
       const role = visualRole(edge);
       const sourcePosition = positions.get(edge.source) ?? { x: 0, y: 0 };

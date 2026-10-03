@@ -227,6 +227,7 @@ export function projectWorkspaceTree(
     people: visiblePeople.map((person) => ({
       id: person.id,
       displayName: person.displayName,
+      gender: person.gender,
       birthYear: person.birth?.year ?? null,
       deathYear: person.death?.year ?? null,
       generation: generationByPerson.get(person.id) ?? null,

@@ -1,5 +1,6 @@
 .worktrees/
 .superpowers/
+.codex-temp/
 work/
 app/node_modules/
 app/out/

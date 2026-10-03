@@ -25,10 +25,15 @@ export function PersonNode({ data, selected }: NodeProps<PersonFlowNode>): JSX.E
   const roleLabel = display.lineageRole === "blood" ? "本层子女"
     : display.lineageRole === "married_in" ? "配偶"
       : display.lineageRole === "associated" ? "关联成员" : null;
+  const gender = display.gender ?? "unknown";
+  const genderLabel = gender === "male" ? "男" : gender === "female" ? "女" : "未知";
+  const metadata = [lifeSummary, generation, display.generationMarker ? `字辈：${display.generationMarker}` : null]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <article
-      className={`tree-person-node${display.lineageRole ? ` ${display.lineageRole.replace("_", "-")}` : ""}${selected ? " selected" : ""}`}
+      className={`tree-person-node gender-${gender}${display.lineageRole ? ` ${display.lineageRole.replace("_", "-")}` : ""}${selected ? " selected" : ""}`}
       role="group"
       aria-label={`人物：${display.displayName}`}
       tabIndex={0}
@@ -42,13 +47,22 @@ export function PersonNode({ data, selected }: NodeProps<PersonFlowNode>): JSX.E
       <Handle id="descent-target" type="target" position={Position.Top} isConnectable={false} />
       <Handle id="marriage-left" type="source" position={Position.Left} isConnectable={false} />
       <Handle id="marriage-right" type="source" position={Position.Right} isConnectable={false} />
-      <strong className="tree-person-name" style={{ fontSize: "15px" }}>{display.displayName}</strong>
-      {roleLabel && <span className="tree-lineage-role">{roleLabel}</span>}
-      {relationshipLabel?.displayTerm && <span className="tree-kinship-label">{relationshipLabel.displayTerm}</span>}
+      <header className="tree-person-heading">
+        <span className="tree-person-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4.5 21a7.5 7.5 0 0 1 15 0" />
+          </svg>
+        </span>
+        <strong className="tree-person-name" style={{ fontSize: "15px" }}>{display.displayName}</strong>
+        <span className="tree-gender-badge" aria-label={`性别：${genderLabel}`}>{genderLabel}</span>
+      </header>
+      {(roleLabel || relationshipLabel?.displayTerm) && <span className="tree-person-tags">
+        {roleLabel && <span className="tree-lineage-role">{roleLabel}</span>}
+        {relationshipLabel?.displayTerm && <span className="tree-kinship-label">{relationshipLabel.displayTerm}</span>}
+      </span>}
       {relationshipLabel?.regionalTerm && relationshipLabel.formalTerm && <span className="tree-kinship-formal">正式关系：{relationshipLabel.formalTerm}</span>}
-      {lifeSummary && <span className="tree-life-years">{lifeSummary}</span>}
-      {generation && <span className={display.generation?.conflict ? "tree-generation conflict" : "tree-generation"}>{generation}</span>}
-      {display.generationMarker && <span className="tree-generation-marker">字辈：{display.generationMarker}</span>}
+      {metadata && <span className={display.generation?.conflict ? "tree-person-metadata conflict" : "tree-person-metadata"} title={metadata}>{metadata}</span>}
       <Handle id="descent-source" type="source" position={Position.Bottom} isConnectable={false} />
     </article>
   );

@@ -266,6 +266,7 @@ describe("TreeProjectionService", () => {
   const people = ["a", "b", "c", "d", "e", "isolated"].map((id) => ({
     id,
     displayName: id.toUpperCase(),
+    gender: id === "b" || id === "d" ? "female" as const : "male" as const,
     birthYear: null,
     deathYear: null,
     generation: null,
@@ -386,6 +387,15 @@ describe("TreeProjectionService", () => {
     expect(fromC.topology).toBe(fromA.topology);
     expect(fromA.labels.c?.displayTerm).toBe("a->c");
     expect(fromC.labels.c?.displayTerm).toBe("c->c");
+  });
+
+  it("keeps each person's gender in the projected person node", () => {
+    const projection = new TreeProjectionService({ people, unions }).full(Number.POSITIVE_INFINITY);
+    const male = projection.topology.nodes.find((node) => node.kind === "person" && node.personId === "a");
+    const female = projection.topology.nodes.find((node) => node.kind === "person" && node.personId === "b");
+
+    expect((male?.display as { gender?: string }).gender).toBe("male");
+    expect((female?.display as { gender?: string }).gender).toBe("female");
   });
 
   it("keeps lineage siblings in descent while attaching a spouse through marriage", () => {
